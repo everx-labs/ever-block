@@ -22,7 +22,7 @@ version = "1.0.0"
 clear_on_drop = { version = "0.2", features = ["no_cc"] }
 
 [dependencies]
-ton_types = { git = "ssh://git@github.com/tonlabs/ton-labs-types.git" }
+ton_types = { git = "https://github.com/tonlabs/ton-labs-types.git" }
 
 # External
 rand = "0.6"
