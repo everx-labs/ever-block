@@ -138,7 +138,8 @@ validator#53
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ValidatorDescr {
     public_key: SigPubKey, 
-    weight: u64 
+    weight: u64,
+    adnl_addr: Option<UInt256>,
 }
 
 impl ValidatorDescr {
@@ -146,28 +147,36 @@ impl ValidatorDescr {
         ValidatorDescr {
             public_key: SigPubKey::default(),
             weight: 0,
+            adnl_addr: None,
         }
     }
 
     pub fn with_params(
         public_key: SigPubKey, 
-        weight: u64) -> Self 
+        weight: u64,
+        adnl_addr: Option<UInt256>) -> Self 
     {
         ValidatorDescr {
             public_key,
             weight,
+            adnl_addr
         }
     }
 }
 
 const VALIDATOR_DESC_TAG: u8 = 0x53;
+const VALIDATOR_DESC_ADDR_TAG: u8 = 0x73;
 
 
 impl Serializable for ValidatorDescr {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
-        cell.append_u8(VALIDATOR_DESC_TAG)?;
+        let tag = if self.adnl_addr.is_some() {VALIDATOR_DESC_ADDR_TAG} else {VALIDATOR_DESC_TAG};
+        cell.append_u8(tag)?;
         self.public_key.write_to(cell)?;
         self.weight.write_to(cell)?;
+        if let Some(adnl_addr) = self.adnl_addr.as_ref() {
+            adnl_addr.write_to(cell)?;
+        }
         Ok(())
     }
 }
@@ -175,11 +184,19 @@ impl Serializable for ValidatorDescr {
 impl Deserializable for ValidatorDescr {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_byte()?;
-        if tag != VALIDATOR_DESC_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "ValidatorDescr".into()))
+        if tag != VALIDATOR_DESC_TAG && tag != VALIDATOR_DESC_ADDR_TAG {
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "ValidatorDescr".into()
+            })
         }
         self.public_key.read_from(cell)?;
         self.weight.read_from(cell)?;
+        if tag == VALIDATOR_DESC_ADDR_TAG {
+            let mut adnl_addr = UInt256::default();
+            adnl_addr.read_from(cell)?;
+            self.adnl_addr = Some(adnl_addr);
+        }
         Ok(())
     }
 }
@@ -196,30 +213,19 @@ validators#11
 = ValidatorSet;
 */
 
+define_HashmapE!{ValidatorDescriptions, 16, ValidatorDescr}
+
 ///
 /// ValidatorSet
 /// 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct ValidatorSet {
     pub utime_since: u32,
     pub utime_until: u32, 
     pub total: Number16, 
     pub main: Number16, 
-    pub list: HashmapE,    
+    pub list: ValidatorDescriptions,
     list_key: u16, 
-}
-
-impl Default for ValidatorSet {
-    fn default() -> Self {
-        ValidatorSet {
-            utime_since: 0,
-            utime_until: 0, 
-            total: Number16::default(), 
-            main: Number16::default(), 
-            list: HashmapE::with_bit_len(16), 
-            list_key: 0
-        }        
-    }
 }
 
 impl ValidatorSet {
@@ -229,7 +235,7 @@ impl ValidatorSet {
             utime_until: 0, 
             total: Number16::default(), 
             main: Number16::default(), 
-            list: HashmapE::with_bit_len(16), 
+            list: ValidatorDescriptions::default(), 
             list_key: 0
         }
     }
@@ -245,15 +251,14 @@ impl ValidatorSet {
             utime_until, 
             total, 
             main, 
-            list: HashmapE::with_bit_len(16),
+            list: ValidatorDescriptions::default(),
             list_key: 0
         }
     }
 
     pub fn add_validator_desc(&mut self, validator: ValidatorDescr) {
         self.list_key += 1;
-        let key = self.list_key.write_to_new_cell().unwrap();
-        self.list.set(key.into(), &validator.write_to_new_cell().unwrap().into()).unwrap();
+        self.list.set(&self.list_key, &validator).unwrap();
     }
 }
 
@@ -266,9 +271,6 @@ impl Serializable for ValidatorSet {
         self.utime_until.write_to(cell)?;
         self.total.write_to(cell)?;
         self.main.write_to(cell)?;
-        if self.list.is_empty() {
-            bail!(BlockErrorKind::InvalidData("self.list is empty".into()))
-        }
         self.list.write_hashmap_root(cell)?;
         Ok(())
     }
@@ -278,13 +280,15 @@ impl Deserializable for ValidatorSet {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_byte()?;
         if tag != VALIDATOR_SET_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "ValidatorSet".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "ValidatorSet".into()
+            })
         }
         self.utime_since.read_from(cell)?;
         self.utime_until.read_from(cell)?;
         self.total.read_from(cell)?;
         self.main.read_from(cell)?;
-        self.list = HashmapE::with_bit_len(16);
         self.list.read_hashmap_root(cell)?;
         self.list_key = self.list.len()? as u16;
         Ok(())

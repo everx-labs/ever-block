@@ -13,16 +13,15 @@
 */
 
 use super::{
-    Block, BlockError, BlockErrorKind, BlockResult, Deserializable, Serializable
+    Block, BlockErrorKind, BlockResult, Deserializable, Serializable
 };
 use ed25519_dalek::{PublicKey, Keypair, Signature, SIGNATURE_LENGTH};
 use sha2::{Digest, Sha256, Sha512};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::{Write, Read, Cursor};
-use std::sync::Arc;
 use cells_serialization::{BagOfCells, deserialize_tree_of_cells};
-use {BuilderData, CellData, SliceData};
+use {BuilderData, Cell, SliceData};
 use {ExceptionCode, UInt256};
 
 
@@ -46,7 +45,9 @@ impl Serializable for BlockSignature {
 impl Deserializable for BlockSignature {
 	fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
 		self.0 = Signature::from_bytes(&cell.get_next_bytes(SIGNATURE_LENGTH)?)
-			.map_err(|e| BlockError::from_kind(BlockErrorKind::Signature(e)))?;
+			.map_err(|e| BlockErrorKind::Signature {
+				inner: e
+			})?;
 		Ok(())
 	}
 }
@@ -69,7 +70,7 @@ pub struct SignedBlock {
 
 impl Ord for SignedBlock {
     fn cmp(&self, other: &SignedBlock) -> Ordering {
-        self.block.info().seq_no().cmp(&other.block.info().seq_no())
+        self.block.read_info().unwrap().seq_no().cmp(&other.block.read_info().unwrap().seq_no())
     }
 }
 
@@ -81,7 +82,7 @@ impl PartialOrd for SignedBlock {
 
 impl PartialEq for SignedBlock {
     fn eq(&self, other: &SignedBlock) -> bool {
-        self.block.info().seq_no() == other.block.info().seq_no()
+        self.block.read_info().unwrap().seq_no() == other.block.read_info().unwrap().seq_no()
     }
 }
 
@@ -90,7 +91,7 @@ impl SignedBlock {
 	pub fn with_block_and_key(block: Block, key: &Keypair) -> BlockResult<Self> {
 		
 		// block serialization 
-		let block_root: Arc<CellData> = block.write_to_new_cell()?.into();
+		let block_root: Cell = block.write_to_new_cell()?.into();
 		let bag = BagOfCells::with_root(&block_root);
 		let mut serialized_block = Vec::<u8>::new();
 		bag.write_to(&mut serialized_block, true)?;
@@ -145,7 +146,7 @@ impl SignedBlock {
 		let key_id = super::id_from_key(key);
 		let signature = match self.signatures.get(&key_id) {
 			Some(s) => &s.0,
-			_ => bail!(BlockErrorKind::NotFound("signature".into()))
+			_ => bail!(BlockErrorKind::NotFound { item_name: "signature".into() })
 		};
 		Ok(key.verify::<Sha512>(self.combined_hash.as_slice(), signature).is_ok())	
 	}
@@ -169,8 +170,8 @@ impl SignedBlock {
 		let bag = BagOfCells::with_roots_and_absent(vec![&cell.into()], vec![&block_absent_cell.into()]);
 
 		// Write signed block's bytes and then unsigned block's bytes
-		bag.write_to(dest, true).map_err(|e| BlockError::from(e))?;
-		dest.write(&self.serialized_block).map_err(|e| BlockErrorKind::Io(e))?;
+		bag.write_to(dest, true)?;
+		dest.write(&self.serialized_block)?;
 
 		Ok(())
 	}
@@ -180,7 +181,7 @@ impl SignedBlock {
 		let cell = deserialize_tree_of_cells(src)?;
 
 		let repr_hash_cell = cell.reference(0)?;
-		if (repr_hash_cell.bits_used() < SHA256_SIZE * 8) || (cell.bits_used() < SHA256_SIZE * 8) {
+		if (repr_hash_cell.bit_length() < SHA256_SIZE * 8) || (cell.bit_length() < SHA256_SIZE * 8) {
 			return Err(ExceptionCode::CellUnderflow)?
 		}
 		let block_repr_hash = repr_hash_cell.data()[..SHA256_SIZE].to_vec();
@@ -190,7 +191,7 @@ impl SignedBlock {
 
 		// second - block's bytes
 		let mut serialized_block = Vec::new();
-		src.read_to_end(&mut serialized_block).map_err(|e| BlockErrorKind::Io(e))?;
+		src.read_to_end(&mut serialized_block)?;
 				
 		let mut serialized_block_cur = Cursor::new(serialized_block);
 		let cell = deserialize_tree_of_cells(&mut serialized_block_cur)?;

@@ -15,7 +15,7 @@
 use super::*;
 use std::sync::Arc;
 use {AccountId, UInt256};
-use ton_types::{BuilderData, SliceData, CellType};
+use ton_types::{BuilderData, SliceData};
 use self::hashmapaug::Augmentable;
 
 
@@ -49,8 +49,8 @@ _
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct EnqueuedMsg {
-    enqueued_lt: u64,
-    out_msg: Arc<MsgEnvelope>
+    pub enqueued_lt: u64,
+    pub out_msg: Arc<MsgEnvelope>
 }
 
 impl EnqueuedMsg {
@@ -97,10 +97,19 @@ define_HashmapAugE!(OutMsgDescr, 256, OutMsg, CurrencyCollection);
 impl OutMsgDescr {
     /// insert new or replace existing
     pub fn insert(&mut self, out_msg: &OutMsg) -> BlockResult<()> {
-        let msg = out_msg.message()
-            .ok_or(BlockErrorKind::InvalidOperation("OutMsg must contain message to be inserted into OutMsgDescr".into()))?;
+        let msg = out_msg.read_message()?;
         let hash = msg.hash()?;
-        self.set(&hash, &out_msg, out_msg.expoted_value().unwrap_or(&CurrencyCollection::default()))
+        let value = match out_msg {
+            OutMsg::External(_) => msg.get_value(),
+            OutMsg::Immediately(_) => msg.get_value(),
+            OutMsg::New(_) => msg.get_value(),
+            OutMsg::Transit(_) => None,
+            OutMsg::Dequeue(_) => None,
+            OutMsg::DequeueImmediately(_) => msg.get_value(),
+            OutMsg::TransitRequired(ref _x) => None,
+            OutMsg::None => unreachable!(),
+        };
+        self.set(&hash, &out_msg, value.unwrap_or(&CurrencyCollection::default()))
     }
 
     /// insert or replace existion record
@@ -109,7 +118,9 @@ impl OutMsgDescr {
         if self.0.set(key.clone(), msg_slice, exported).is_ok() {
             Ok(())
         } else {
-            block_err!(BlockErrorKind::Other("Error insert serialized message".to_string()))
+            bail!(BlockErrorKind::Other {
+                msg: "Error insert serialized message".into()
+            })
         }
     }
 }
@@ -133,10 +144,9 @@ impl Augmentable for MsgTime {
 
 impl OutMsgQueue {
     /// insert OutMessage to OutMsgQueue
-    pub fn insert(&mut self, address: u64, msg: &OutMsg) -> BlockResult<()> {
+    pub fn insert(&mut self, address: u64, msg: &OutMsg, msg_lt: u64) -> BlockResult<()> {
         let key = OutMsgQueueKey::with_workchain_id_and_message(0, address, &msg).unwrap();
-        let lt = msg.at_and_lt().unwrap_or_default().1;
-        self.set(&key, &msg, &lt)
+        self.set(&key, &msg, &msg_lt)
     }
 }
 
@@ -283,112 +293,51 @@ impl Default for OutMsg {
 impl OutMsg {
 
     ///
-    /// the function returns the value exported by the message from the account
+    /// the function returns the message
     ///
-    pub fn expoted_value<'a>(&'a self) -> Option<&'a CurrencyCollection> {
+    pub fn read_message(&self) -> BlockResult<Message> {
+        Ok(
+            match self {
+                OutMsg::External(ref x) => x.read_message()?,
+                OutMsg::Immediately(ref x) => x.read_out_message()?.read_message()?,
+                OutMsg::New(ref x) => x.read_out_message()?.read_message()?,
+                OutMsg::Transit(ref x) => x.read_out_message()?.read_message()?,
+                OutMsg::Dequeue(ref x) => x.read_out_message()?.read_message()?,
+                OutMsg::DequeueImmediately(ref x) => x.read_out_message()?.read_message()?,
+                OutMsg::TransitRequired(ref x) => x.read_out_message()?.read_message()?,
+                OutMsg::None => unreachable!(),
+            }
+        )
+    }
+
+    ///
+    /// the function returns the message cell (if exists)
+    ///
+    pub fn message_cell(&self) -> BlockResult<Cell> {
+        Ok(
+            match self {
+                OutMsg::External(ref x) => x.message_cell().clone(),
+                OutMsg::Immediately(ref x) => x.read_out_message()?.message_cell().clone(),
+                OutMsg::New(ref x) => x.read_out_message()?.message_cell().clone(),
+                OutMsg::Transit(ref x) => x.read_out_message()?.message_cell().clone(),
+                OutMsg::Dequeue(ref x) => x.read_out_message()?.message_cell().clone(),
+                OutMsg::DequeueImmediately(ref x) => x.read_out_message()?.message_cell().clone(),
+                OutMsg::TransitRequired(ref x) => x.read_out_message()?.message_cell().clone(),
+                OutMsg::None => unreachable!(),
+            }
+        )
+    }
+
+    pub fn transaction_cell(&self) -> Option<&Cell> {
         match self {
-            OutMsg::External(ref x) => x.msg.get_value(),
-            OutMsg::Immediately(ref x) => x.out_msg.get_message().get_value(),
-            OutMsg::New(ref x) => x.out_msg.get_message().get_value(),
+            OutMsg::External(ref x) => Some(x.transaction_cell()),
+            OutMsg::Immediately(ref x) => Some(x.transaction_cell()),
+            OutMsg::New(ref x) => Some(x.transaction_cell()),
             OutMsg::Transit(ref _x) => None,
             OutMsg::Dequeue(ref _x) => None,
-            OutMsg::DequeueImmediately(ref x) => x.out_msg.get_message().get_value(),
+            OutMsg::DequeueImmediately(ref _x) => None,
             OutMsg::TransitRequired(ref _x) => None,
             OutMsg::None => None,
-        }
-    }
-
-    ///
-    /// the function returns the message (if exists)
-    ///
-    pub fn message<'a>(&'a self) -> Option<&'a Message> {
-        match self {
-            OutMsg::External(ref x) => Some(&x.msg),
-            OutMsg::Immediately(ref x) => Some(x.out_msg.get_message()),
-            OutMsg::New(ref x) => Some(x.out_msg.get_message()),
-            OutMsg::Transit(ref x) => Some(x.out_msg.get_message()),
-            OutMsg::Dequeue(ref x) => Some(x.out_msg.get_message()),
-            OutMsg::DequeueImmediately(ref x) => Some(x.out_msg.get_message()),
-            OutMsg::TransitRequired(ref x) => Some(x.out_msg.get_message()),
-            OutMsg::None => None,
-        }
-    }
-
-    ///
-    /// the function returns the message (if exists)
-    ///
-    pub fn message_mut<'a>(&'a mut self) -> Option<&'a mut Message> {
-        match self {
-            OutMsg::External(ref mut x) => Some(Arc::get_mut(&mut x.msg).unwrap()),
-            OutMsg::Immediately(ref mut x) => x.out_msg.get_message_mut(),
-            OutMsg::New(ref mut x) => x.out_msg.get_message_mut(),
-            OutMsg::Transit(ref mut x) => x.out_msg.get_message_mut(),
-            OutMsg::Dequeue(ref mut x) => x.out_msg.get_message_mut(),
-            OutMsg::DequeueImmediately(ref mut x) => x.out_msg.get_message_mut(),
-            OutMsg::TransitRequired(ref mut x) => x.out_msg.get_message_mut(),
-            OutMsg::None => None,
-        }
-    }
-    
-    ///
-    /// the function returns the fees exported by the message from the account
-    ///
-    pub fn exported_fee(&self) -> BlockResult<Option<Grams>> {
-        match self {
-            OutMsg::External(ref x) => x.msg.get_fee(),
-            OutMsg::Immediately(ref x) => x.out_msg.get_message().get_fee(),
-            OutMsg::New(ref x) => x.out_msg.get_message().get_fee(),
-            OutMsg::Transit(ref x) => x.out_msg.get_message().get_fee(),
-            OutMsg::Dequeue(ref x) => x.out_msg.get_message().get_fee(),
-            OutMsg::DequeueImmediately(ref x) => x.out_msg.get_message().get_fee(),
-            OutMsg::TransitRequired(ref x) => x.out_msg.get_message().get_fee(),
-            OutMsg::None => Ok(None),
-        }
-    }
-
-    ///
-    /// set UNIX time and Logical Time for outbound message
-    ///
-    pub fn set_at_and_lt(&mut self, at: u32, lt: u64) {
-        match self {
-            OutMsg::External(ref mut x) => { Arc::get_mut(&mut x.msg).map(|m| m.set_at_and_lt(at, lt)); },
-            OutMsg::Immediately(ref mut x) => { x.out_msg.get_message_mut().map(|m| m.set_at_and_lt(at, lt)); },
-            OutMsg::New(ref mut x) => { x.out_msg.get_message_mut().map(|m| m.set_at_and_lt(at, lt)); },
-            OutMsg::Transit(ref mut x) => { x.out_msg.get_message_mut().map(|m| m.set_at_and_lt(at, lt)); },
-            OutMsg::Dequeue(ref mut x) => { x.out_msg.get_message_mut().map(|m| m.set_at_and_lt(at, lt)); },
-            OutMsg::DequeueImmediately(ref mut x) => { x.out_msg.get_message_mut().map(|m| m.set_at_and_lt(at, lt)); },
-            OutMsg::TransitRequired(ref mut x) => { x.out_msg.get_message_mut().map(|m| m.set_at_and_lt(at, lt)); },
-            OutMsg::None => (),
-        }
-    }
-    
-    ///
-    /// get UNIX time and Logical Time for outbound message
-    ///
-    pub fn at_and_lt(&self) -> Option<(u32, u64)> {
-        match self {
-            OutMsg::External(ref x) =>  { x.msg.at_and_lt() },
-            OutMsg::Immediately(ref x) => { x.out_msg.get_message().at_and_lt() },
-            OutMsg::New(ref x) => { x.out_msg.get_message().at_and_lt() },
-            OutMsg::Transit(ref x) => { x.out_msg.get_message().at_and_lt() },
-            OutMsg::Dequeue(ref x) => { x.out_msg.get_message().at_and_lt() },
-            OutMsg::DequeueImmediately(ref x) => { x.out_msg.get_message().at_and_lt() },
-            OutMsg::TransitRequired(ref x) => { x.out_msg.get_message().at_and_lt() },
-            OutMsg::None => None,
-        }
-    }
-
-    pub fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let tag: u8 = (cell.get_next_bits(3)?[0] & 0xE0) >> 5;
-        match tag {
-            OUT_MSG_EXT => OutMsgExternal::read_message_from(cell),
-            OUT_MSG_IMM => OutMsgImmediately::read_message_from(cell),
-            OUT_MSG_NEW => OutMsgNew::read_message_from(cell),
-            OUT_MSG_TR => OutMsgTransit::read_message_from(cell),
-            OUT_MSG_DEQ_IMM => OutMsgDequeueImmediately::read_message_from(cell),
-            OUT_MSG_DEQ =>  OutMsgDequeue::read_message_from(cell),
-            OUT_MSG_TRDEQ => OutMsgTransitRequired::read_message_from(cell),
-            tag => bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "OutMsg".into())),
         }
     }
 }
@@ -422,7 +371,7 @@ impl Serializable for OutMsg {
             OutMsg::DequeueImmediately(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_DEQ_IMM)),
             OutMsg::TransitRequired(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_TRDEQ)),
             OutMsg::None => 
-                bail!(BlockErrorKind::InvalidOperation("OutMsg::None can't be sirialized".into())),
+                bail!(BlockErrorKind::InvalidOperation { msg: "OutMsg::None can't be sirialized".into() }),
         }
     }
 }
@@ -438,7 +387,10 @@ impl Deserializable for OutMsg {
             OUT_MSG_DEQ_IMM => read_out_msg_descr!(cell, OutMsgDequeueImmediately, DequeueImmediately),
             OUT_MSG_DEQ =>  read_out_msg_descr!(cell, OutMsgDequeue, Dequeue),
             OUT_MSG_TRDEQ => read_out_msg_descr!(cell, OutMsgTransitRequired, TransitRequired),
-            tag => bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "OutMsg".into())),
+            tag => bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "OutMsg".into()
+            }),
         };
         Ok(())
     }
@@ -450,24 +402,34 @@ impl Deserializable for OutMsg {
 /// 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutMsgExternal {
-    pub msg: Arc<Message>,
-    pub transaction: Arc<Transaction>,
+    msg: ChildCell<Message>,
+    transaction: ChildCell<Transaction>,
 }
 
 impl OutMsgExternal {
-    pub fn with_params(msg: Arc<Message>, tr: Arc<Transaction>) -> Self{
-        OutMsgExternal {
-            msg: msg,
-            transaction: tr,
-        }
+    pub fn with_params(msg: &Message, tr: &Transaction) -> BlockResult<Self> {
+        Ok(
+            OutMsgExternal {
+                msg: ChildCell::with_struct(msg)?,
+                transaction: ChildCell::with_struct(tr)?,
+            }
+        )
     }
 
-    fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let ref_cell = cell.checked_drain_reference()?;
-        if ref_cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess("Message".into()))
-        }
-        Message::construct_from(&mut ref_cell.into())
+    pub fn read_message(&self) -> BlockResult<Message> {
+        self.msg.read_struct()
+    }
+
+    pub fn message_cell(&self) -> &Cell {
+        self.msg.cell()
+    }
+
+    pub fn read_transaction(&self) -> BlockResult<Transaction> {
+        self.transaction.read_struct()
+    }
+
+    pub fn transaction_cell(&self) -> &Cell {
+        self.transaction.cell()
     }
 }
 
@@ -481,8 +443,8 @@ impl Serializable for OutMsgExternal {
 
 impl Deserializable for OutMsgExternal {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
-        self.msg = Arc::new(Message::construct_from(&mut cell.checked_drain_reference()?.into())?);
-        self.transaction = Arc::new(Transaction::construct_from(&mut cell.checked_drain_reference()?.into())?);
+        self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
     }
 }
@@ -493,28 +455,44 @@ impl Deserializable for OutMsgExternal {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutMsgImmediately {
-    pub out_msg: MsgEnvelope,
-    pub transaction: Arc<Transaction>,
-    pub reimport: Arc<InMsg>,
+    out_msg: ChildCell<MsgEnvelope>,
+    transaction: ChildCell<Transaction>,
+    reimport: ChildCell<InMsg>,
 }
 
 impl OutMsgImmediately {
-    pub fn with_params(env: MsgEnvelope,
-                        tr: Arc<Transaction>,
-                        reimport: Arc<InMsg>) -> Self {
-        OutMsgImmediately{
-            out_msg: env,
-            transaction: tr,
-            reimport: reimport,
-        }
+    pub fn with_params(env: &MsgEnvelope, tr: &Transaction, reimport: &InMsg) -> BlockResult<Self> {
+        Ok(
+            OutMsgImmediately{
+                out_msg: ChildCell::with_struct(env)?,
+                transaction: ChildCell::with_struct(tr)?,
+                reimport: ChildCell::with_struct(reimport)?,
+            }
+        )
     }
 
-    pub fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let ref_cell = cell.checked_drain_reference()?;
-        if ref_cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess("MsgEnvelope".into()))
-        }
-        MsgEnvelope::read_message_from(&mut ref_cell.into())
+    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+        self.out_msg.read_struct()
+    }
+
+    pub fn out_message_cell(&self) -> &Cell {
+        self.out_msg.cell()
+    }
+
+    pub fn read_transaction(&self) -> BlockResult<Transaction> {
+        self.transaction.read_struct()
+    }
+
+    pub fn transaction_cell(&self) -> &Cell {
+        self.transaction.cell()
+    }
+
+    pub fn read_reimport_message(&self) -> BlockResult<InMsg> {
+        self.reimport.read_struct()
+    }
+
+    pub fn reimport_message_cell(&self) -> &Cell {
+        self.reimport.cell()
     }
 }
 
@@ -530,8 +508,8 @@ impl Serializable for OutMsgImmediately {
 impl Deserializable for OutMsgImmediately {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.transaction = Arc::new(Transaction::construct_from(&mut cell.checked_drain_reference()?.into())?);
-        self.reimport = Arc::new(InMsg::construct_from(&mut cell.checked_drain_reference()?.into())?);
+        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.reimport.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
     }
 }
@@ -542,25 +520,34 @@ impl Deserializable for OutMsgImmediately {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutMsgNew {
-    pub out_msg: MsgEnvelope,
-    pub transaction: Arc<Transaction>,
+    out_msg: ChildCell<MsgEnvelope>,
+    transaction: ChildCell<Transaction>,
 }
 
 impl OutMsgNew {
-    pub fn with_params(env: MsgEnvelope,
-                       tr: Arc<Transaction>) -> Self {
-        OutMsgNew{
-            out_msg: env,
-            transaction: tr,
-        }
+    pub fn with_params(msg: &MsgEnvelope, tr: &Transaction) -> BlockResult<Self> {
+        Ok(
+            OutMsgNew {
+                out_msg: ChildCell::with_struct(msg)?,
+                transaction: ChildCell::with_struct(tr)?,
+            }
+        )
     }
 
-    pub fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let ref_cell = cell.checked_drain_reference()?;
-        if ref_cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess("MsgEnvelope".into()))
-        }
-        MsgEnvelope::read_message_from(&mut ref_cell.into())
+    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+        self.out_msg.read_struct()
+    }
+
+    pub fn message_cell(&self) -> &Cell {
+        self.out_msg.cell()
+    }
+
+    pub fn read_transaction(&self) -> BlockResult<Transaction> {
+        self.transaction.read_struct()
+    }
+
+    pub fn transaction_cell(&self) -> &Cell {
+        self.transaction.cell()
     }
 }
 
@@ -575,7 +562,7 @@ impl Serializable for OutMsgNew {
 impl Deserializable for OutMsgNew {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.transaction = Arc::new(Transaction::construct_from(&mut cell.checked_drain_reference()?.into())?);
+        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
     }
 }
@@ -586,24 +573,34 @@ impl Deserializable for OutMsgNew {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutMsgTransit {
-    pub out_msg: MsgEnvelope,
-    pub imported: InMsg,
+    out_msg: ChildCell<MsgEnvelope>,
+    imported: ChildCell<InMsg>,
 }
 
 impl OutMsgTransit {
-    pub fn with_params(env: MsgEnvelope, imported: InMsg) -> Self {
-        OutMsgTransit{
-            out_msg: env,
-            imported: imported,
-        }
+    pub fn with_params(env: &MsgEnvelope, imported: &InMsg) -> BlockResult<Self> {
+        Ok(
+            OutMsgTransit{
+                out_msg: ChildCell::with_struct(env)?,
+                imported: ChildCell::with_struct(imported)?,
+            }
+        )
     }
 
-    pub fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let ref_cell = cell.checked_drain_reference()?;
-        if ref_cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess("MsgEnvelope".into()))
-        }
-        MsgEnvelope::read_message_from(&mut ref_cell.into())
+    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+        self.out_msg.read_struct()
+    }
+
+    pub fn out_message_cell(&self) -> &Cell {
+        self.out_msg.cell()
+    }
+
+    pub fn read_imported(&self) -> BlockResult<InMsg> {
+        self.imported.read_struct()
+    }
+
+    pub fn imported_cell(&self) -> &Cell {
+        self.imported.cell()
     }
 }
 
@@ -629,24 +626,34 @@ impl Deserializable for OutMsgTransit {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutMsgDequeueImmediately {
-    pub out_msg: MsgEnvelope,
-    pub reimport: InMsg,
+    out_msg: ChildCell<MsgEnvelope>,
+    reimport: ChildCell<InMsg>,
 }
 
 impl OutMsgDequeueImmediately {
-    pub fn with_params(env: MsgEnvelope, reimport: InMsg) -> Self {
-        Self {
-            out_msg: env,
-            reimport,
-        }
+    pub fn with_params(env: &MsgEnvelope, reimport: &InMsg) -> BlockResult<Self> {
+        Ok(
+            OutMsgDequeueImmediately{
+                out_msg: ChildCell::with_struct(env)?,
+                reimport: ChildCell::with_struct(reimport)?,
+            }
+        )
     }
 
-    pub fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let ref_cell = cell.checked_drain_reference()?;
-        if ref_cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess("MsgEnvelope".into()))
-        }
-        MsgEnvelope::read_message_from(&mut ref_cell.into())
+    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+        self.out_msg.read_struct()
+    }
+
+    pub fn out_message_cell(&self) -> &Cell {
+        self.out_msg.cell()
+    }
+
+    pub fn read_reimport_message(&self) -> BlockResult<InMsg> {
+        self.reimport.read_struct()
+    }
+
+    pub fn reimport_message_cell(&self) -> &Cell {
+        self.reimport.cell()
     }
 }
 
@@ -672,24 +679,30 @@ impl Deserializable for OutMsgDequeueImmediately {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutMsgDequeue {
-    pub out_msg: MsgEnvelope,
+    out_msg: ChildCell<MsgEnvelope>,
     pub import_block_lt: u64,
 }
 
 impl OutMsgDequeue {
-    pub fn with_params(env: MsgEnvelope, lt: u64) -> Self {
-        OutMsgDequeue{
-            out_msg: env,
-            import_block_lt: lt,
-        }
+    pub fn with_params(env: &MsgEnvelope, lt: u64) -> BlockResult<Self> {
+        Ok(
+            OutMsgDequeue{
+                out_msg: ChildCell::with_struct(env)?,
+                import_block_lt: lt,
+            }
+        )
     }
 
-    pub fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let ref_cell = cell.checked_drain_reference()?;
-        if ref_cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess("MsgEnvelope".into()))
-        }
-        MsgEnvelope::read_message_from(&mut ref_cell.into())
+    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+        self.out_msg.read_struct()
+    }
+
+    pub fn out_message_cell(&self) -> &Cell {
+        self.out_msg.cell()
+    }
+
+    pub fn import_block_lt(&self) -> u64 {
+        self.import_block_lt
     }
 }
 
@@ -715,25 +728,34 @@ impl Deserializable for OutMsgDequeue {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OutMsgTransitRequired {
-    pub out_msg: MsgEnvelope,
-    pub imported: InMsg,
+    out_msg: ChildCell<MsgEnvelope>,
+    imported: ChildCell<InMsg>,
 }
 
 impl OutMsgTransitRequired {
-    pub fn with_params(env: MsgEnvelope,
-                        imported: InMsg) -> Self {
-        OutMsgTransitRequired{
-            out_msg: env,
-            imported: imported,
-        }
+    pub fn with_params(env: &MsgEnvelope, imported: &InMsg) -> BlockResult<Self> {
+        Ok(
+            OutMsgTransitRequired{
+                out_msg: ChildCell::with_struct(env)?,
+                imported: ChildCell::with_struct(imported)?,
+            }
+        )
     }
 
-    pub fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let ref_cell = cell.checked_drain_reference()?;
-        if ref_cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess("MsgEnvelope".into()))
-        }
-        MsgEnvelope::read_message_from(&mut ref_cell.into())
+    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+        self.out_msg.read_struct()
+    }
+
+    pub fn out_message_cell(&self) -> &Cell {
+        self.out_msg.cell()
+    }
+
+    pub fn read_imported(&self) -> BlockResult<InMsg> {
+        self.imported.read_struct()
+    }
+
+    pub fn imported_cell(&self) -> &Cell {
+        self.imported.cell()
     }
 }
 

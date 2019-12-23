@@ -151,7 +151,10 @@ impl Deserializable for SigPubKey {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_u32()?;
         if tag != SIG_PUB_KEY_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag, "SigPubKey".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag,
+                s: "SigPubKey".into()
+            })
         }
         self.pubkey.read_from(cell)?;
         Ok(())
@@ -289,7 +292,10 @@ impl Deserializable for BlockSignatures {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_byte()?;
         if tag != BLOCK_SIGNATURES_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "BlockSignatures".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "BlockSignatures".into()
+            })
         }
         self.validator_info.read_from(cell)?; 
         self.pure_signatures.read_from(cell)?;
@@ -311,7 +317,7 @@ block_proof#c3
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct BlockProof {
     pub proof_for: BlockIdExt,
-    pub root: Arc<CellData>,
+    pub root: Cell,
     pub signatures: Option<BlockSignatures>,
 }
 
@@ -328,7 +334,7 @@ impl BlockProof {
     /// Create new instance of BlockProof
     pub fn with_params(    
         proof_for: BlockIdExt,
-        root: Arc<CellData>,
+        root: Cell,
         signatures: Option<BlockSignatures>
     ) -> Self {
         BlockProof {
@@ -355,7 +361,10 @@ impl Deserializable for BlockProof {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_byte()?;
         if tag != BLOCK_PROOF_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "BlockProof".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "BlockProof".into()
+            })
         }
         self.proof_for.read_from(cell)?; 
         self.root = cell.checked_drain_reference()?.clone();

@@ -13,21 +13,18 @@
 */
 
 use super::{
-    BlockError, BlockErrorKind, BlockId, BlockResult, Deserializable, GenericId,
+    BlockErrorKind, BlockResult, Deserializable,
     Grams, MaybeDeserialize, MaybeSerialize, Number5, Number9, Serializable, 
-    TransactionId, UnixTime32, VarUInteger32, LazySerializable, MerkleProof
+    UnixTime32, VarUInteger32, MerkleProof
 };
 use super::hashmapaug::Augmentable;
-use {BuilderData, CellData, SliceData};
+use {BuilderData, Cell, SliceData, UsageTree, Block, GetRepresentationHash,
+     MAX_REFERENCES_COUNT, MAX_DATA_BITS};
 use cell::IBitstring;
 use dictionary::{HashmapE, HashmapType};
 use std::fmt;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::RwLock;
 use {AccountId, ExceptionCode, UInt256};
-use cells_serialization::BagOfCells;
-use std::collections::HashMap;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -58,7 +55,7 @@ pub struct AnycastInfo{
 impl AnycastInfo {
     pub fn with_rewrite_pfx(pfx: SliceData) -> BlockResult<Self> {
         if pfx.remaining_bits() > Number5::get_max_len() {
-            bail!(BlockErrorKind::InvalidArg("pfx can't be longer than 2^5-1 bits".into()))
+            bail!(BlockErrorKind::InvalidArg { msg: "pfx can't be longer than 2^5-1 bits".into() })
         }
         Ok(Self {
             rewrite_pfx: pfx
@@ -66,7 +63,7 @@ impl AnycastInfo {
     }
     pub fn set_rewrite_pfx(&mut self, pfx: SliceData) -> BlockResult<()>{
         if pfx.remaining_bits() > Number5::get_max_len() {
-            bail!(BlockErrorKind::InvalidArg("pfx can't be longer than 2^5-1 bits".into()))
+            bail!(BlockErrorKind::InvalidArg { msg: "pfx can't be longer than 2^5-1 bits".into() })
         }
         self.rewrite_pfx = pfx;
         Ok(())
@@ -127,7 +124,7 @@ pub struct MsgAddrVar {
 impl MsgAddrVar {
     pub fn with_address(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> BlockResult<MsgAddrVar> {
         if address.remaining_bits() > Number9::get_max_len(){
-            bail!(BlockErrorKind::InvalidArg("address can't be longer than 2^9-1 bits".into()));
+            bail!(BlockErrorKind::InvalidArg { msg: "address can't be longer than 2^9-1 bits".into() });
         }
         Ok(MsgAddrVar { anycast, workchain_id, address })
     }
@@ -230,7 +227,7 @@ pub struct MsgAddrExt(pub SliceData);
 impl MsgAddrExt {
     pub fn with_address(address: SliceData) -> BlockResult<Self>{
         if address.remaining_bits() > Number9::get_max_len(){
-            bail!(BlockErrorKind::InvalidArg("address can't be longer than 2^9-1 bits".into()));
+            bail!(BlockErrorKind::InvalidArg { msg: "address can't be longer than 2^9-1 bits".into() });
         }
         Ok(MsgAddrExt(address))
     }
@@ -279,12 +276,14 @@ impl Default for MsgAddressExt {
 }
 
 impl FromStr for MsgAddressExt {
-    type Err = BlockError;
+    type Err = failure::Error;
     fn from_str(string: &str) -> BlockResult<Self> {
         match MsgAddress::from_str(string)? {
             MsgAddress::AddrNone => Ok(MsgAddressExt::AddrNone),
             MsgAddress::AddrExt(addr) => Ok(MsgAddressExt::AddrExtern(addr)),
-            _ => bail!(BlockErrorKind::Other(format!("Wrong type of address")))
+            _ => bail!(BlockErrorKind::Other {
+                msg: format!("Wrong type of address")
+            })
         }
     }
 }
@@ -377,21 +376,27 @@ impl MsgAddress {
 
 
 impl FromStr for MsgAddress {
-    type Err = BlockError;
+    type Err = failure::Error;
     fn from_str(string: &str) -> BlockResult<Self> {
         let parts: Vec<&str> = string.split(':').take(4).collect();
         let len = parts.len();
         if len > 3 {
-            bail!(BlockErrorKind::InvalidArg(format!("too many components in address")))
+            bail!(BlockErrorKind::InvalidArg {
+                msg: "too many components in address".into()
+            })
         }
         if len == 0 {
-            bail!(BlockErrorKind::InvalidArg(format!("bad split")))
+            bail!(BlockErrorKind::InvalidArg {
+                msg: "bad split".into()
+            })
         }
         if parts[len - 1].is_empty() {
             if len == 1 {
                 return Ok(MsgAddress::AddrNone)
             } else {
-                bail!(BlockErrorKind::InvalidArg(format!("wrong format")))
+                bail!(BlockErrorKind::InvalidArg {
+                    msg: "wrong format".into()
+                })
             }
         }
         let address = SliceData::from_string(parts[len - 1])?;
@@ -400,17 +405,23 @@ impl FromStr for MsgAddress {
         }
         let workchain_id = len.checked_sub(2)
             .map(|index| parts[index].parse::<i32>()).transpose()
-            .map_err(|err| BlockErrorKind::InvalidArg(format!("workchain_id is not correct number: {}", err)))?
+            .map_err(|err| BlockErrorKind::InvalidArg {
+                msg: format!("workchain_id is not correct number: {}", err)
+            })?
             .unwrap_or_default();
         let anycast = len.checked_sub(3)
             .map(|index| if parts[index].is_empty() {
-                Err(BlockErrorKind::InvalidArg(format!("wrong format")))
+                Err(BlockErrorKind::InvalidArg { msg: "wrong format".into() })
             } else {
                 SliceData::from_string(parts[index])
-                    .map_err(|err| BlockErrorKind::InvalidArg(format!("anycast is not correct: {}", err)))
+                    .map_err(|err| BlockErrorKind::InvalidArg {
+                        msg: format!("anycast is not correct: {}", err)
+                    })
             }).transpose()?
             .map(|value| AnycastInfo::with_rewrite_pfx(value)).transpose()
-            .map_err(|err| BlockErrorKind::InvalidArg(format!("anycast is not correct: {}", err)))?;
+            .map_err(|err| BlockErrorKind::InvalidArg {
+                msg: format!("anycast is not correct: {}", err)
+            })?;
 
         if (workchain_id / 128 == 0) && (parts[len - 1].len() == 64) {
             Ok(MsgAddress::with_standart(anycast, workchain_id as i8, address)?)
@@ -492,13 +503,15 @@ impl Default for MsgAddressInt {
 }
 
 impl FromStr for MsgAddressInt {
-    type Err = BlockError;
+    type Err = failure::Error;
     fn from_str(string: &str) -> BlockResult<Self> {
         match MsgAddress::from_str(string)? {
             MsgAddress::AddrNone => Ok(MsgAddressInt::AddrNone),
             MsgAddress::AddrStd(addr) => Ok(MsgAddressInt::AddrStd(addr)),
             MsgAddress::AddrVar(addr) => Ok(MsgAddressInt::AddrVar(addr)),
-            _ => bail!(BlockErrorKind::Other(format!("Wrong type of address")))
+            _ => bail!(BlockErrorKind::Other {
+                    msg: "Wrong type of address".into()
+                })
         }
     }
 }
@@ -1004,21 +1017,11 @@ pub type MessageId = UInt256;
 ///
 /// 
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct Message {
-    // next 4 fields are stored only in JSON representation and not saved into BOC
-    id: Option<UInt256>,
-    pub transaction_id: Option<TransactionId>,
-    pub block_id: Option<BlockId>,
-    pub status: MessageProcessingStatus,
-    pub proof: Option<SliceData>,
-    pub boc: Option<SliceData>,
-
     header: CommonMsgInfo,
     init: Option<StateInit>,
     body: Option<SliceData>,
-
-    root_cell: RwLock<Option<SliceData>>,
 }
 
 impl fmt::Display for Message {
@@ -1036,42 +1039,6 @@ impl fmt::Display for Message {
     }
 }
 
-impl GenericId for Message {
-    fn id_mut_internal(&mut self) -> &mut Option<UInt256> {
-        &mut self.id
-    }
-
-    fn id_internal(&self) -> Option<&UInt256> {
-        self.id.as_ref()
-    }
-}
-
-impl PartialEq for Message {
-    fn eq(&self, other: &Self) -> bool {
-        self.header == other.header &&
-        self.init == other.init &&
-        self.body == other.body
-    }
-}
-impl Eq for Message {}
-
-impl Clone for Message {
-    fn clone(&self) -> Self {
-        Message {
-            id: self.id.clone(),
-            status: self.status.clone(),
-            transaction_id: self.transaction_id.clone(),
-            block_id: self.block_id.clone(),
-            boc: self.boc.clone(),
-            proof: self.proof.clone(),
-            header: self.header.clone(),
-            init: self.init.clone(),
-            body: self.body.clone(),
-            root_cell: self.clone_root_cell()
-        }
-    }
-}
-
 impl Message {
     
     ///
@@ -1079,16 +1046,9 @@ impl Message {
     ///
     pub fn with_int_header(h: InternalMessageHeader) -> Message {
         Message {
-            id: None,
-            transaction_id: None,
-            block_id: None,
-            boc: None,
-            proof: None,
-            status: MessageProcessingStatus::default(),
             header: CommonMsgInfo::IntMsgInfo(h),
             init: None,
             body: None,
-            root_cell: RwLock::new(None)
         }
     }
 
@@ -1097,16 +1057,9 @@ impl Message {
     ///
     pub fn with_ext_in_header(h: ExternalInboundMessageHeader) -> Message{
         Message {
-            id: None,
-            transaction_id: None,
-            block_id: None,
-            boc: None,
-            proof: None,
-            status: MessageProcessingStatus::default(),
             header: CommonMsgInfo::ExtInMsgInfo(h),
             init: None,
             body: None,
-            root_cell: RwLock::new(None)
         }
     }
 
@@ -1115,16 +1068,9 @@ impl Message {
     ///
     pub fn with_ext_out_header(h: ExtOutMessageHeader) -> Message{
         Message {
-            id: None,
-            transaction_id: None,
-            block_id: None,
-            boc: None,
-            proof: None,
-            status: MessageProcessingStatus::default(),
             header: CommonMsgInfo::ExtOutMsgInfo(h),
             init: None,
             body: None,
-            root_cell: RwLock::new(None)
         }
     }
 
@@ -1133,7 +1079,6 @@ impl Message {
     }
 
     pub fn header_mut(&mut self) -> &mut CommonMsgInfo {
-        self.reset_root_cell();
         &mut self.header
     }
 
@@ -1146,7 +1091,6 @@ impl Message {
     }
 
     pub fn state_init_mut(&mut self) -> &mut Option<StateInit> {
-        self.reset_root_cell();
         &mut self.init
     }
 
@@ -1155,7 +1099,6 @@ impl Message {
     }
 
     pub fn body_mut(&mut self) -> &mut Option<SliceData> {
-        self.reset_root_cell();
         &mut self.body
     }
 
@@ -1211,23 +1154,17 @@ impl Message {
     /// Internal and External outbound messages
     ///
     pub fn set_at_and_lt(&mut self, at: u32, lt: u64) {
-        let changed = 
         match self.header {
             CommonMsgInfo::IntMsgInfo(ref mut header) => {
                 header.created_at = UnixTime32(at);
                 header.created_lt = lt;
-                true
             },
             CommonMsgInfo::ExtOutMsgInfo(ref mut header) => {
                 header.created_at = UnixTime32(at);
                 header.created_lt = lt;
-                true
             },
-            _ => false
+            _ => ()
         };
-        if changed {
-            self.reset_root_cell();
-        }
     }
 
     ///
@@ -1257,7 +1194,6 @@ impl Message {
     /// Get value transmitted by the message
     ///
     pub fn get_value_mut<'a>(&'a mut self) -> Option<&'a mut CurrencyCollection> {
-        self.reset_root_cell();
         self.header.get_value_mut()
     }
 
@@ -1300,16 +1236,9 @@ impl Message {
     }
 
     ///
-    /// Get processing status of message
-    /// 
-    pub fn processing_status(&self) -> MessageProcessingStatus {
-        self.status.clone()
-    }
-
-    ///
     /// Get destination workchain of message
     /// 
-    pub fn workchain(&self) -> Option<i32> {
+    pub fn workchain_id(&self) -> Option<i32> {
         match &self.header {
             CommonMsgInfo::IntMsgInfo(ref imi) => {
                 match imi.dst {
@@ -1339,41 +1268,81 @@ impl Message {
         }
     }
 
-    pub fn prepare_proof_for_json(&mut self, block_info_cells: &HashMap<UInt256, Arc<CellData>>,
-        block_root: &Arc<CellData>) -> BlockResult<()> {
-
-        // proof for message and block info in block
-        let message_root = self.write_to_new_cell()?;
-        let message_cells = BagOfCells::with_root(&message_root.into())
-            .withdraw_cells();
-
-        let is_include = |h| {
-            block_info_cells.contains_key(&h) || message_cells.contains_key(&h)
-        };
-
-        let message_proof = MerkleProof::create(block_root, &is_include)?;
-        self.proof = Some(message_proof.write_to_new_cell()?.into());
-        Ok(())
+    ///
+    /// Get source workchain of message
+    /// 
+    pub fn src_workchain_id(&self) -> Option<i32> {
+        match self.header() {
+            CommonMsgInfo::IntMsgInfo(ref imi) => {
+                match imi.src {
+                    MsgAddressInt::AddrNone => None,
+                    MsgAddressInt::AddrStd(ref addr) => {
+                        Some(addr.workchain_id as i32)
+                    }
+                    MsgAddressInt::AddrVar(ref addr) => {
+                        Some(addr.workchain_id)
+                    }
+                }
+            }
+            CommonMsgInfo::ExtInMsgInfo(_) => {
+                None
+            }
+            CommonMsgInfo::ExtOutMsgInfo(ref eimi) => {
+                match &eimi.src {
+                    MsgAddressInt::AddrNone => None,
+                    MsgAddressInt::AddrStd(ref addr) => {
+                        Some(addr.workchain_id as i32)
+                    }
+                    MsgAddressInt::AddrVar(ref addr) => {
+                        Some(addr.workchain_id)
+                    }
+                }
+            }
+        }
     }
 
-    pub fn prepare_boc_for_json(&mut self) -> BlockResult<()> {
-        self.boc = Some(self.write_to_new_cell()?.into());
-        Ok(())
+    pub fn prepare_proof(&self, is_inbound: bool, block_root: &Cell) -> BlockResult<Cell> {
+
+        // proof for message and block info in block
+
+        let msg_hash = self.hash()?;
+        let usage_tree = UsageTree::with_root(block_root.clone());
+        let block: Block = Block::construct_from(&mut usage_tree.root_slice()).unwrap();
+
+        block.read_info()?;
+
+        if is_inbound {
+            block
+                .read_extra()?
+                .read_in_msg_descr()?
+                .get(&msg_hash)?
+                    .ok_or(BlockErrorKind::InvalidArg {
+                        msg: "Message isn't belonged given block's in_msg_descr".into()
+                    })?
+                .read_message()?;
+        } else {
+            block
+                .read_extra()?
+                .read_out_msg_descr()?
+                .get(&msg_hash)?
+                    .ok_or(BlockErrorKind::InvalidArg { 
+                        msg: "Message isn't belonged given block's out_msg_descr".into()
+                    })?
+                .read_message()?;
+        }
+
+        MerkleProof::create_by_usage_tree(block_root, &usage_tree)
+            .and_then(|proof| proof.write_to_new_cell())
+            .map(|cell| cell.into())
     }
 }
 
-impl LazySerializable for Message
+impl Serializable for Message
 {
-    fn root_cell(&self) -> &RwLock<Option<SliceData>> {
-        &self.root_cell
-    }
-
-    fn do_write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
 
         // write header
         self.header.write_to(builder)?;
-        
-        let body_slice = self.body.clone().unwrap_or_default();
 
         let init_builder = if let Some(ref init) = self.init {
             init.write_to_new_cell()?
@@ -1381,40 +1350,36 @@ impl LazySerializable for Message
             BuilderData::new()
         };
 
-        let mut total_len = builder.length_in_bits() + init_builder.length_in_bits() + body_slice.remaining_bits();
-        total_len += if total_len % 8 != 0  { 8 - total_len % 8 } else { 0 };
+        let mut header_bits = builder.length_in_bits() + 2; // 2 is state_init's Maybe bit + body's Either bit
+        if self.state_init().is_some() {
+            header_bits += 1 // state_init's Either bit
+        }
+        let header_refs = builder.references_used();
+        let state_bits = init_builder.length_in_bits();
+        let state_refs = init_builder.references_used();
+        let (body_bits, body_refs) =
+            self.body.as_ref().map(|s| (s.remaining_bits(), s.remaining_references())).unwrap_or((0, 0));
+
         let (body_to_ref, init_to_ref) = 
-            if builder.references_used() == 0 {
-                if init_builder.references_used() + body_slice.remaining_references() <= 4 {
-                    if total_len <= 1023 {
-                        (false, false)
-                    } else {
-                        (true, false)
-                    }
-                } else if body_slice.remaining_references() < 4 {
-                    if total_len < 1023 {
-                        (false, true)
-                    } else {
-                        (true, false)
-                    }
-                } else if total_len < 1023 {
-                    (false, false)
-                } else {
+            if header_bits + state_bits + body_bits <= MAX_DATA_BITS &&
+                header_refs + state_refs + body_refs <= MAX_REFERENCES_COUNT {
+                // all fits into one cell
+                (false, false)
+            } else {
+                if header_bits + state_bits <= MAX_DATA_BITS &&
+                    header_refs + state_refs + 1 <= MAX_REFERENCES_COUNT { // + body cell ref
+                    // header & state fit
                     (true, false)
-                }
-            } else if init_builder.references_used() + body_slice.remaining_references() < 4 {
-                //header can have only 1 ref maximum
-                if total_len <= 1023 {
-                    (false, false)
-                } else if init_builder.references_used() <= 2 {
-                    (true, false)
+                } else if header_bits + body_bits <= MAX_DATA_BITS &&
+                    header_refs + body_refs + 1 <= MAX_REFERENCES_COUNT { // + init cell ref
+                    // header & body fit
+                    (false, true)
                 } else {
+                    // only header fits
                     (true, true)
                 }
-            } else {
-                (true, false)
             };
-        
+
         // write StateInit
         match self.init {
             Some(_) => {
@@ -1439,10 +1404,10 @@ impl LazySerializable for Message
             Some(_) => {
                 if !body_to_ref {
                     builder.append_bit_zero()?;     //either bit
-                    builder.checked_append_references_and_data(&body_slice)?;
+                    builder.checked_append_references_and_data(&self.body().unwrap())?;
                 } else { // if not enough space in current cell - append as reference
                     builder.append_bit_one()?;     //either bit
-                    builder.append_reference(BuilderData::from_slice(&body_slice));
+                    builder.append_reference(BuilderData::from_slice(&self.body().unwrap()));
                 };
             },
             None => {
@@ -1454,8 +1419,10 @@ impl LazySerializable for Message
 
         Ok(())
     } 
+}
 
-    fn do_read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+impl Deserializable for Message {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
 
         // read header
         self.header.read_from(cell)?;
@@ -1719,9 +1686,9 @@ impl fmt::Display for TickTock {
 pub struct StateInit {
     pub split_depth: Option<Number5>,
     pub special: Option<TickTock>,
-    pub code: Option<Arc<CellData>>,
-    pub data: Option<Arc<CellData>>,
-    pub library: Option<Arc<CellData>>,
+    pub code: Option<Cell>,
+    pub data: Option<Cell>,
+    pub library: Option<Cell>,
 }
 
 impl StateInit {
@@ -1735,17 +1702,17 @@ impl StateInit {
         self.special = Some(val);
     }
 
-    pub fn set_code(&mut self, val: Arc<CellData>)
+    pub fn set_code(&mut self, val: Cell)
     {
         self.code = Some(val);
     }
 
-    pub fn set_data(&mut self, val: Arc<CellData>)
+    pub fn set_data(&mut self, val: Cell)
     {
         self.data = Some(val);
     }
 
-    pub fn set_library(&mut self, val: Arc<CellData>)
+    pub fn set_library(&mut self, val: Cell)
     {
         self.library = Some(val);
     }
@@ -1792,7 +1759,7 @@ impl Deserializable for StateInit {
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum MessageProcessingStatus {
-    Unknown,
+    Unknown = 0,
     Queued,
     Processing,
     Preliminary,

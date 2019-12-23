@@ -27,7 +27,7 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
         while cursor.get_next_bit()? {
             if cursor.remaining_references() < 2 {
                 // fork doesn't have two refs - bad data
-                bail!(BlockErrorKind::InvalidData("Fork doesn't have two refs".into()))
+                bail!(BlockErrorKind::InvalidData { msg: "Fork doesn't have two refs".into() })
             }
             match key.get_next_bit_int() {
                 Ok(x) => cursor = cursor.reference(x).expect("There must be at least two links").into(),
@@ -42,14 +42,14 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
     }
     /// Iterates over all items
     fn iterate<F: FnMut(SliceData, X) -> BlockResult<bool>>(&self, p: &mut F) -> BlockResult<bool> {
-        iterate_internal(BuilderData::new(), &mut self.get_data(), p)
+        iterate_internal(&mut self.get_data(), BuilderData::new(), p)
     }
 }
 
 //////////////////////////////////
 // helper functions
 fn internal_merge(
-    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Arc<CellData>>, mut key: SliceData
+    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, mut key: SliceData
 ) -> bool {
     if *bits != 1 || children.len() < 2 {
         false
@@ -66,7 +66,7 @@ fn internal_merge(
 }
 
 fn internal_split<X: Default + Serializable + Deserializable>(
-    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Arc<CellData>>, (mut key, value): (SliceData, &X)
+    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, value): (SliceData, &X)
 ) -> BlockResult<bool> {
     if *bits == 1 && data.as_slice() == [0x80] { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
         if children.len() < 2 {
@@ -90,18 +90,19 @@ fn internal_split<X: Default + Serializable + Deserializable>(
     Ok(false)
 }
 
-fn append_key_bit(mut key: BuilderData, bit: bool) -> Result<BuilderData, ExceptionCode> {
-    key.append_bit_bool(bit)?;
-    Ok(key)
-}
-
-fn iterate_internal<X, F>(key: BuilderData, slice: &mut SliceData, p: &mut F) -> BlockResult<bool>
-where X: Default + Serializable + Deserializable, F: FnMut(SliceData, X) -> BlockResult<bool> {
-    let result = if slice.get_next_bit()? {
-        iterate_internal(append_key_bit(key.clone(), false)?, &mut slice.checked_drain_reference()?.into(), p)? &&
-        iterate_internal(append_key_bit(key, true)?, &mut slice.checked_drain_reference()?.into(), p)?
+fn iterate_internal<X, F>(cursor: &mut SliceData, mut key: BuilderData, p: &mut F) -> BlockResult<bool>
+where 
+    X: Default + Serializable + Deserializable, 
+    F: FnMut(SliceData, X) -> BlockResult<bool> {
+    
+    let result = if cursor.get_next_bit()? {
+        let mut left_key = key.clone();
+        left_key.append_bit_zero()?;
+        key.append_bit_one()?;
+        iterate_internal(&mut cursor.checked_drain_reference()?.into(), left_key, p)? &&
+        iterate_internal(&mut cursor.checked_drain_reference()?.into(), key, p)?
     } else {
-        return p(key.into(), X::construct_from(slice)?)
+        return p(key.into(), X::construct_from(cursor)?)
     };
     Ok(result)
 }
@@ -262,7 +263,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
     //////////////////////////////////
     // helper functions
     fn internal_split_next(
-        data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Arc<CellData>>, (mut key, value, aug): (SliceData, &X, &Y)
+        data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, value, aug): (SliceData, &X, &Y)
     ) -> BlockResult<bool> {
         if let Ok(x) = key.get_next_bit_int() {
             let mut cursor = children[x].clone().into();

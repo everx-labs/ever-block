@@ -13,7 +13,6 @@
 */
 
 use super::*;
-use ton_types::CellType;
 
 
 
@@ -120,7 +119,7 @@ impl IntermediateAddressRegular {
     }
 
     pub fn with_use_src_bits(use_bits: u8) -> BlockResult<Self> {
-        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg("use_bits must be <= 96".into())); }
+        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg { msg: "use_bits must be <= 96".into() }); }
         Ok(IntermediateAddressRegular {
             use_src_bits: use_bits
         })
@@ -131,7 +130,7 @@ impl IntermediateAddressRegular {
     }
 
     pub fn set_use_src_bits(&mut self, use_bits: u8) -> BlockResult<()>{
-        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg("use_bits must be <= 96".into())); }
+        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg { msg: "use_bits must be <= 96".into() }); }
         self.use_src_bits = use_bits;
         Ok(())
     }
@@ -148,7 +147,7 @@ impl Serializable for IntermediateAddressRegular{
 impl Deserializable for IntermediateAddressRegular{
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
         let use_bits = cell.get_next_bits(7)?[0] >> 1;    // read 7 bit into use_src_bits
-        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg("use_bits must be <= 96".into())); }
+        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg { msg: "use_bits must be <= 96".into() }); }
         self.use_src_bits = use_bits;
 
         Ok(())
@@ -186,7 +185,7 @@ impl IntermediateAddressSimple {
 
     pub fn with_addr(workchain_id: i8, addr_pfx: SliceData) -> BlockResult<Self> {
         if addr_pfx.remaining_bits() != 64 { 
-            bail!(BlockErrorKind::InvalidArg("addr_pfx's length in bits must be 64".into())); 
+            bail!(BlockErrorKind::InvalidArg { msg: "addr_pfx's length in bits must be 64".into() });
         }
         Ok(IntermediateAddressSimple {
             workchain_id: workchain_id,
@@ -194,21 +193,21 @@ impl IntermediateAddressSimple {
         })
     }
 
-    pub fn get_workchain_id(&self) -> i8 {
+    pub fn workchain_id(&self) -> i8 {
         self.workchain_id
     }
 
-    pub fn get_addr_pfx(&self) -> SliceData {
-        self.addr_pfx.clone()
+    pub fn addr_pfx(&self) -> &SliceData {
+        &self.addr_pfx
     }
 
-    pub fn set_workchain_id(&mut self, workchain_id: i8) {
-        self.workchain_id = workchain_id;
+    pub fn workchain_id_mut(&mut self) -> &mut i8 {
+        &mut self.workchain_id
     }
 
     pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> BlockResult<()>{
         if addr_pfx.remaining_bits() != 64 { 
-            bail!(BlockErrorKind::InvalidArg("addr_pfx's length in bits must be 64".into())); 
+            bail!(BlockErrorKind::InvalidArg { msg: "addr_pfx's length in bits must be 64".into() });
         }
         self.addr_pfx = addr_pfx;
         Ok(())
@@ -262,7 +261,7 @@ impl IntermediateAddressExt {
 
     pub fn with_addr(workchain_id: i32, addr_pfx: SliceData) -> BlockResult<Self> {
         if addr_pfx.remaining_bits() != 64 {
-            bail!(BlockErrorKind::InvalidArg("addr_pfx's length in bits must be 64".into())); 
+            bail!(BlockErrorKind::InvalidArg { msg: "addr_pfx's length in bits must be 64".into() });
         }
         Ok(IntermediateAddressExt {
             workchain_id: workchain_id,
@@ -270,21 +269,21 @@ impl IntermediateAddressExt {
         })
     }
 
-    pub fn get_workchain_id(&self) -> i32 {
+    pub fn workchain_id(&self) -> i32 {
         self.workchain_id
     }
 
-    pub fn get_addr_pfx(&self) -> SliceData {
-        self.addr_pfx.clone()
+    pub fn addr_pfx(&self) -> &SliceData {
+        &self.addr_pfx
     }
 
-    pub fn set_workchain_id(&mut self, workchain_id: i32) {
-        self.workchain_id = workchain_id;
+    pub fn workchain_id_mut(&mut self) -> &mut i32 {
+        &mut self.workchain_id
     }
 
     pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> BlockResult<()>{
         if addr_pfx.remaining_bits() != 64 {
-            bail!(BlockErrorKind::InvalidArg("addr_pfx's length in bits must be 64".into())); 
+            bail!(BlockErrorKind::InvalidArg { msg: "addr_pfx's length in bits must be 64".into() });
         }
         self.addr_pfx = addr_pfx;
         Ok(())
@@ -307,60 +306,54 @@ impl Deserializable for IntermediateAddressExt{
     } 
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
-/// 
-/// msg_envelope cur_addr:IntermediateAddress
-/// next_addr:IntermediateAddress fwd_fee_remaining:Grams
-/// msg:^Message = MsgEnvelope;
-/// 
-/// 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MsgEnvelope{
+// msg_envelope#4 
+//   cur_addr:IntermediateAddress 
+//   next_addr:IntermediateAddress
+//   fwd_fee_remaining:Grams 
+//   msg:^(Message Any) 
+// = MsgEnvelope; 
+#[derive(Clone, Default, Debug, Eq, PartialEq)]
+pub struct MsgEnvelope {
     pub cur_addr: IntermediateAddress,
     pub next_addr: IntermediateAddress,
     pub fwd_fee_remaining: Grams,
-    pub msg: Arc<Message>,
-}
-
-impl Default for MsgEnvelope{
-    fn default() -> Self{
-        MsgEnvelope{
-            cur_addr: IntermediateAddress::default(),
-            next_addr: IntermediateAddress::default(),
-            fwd_fee_remaining: Grams::zero(),
-            msg: Arc::new(Message::default()),
-        }
-    }
+    msg: ChildCell<Message>,
 }
 
 impl MsgEnvelope {
     ///
     /// Create Envelope with message and remainig_fee
     ///
-    pub fn with_message_and_fee(msg: Arc<Message>, fee_remainig: Grams) -> Self{
-        MsgEnvelope{
-            cur_addr: IntermediateAddress::default(),
-            next_addr: IntermediateAddress::default(),
-            fwd_fee_remaining: fee_remainig,
-            msg: msg,
-        }
+    pub fn with_message_and_fee(msg: &Message, fee_remainig: Grams) -> BlockResult<Self> {
+        Ok(
+            MsgEnvelope {
+                cur_addr: IntermediateAddress::default(),
+                next_addr: IntermediateAddress::default(),
+                fwd_fee_remaining: fee_remainig,
+                msg: ChildCell::with_struct(msg)?,
+            }
+        )
     }
 
     ///
-    /// Get message from envelope
+    /// Read message struct from envelope
     ///
-    pub fn get_message<'a>(&'a self) -> &Message {
-        &self.msg
-    }
-    pub fn get_message_mut<'a>(&'a mut self) -> Option<&'a mut Message> {
-        Arc::get_mut(&mut self.msg)
+    pub fn read_message(&self) -> BlockResult<Message> {
+        self.msg.read_struct()
     }
 
     ///
-    /// Get fee from message in envelope
+    /// Write message struct to envelope
     ///
-    pub fn get_msg_fwd_fee(&self) -> BlockResult<Option<Grams>> {
-        self.msg.get_fee()
+    pub fn write_message(&mut self, value: &Message) -> BlockResult<()> {
+        self.msg.write_struct(value)
+    }
+
+    ///
+    /// Read message cell from envelope
+    ///
+    pub fn message_cell(&self) -> &Cell {
+        self.msg.cell()
     }
 
     ///
@@ -406,19 +399,6 @@ impl MsgEnvelope {
     pub fn get_next_addr(&self) -> IntermediateAddress{
         self.next_addr.clone()
     }
-
-    pub fn read_message_from(cell: &mut SliceData) -> BlockResult<Message> {
-        let tag = cell.get_next_int(4)? as usize;
-        if tag != MSG_ENVELOPE_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "MsgEnvelope".into()))
-        }
-        let ref_cell = cell.checked_drain_reference()?;
-        if ref_cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess("Message".into()))
-        }
-        Message::construct_from(&mut ref_cell.into())
-    }
-
 }
 
 const MSG_ENVELOPE_TAG : usize = 0x4;
@@ -438,12 +418,15 @@ impl Deserializable for MsgEnvelope{
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
         let tag = cell.get_next_int(4)? as usize;
         if tag != MSG_ENVELOPE_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "MsgEnvelope".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "MsgEnvelope".into()
+            })
         }
         self.cur_addr.read_from(cell)?;
         self.next_addr.read_from(cell)?;
         self.fwd_fee_remaining.read_from(cell)?;
-        self.msg = Arc::new(Message::construct_from(&mut cell.checked_drain_reference()?.into())?);
+        self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
     } 
 }

@@ -49,10 +49,7 @@ pub struct McBlockExtra {
 
 pub fn shard_ident_to_u64(shard: &[u8]) -> u64 {
     let mut shard_key = [0; 8];
-    let len = match shard.len() {
-        len @ 0..=8 => len,
-        _ => 8
-    };
+    let len = std::cmp::min(shard.len(), 8);
     shard_key[..len].copy_from_slice(&shard[..len]);
     u64::from_be_bytes(shard_key)
 }
@@ -144,7 +141,10 @@ impl Deserializable for McBlockExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_u16()?;
         if tag != MC_BLOCK_EXTRA_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag.into(), "McBlockExtra".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag.into(),
+                s: "McBlockExtra".into()
+            })
         }
         let key_block = cell.get_next_bit()?;
         self.hashes.read_from(cell)?;
@@ -194,7 +194,7 @@ pub struct KeyMaxLt {
 }
 
 impl Deserializable for KeyMaxLt {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<(), BlockError> {
+    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
         self.key.read_from(slice)?;
         self.max_end_lt.read_from(slice)?;
         Ok(())
@@ -202,7 +202,7 @@ impl Deserializable for KeyMaxLt {
 }
 
 impl Serializable for KeyMaxLt {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<(), BlockError> {
+    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         self.key.write_to(cell)?;
         self.max_end_lt.write_to(cell)?;
         Ok(())
@@ -210,7 +210,7 @@ impl Serializable for KeyMaxLt {
 }
 
 impl Augmentable for KeyMaxLt {
-    fn calc(&mut self, other: &Self) -> Result<(), BlockError> {
+    fn calc(&mut self, other: &Self) -> BlockResult<()> {
         if other.key {
             self.key = true
         }
@@ -229,7 +229,7 @@ pub struct KeyExtBlkRef {
 }
 
 impl Deserializable for KeyExtBlkRef {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<(), BlockError> {
+    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
         self.key.read_from(slice)?;
         self.blk_ref.read_from(slice)?;
         Ok(())
@@ -237,7 +237,7 @@ impl Deserializable for KeyExtBlkRef {
 }
 
 impl Serializable for KeyExtBlkRef {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<(), BlockError> {
+    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         self.key.write_to(cell)?;
         self.blk_ref.write_to(cell)?;
         Ok(())
@@ -299,7 +299,7 @@ impl Counters {
 }
 
 impl Deserializable for Counters {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<(), BlockError> {
+    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
         self.last_updated.read_from(slice)?;
         self.total.read_from(slice)?;
         self.cnt2048.read_from(slice)?;
@@ -309,7 +309,7 @@ impl Deserializable for Counters {
 }
 
 impl Serializable for Counters {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<(), BlockError> {
+    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         self.last_updated.write_to(cell)?;
         self.total.write_to(cell)?;
         self.cnt2048.write_to(cell)?;
@@ -336,10 +336,13 @@ impl CreatorStats {
 }
 
 impl Deserializable for CreatorStats {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<(), BlockError> {
+    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
         let tag = slice.get_next_int(Self::tag_len_bits())? as u32;
         if tag != Self::tag() {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag.into(), "CreatorStats".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag.into(),
+                s: "CreatorStats".into()
+            })
         }
 
         self.mc_blocks.read_from(slice)?;
@@ -349,7 +352,7 @@ impl Deserializable for CreatorStats {
 }
 
 impl Serializable for CreatorStats {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<(), BlockError> {
+    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         cell.append_bits(Self::tag() as usize, Self::tag_len_bits())?;
 
         self.mc_blocks.write_to(cell)?;
@@ -383,10 +386,13 @@ impl BlockCreateStats {
 }
 
 impl Deserializable for BlockCreateStats {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<(), BlockError> {
+    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
         let tag = slice.get_next_int(Self::tag_len_bits())? as u32;
         if tag != Self::tag() {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag.into(), "BlockCreateStats".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag.into(),
+                s: "BlockCreateStats".into()
+            })
         }
 
         self.counters.read_from(slice)?;
@@ -395,7 +401,7 @@ impl Deserializable for BlockCreateStats {
 }
 
 impl Serializable for BlockCreateStats {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<(), BlockError> {
+    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         cell.append_bits(Self::tag() as usize, Self::tag_len_bits())?;
 
         self.counters.write_to(cell)?;
@@ -488,7 +494,10 @@ impl Deserializable for McStateExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_u16()?;
         if tag != Self::tag() {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag.into(), "McStateExtra".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag.into(),
+                s: "McStateExtra".into()
+            })
         }
         self.hashes.read_from(cell)?;
         self.config.read_from(cell)?;
@@ -497,7 +506,9 @@ impl Deserializable for McStateExtra {
         let mut flags = 0u16;
         flags.read_from(cell1)?;
         if flags > 1 {
-            bail!(BlockErrorKind::InvalidData(format!("Invalid flags value ({}). Must be <= 1.", flags)));
+            bail!(BlockErrorKind::InvalidData {
+                msg: format!("Invalid flags value ({}). Must be <= 1.", flags)
+            });
         }
         self.validator_info.read_from(cell1)?;
         self.prev_blocks.read_from(cell1)?;
@@ -673,7 +684,10 @@ impl Deserializable for ShardDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
         let tag = slice.get_next_int(Self::tag_len_bits())? as u32;
         if tag != Self::tag() {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag, "ShardDescr".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag,
+                s: "ShardDescr".into()
+            })
         }
 
         self.seq_no.read_from(slice)?;
@@ -775,21 +789,21 @@ shared_lib_descr$00 lib:^Cell publishers:(Hashmap 256 False) = LibDescr;
 */
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LibDescr {
-    lib: Arc<CellData>,
+    lib: Cell,
     publishers: HashmapE // publishers:(Hashmap 256 False)
 }
 
 impl Default for LibDescr {
     fn default() -> Self {
         Self {
-            lib: Arc::new(CellData::new()),
+            lib: Cell::default(),
             publishers: HashmapE::with_bit_len(256)
         }
     }
 }
 
 impl LibDescr {
-    pub fn from_lib_data_by_publisher(lib: Arc<CellData>, publisher: AccountId) -> Self {
+    pub fn from_lib_data_by_publisher(lib: Cell, publisher: AccountId) -> Self {
         let mut publishers = HashmapE::with_bit_len(256);
         publishers.set(
             publisher.write_to_new_cell().unwrap().into(),
@@ -819,7 +833,7 @@ impl Deserializable for LibDescr {
 impl Serializable for LibDescr {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         if self.publishers.is_empty() {
-            bail!(BlockErrorKind::InvalidData("self.publishers is empty".into()))
+            bail!(BlockErrorKind::InvalidData { msg: "self.publishers is empty".into() })
         }
         self.lib.write_to(cell)?;
         self.publishers.write_hashmap_root(cell)?;

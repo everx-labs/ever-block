@@ -12,21 +12,22 @@
 * limitations under the License.
 */
 
+#![cfg_attr(feature = "ci_run", deny(warnings))]
+#![recursion_limit="128"] // needs for error_chain
+
 // External
 extern crate core;
 #[macro_use]
 extern crate log;
 extern crate num;
-
 extern crate sha2;
 
 #[macro_use]
-extern crate error_chain;
+extern crate failure;
 
 extern crate ton_types;
 
 #[macro_use]
-#[allow(deprecated)]
 pub mod error;
 pub use self::error::*;
 
@@ -99,11 +100,10 @@ pub use self::config_params::*;
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use ton_types::{BuilderData, CellData, IBitstring, SliceData};
+use ton_types::{BuilderData, Cell, IBitstring, SliceData};
 
 use ton_types::dictionary::{HashmapE, HashmapType};
 use std::sync::Arc;
-use std::sync::RwLock;
 
 pub use ton_types::*;
 pub use ton_types::types::*;
@@ -184,14 +184,14 @@ pub trait MaybeSerialize {
     fn write_maybe_to(&self, cell: &mut BuilderData) -> BlockResult<()>;
 }
 
-impl Deserializable for Arc<CellData> {
+impl Deserializable for Cell {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         *self = cell.checked_drain_reference()?.clone();
         Ok(())
     }
 }
 
-impl Serializable for Arc<CellData> {
+impl Serializable for Cell {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         cell.append_reference(BuilderData::from(self));
         Ok(())
@@ -241,64 +241,12 @@ impl<T: Deserializable> MaybeDeserialize for T {}
 
 pub trait GetRepresentationHash: Serializable {
     fn hash(&self) -> BlockResult<UInt256> {
-        let cell: Arc<CellData> = self.write_to_new_cell()?.into();
+        let cell: Cell = self.write_to_new_cell()?.into();
         Ok(cell.repr_hash())
     }
 }
 
 impl<T: Serializable> GetRepresentationHash for T {}
-
-pub trait LazySerializable: Serializable + Deserializable {
-    fn root_cell(&self) -> &RwLock<Option<SliceData>>;
-    fn do_write_to(&self, builder: &mut BuilderData) -> BlockResult<()>;
-    fn do_read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>;
-
-    fn reset_root_cell(&self) {
-        *(self.root_cell().write().unwrap()) = None
-    }
-
-    fn set_root_cell(&self, root: SliceData) {
-        *(self.root_cell().write().unwrap()) = Some(root)
-    }
-
-    fn clone_root_cell(&self) -> RwLock<Option<SliceData>> {
-        let root_cell = self.root_cell().read().unwrap();
-        RwLock::new(
-            if root_cell.is_some() {
-                Some(root_cell.as_ref().unwrap().clone())
-            } else {
-                None
-            })
-    }
-}
-
-impl<T: LazySerializable> Serializable for T {
-    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
-        {
-            let root_cell = self.root_cell().read().unwrap();
-            if root_cell.is_some() {
-                builder.checked_append_references_and_data(root_cell.as_ref().unwrap())?;
-                return Ok(())
-            }
-        }
-
-        let mut builder1 = BuilderData::new();
-        self.do_write_to(&mut builder1)?;
-
-        let slice: SliceData = builder1.into();
-        self.set_root_cell(slice.clone());
-        builder.checked_append_references_and_data(&slice)?;
-
-        Ok(())
-    }
-}
-
-impl<T: LazySerializable> Deserializable for T {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
-        self.set_root_cell(cell.clone());
-        self.do_read_from(cell)
-    }
-}
 
 impl Deserializable for UInt256 {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
@@ -360,11 +308,3 @@ pub fn id_from_key(key: &ed25519_dalek::PublicKey) -> u64 {
     ])
 }
 
-#[cfg(test)]
-pub fn write_read_and_assert<T>(s: T) -> T
-where T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq {
-    let cell = s.write_to_new_cell().unwrap();
-    let s2 = T::construct_from(&mut cell.into()).unwrap();
-    assert_eq!(s, s2);
-    s2
-}

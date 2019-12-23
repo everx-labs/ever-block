@@ -17,7 +17,6 @@ use AccountId;
 use super::*;
 use std::fmt;
 use ton_types::cells_serialization:: BagOfCells;
-use std::sync::Arc;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -89,7 +88,7 @@ impl StorageUsed {
         Ok(Self::calculate_for_cell(&root_cell))
     }
 
-    pub fn calculate_for_cell(root_cell: &Arc<CellData>) -> StorageUsed {
+    pub fn calculate_for_cell(root_cell: &Cell) -> StorageUsed {
 
         let boc = BagOfCells::with_root(root_cell);
         let mut cells: u64 = 0;
@@ -98,7 +97,7 @@ impl StorageUsed {
 
         for (_, cell) in boc.cells().iter() {
             cells += 1;
-            bits += cell.calc_bit_length() as u64;
+            bits += cell.bit_length() as u64;
         }
 
         StorageUsed::with_values(cells, bits, _public_cells)
@@ -165,7 +164,7 @@ impl StorageUsedShort {
         Ok(Self::calculate_for_cell(&root_cell))
     }
 
-    pub fn calculate_for_cell(root_cell: &Arc<CellData>) -> StorageUsedShort {
+    pub fn calculate_for_cell(root_cell: &Cell) -> StorageUsedShort {
 
         let boc = BagOfCells::with_root(root_cell);
         let mut cells: u64 = 0;
@@ -173,14 +172,14 @@ impl StorageUsedShort {
 
         for (_, cell) in boc.cells().iter() {
             cells += 1;
-            bits += cell.calc_bit_length() as u64;
+            bits += cell.bit_length() as u64;
         }
 
         StorageUsedShort::with_values(cells, bits)
     }
 
     /// append cell and bits count into
-    pub fn append(&mut self, root_cell: &Arc<CellData>) {
+    pub fn append(&mut self, root_cell: &Cell) {
         let addition = Self::calculate_for_cell(root_cell);
         self.cells.0 += addition.cells.0;
         self.bits.0 += addition.bits.0;
@@ -274,7 +273,6 @@ impl fmt::Display for StorageInfo {
 /// acc_state_nonexist$11 = AccountStatus;
 ///
 
-#[allow(dead_code)]
 #[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord)]
 pub enum AccountStatus {
     AccStateUninit,
@@ -313,7 +311,7 @@ impl Deserializable for AccountStatus {
             0x80 => AccountStatus::AccStateActive,
             0x40 => AccountStatus::AccStateFrozen,
             0xC0 => AccountStatus::AccStateNonexist,
-            _ => bail!(BlockErrorKind::Other("unreachable".into())),
+            _ => bail!(BlockErrorKind::Other { msg: "unreachable".into() }),
         };
         Ok(())
     }
@@ -374,7 +372,6 @@ impl fmt::Display for AccountStorage {
 /// account_frozen$01 state_hash:uint256 = AccountState;
 ///
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AccountState {
     AccountUninit,
@@ -458,9 +455,6 @@ impl fmt::Display for AccountState {
 
 #[derive(Debug, Clone, Default)]
 pub struct AccountStuff {
-    pub proof: Option<SliceData>,
-    pub boc: Option<SliceData>,
-
     pub addr: MsgAddressInt,
     pub storage_stat: StorageInfo,
     pub storage: AccountStorage,
@@ -526,8 +520,6 @@ impl Account {
         //storage.last_trans_lt = current_unix_time(); //the time of account creation or last transaction time
 
         let account = Account::Account(AccountStuff {
-            boc: None,
-            proof: None,
             addr: addr.clone(),
             storage_stat: StorageInfo::default(),
             storage: storage
@@ -540,8 +532,6 @@ impl Account {
     ///
     pub fn with_address(addr: &MsgAddressInt) -> Self {
         let account = Account::Account(AccountStuff {
-            boc: None,
-            proof: None,
             addr: addr.clone(),
             storage_stat: StorageInfo::default(),
             storage: AccountStorage::default()
@@ -570,18 +560,17 @@ impl Account {
             //code must present in constructor message
             match init.code {
                 Some(_) => storage.state = AccountState::AccountActive(init.clone()),
-                None => bail!(BlockErrorKind::InvalidData(
-                    "code field must present in StateInit in constructor message while creating account".into())),
+                None => bail!(BlockErrorKind::InvalidData {
+                        msg: "code field must present in StateInit in constructor message while creating account".into()
+                    }),
             };
         } else {
-            bail!(BlockErrorKind::InvalidData(
-                "stateInit must present in constructor message while creating account".into()
-            ));
+            bail!(BlockErrorKind::InvalidData {
+                msg: "stateInit must present in constructor message while creating account".into()
+            });
         }
 
         let account = Account::Account(AccountStuff {
-            boc: None,
-            proof: None,
             addr: address,
             storage_stat: StorageInfo::default(),
             storage: storage
@@ -610,8 +599,6 @@ impl Account {
         storage: &AccountStorage,
     ) -> Self {
         let account = Account::Account(AccountStuff {
-            boc: None,
-            proof: None,
             addr: addr.clone(),
             storage_stat: storage_stat.clone(),
             storage: storage.clone()
@@ -689,11 +676,11 @@ impl Account {
     }
 
     /// getting to the root of the cell with Code of Smart Contract
-    pub fn get_code(&self) -> Option<Arc<CellData>> {
+    pub fn get_code(&self) -> Option<Cell> {
         if let Some(stuff) = self.stuff() {
             if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
                 if let Some(ref code) = (*state_init).code {
-                    return Some(Arc::clone(code));
+                    return Some(code.clone());
                 }
             }
         }
@@ -701,11 +688,11 @@ impl Account {
     }
 
     /// getting to the root of the cell with persistent Data of Smart Contract
-    pub fn get_data(&self) -> Option<Arc<CellData>> {
+    pub fn get_data(&self) -> Option<Cell> {
         if let Some(stuff) = self.stuff() {
             if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
                 if let Some(ref data) = (*state_init).data {
-                    return Some(Arc::clone(data));
+                    return Some(data.clone());
                 }
             }
         }
@@ -713,7 +700,7 @@ impl Account {
     }
 
     /// save persistent data of smart contract (for example, after execute code of smart contract into transaction)
-    pub fn set_data(&mut self, new_data: Arc<CellData>) -> bool {
+    pub fn set_data(&mut self, new_data: Cell) -> bool {
         if let Some(stuff) = self.stuff_mut() {
             if let AccountState::AccountActive(ref mut state_init) = stuff.storage.state {
                 if let Some(ref mut data) = (*state_init).data {
@@ -726,7 +713,7 @@ impl Account {
     }
 
     /// set new code of smart contract
-    pub fn set_code(&mut self, new_code: Arc<CellData>) -> bool {
+    pub fn set_code(&mut self, new_code: Cell) -> bool {
         if let Some(stuff) = self.stuff_mut() {
             if let AccountState::AccountActive(ref mut state_init) = stuff.storage.state {
                 if let Some(ref mut code) = state_init.code {
@@ -755,11 +742,11 @@ impl Account {
     }
 
     /// getting to the root of the cell with library
-    pub fn get_library(&self) -> Option<Arc<CellData>> {
+    pub fn get_library(&self) -> Option<Cell> {
         if let Some(stuff) = self.stuff() {
             if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
                 if let Some(ref library) = (*state_init).library {
-                    return Some(Arc::clone(library));
+                    return Some(library.clone());
                 }
             }
         }
@@ -806,26 +793,30 @@ impl Account {
         }
     }
 
-    pub fn prepare_proof_for_json(&mut self, state_root: &Arc<CellData>) -> BlockResult<()> {
-        if !self.is_none() { 
+    pub fn prepare_proof(&self, state_root: &Cell) -> BlockResult<Cell> {
+        if self.is_none() {
+            bail!(BlockErrorKind::InvalidData {
+                msg: "Account cannot be None".into()
+            })
+        } else {
             // proof for account in shard state
-            let acc_root: Arc<CellData> = self.write_to_new_cell()?.into();
 
-            let is_include = |h| h == acc_root.repr_hash();
+            let usage_tree = UsageTree::with_root(state_root.clone());
+            let ss: ShardStateUnsplit = 
+                ShardStateUnsplit::construct_from(&mut usage_tree.root_slice())?;
 
-            let acc_proof = MerkleProof::create(state_root, &is_include)?;
-            self.stuff_mut().unwrap().proof = Some(acc_proof.write_to_new_cell()?.into());
+            ss
+                .read_accounts()?
+                .get(&self.get_addr().unwrap().get_address())?
+                    .ok_or(BlockErrorKind::InvalidArg {
+                        msg: "Account isn't belonged given shard state".into()
+                    })?
+                .read_account()?;
+
+            MerkleProof::create_by_usage_tree(state_root, &usage_tree)
+                .and_then(|proof| proof.write_to_new_cell())
+                .map(|cell| cell.into())
         }
-        Ok(())
-    }
-
-    pub fn prepare_boc_for_json(&mut self) -> BlockResult<()> {
-        if !self.is_none() {
-            // Account's json must contain FULL account boc, so we write full boc
-            // into stuff (instead stuff's boc)
-            self.stuff_mut().unwrap().boc = Some(SliceData::from(self.write_to_new_cell()?));
-        }
-        Ok(())
     }
 }
 
@@ -880,7 +871,7 @@ pub struct ShardAccount {
 impl ShardAccount {
     pub fn with_params(account: Account, last_trans_hash: UInt256, last_trans_lt: u64) -> BlockResult<Self> {
         Ok(ShardAccount {
-            account: ChildCell::with_struct(account)?,
+            account: ChildCell::with_struct(&account)?,
             last_trans_hash,
             last_trans_lt,
         })
@@ -890,7 +881,7 @@ impl ShardAccount {
         self.account.read_struct()
     }
 
-    pub fn write_account(&mut self, value: Account) -> BlockResult<()> {
+    pub fn write_account(&mut self, value: &Account) -> BlockResult<()> {
         self.account.write_struct(value)
     }
 
@@ -910,7 +901,7 @@ impl ShardAccount {
         &mut self.last_trans_lt
     }
 
-    pub fn account_cell(&self) -> &CellData {
+    pub fn account_cell(&self) -> &Cell {
         self.account.cell()
     }
 }

@@ -80,7 +80,9 @@ macro_rules! define_VarIntegerN {
 
             fn check_owerflow(value: &BigInt) -> BlockResult<()> {
                 if Self::get_len(&value) > $N {
-                    bail!(BlockErrorKind::InvalidArg(format!("value is bigger than {} bytes", $N).into()))
+                    bail!(BlockErrorKind::InvalidArg {
+                        msg: format!("value is bigger than {} bytes", $N).into()
+                    })
                 } else {
                     Ok(())
                 }
@@ -257,7 +259,9 @@ macro_rules! define_NumberN_up32bit {
         impl $varname {
             pub fn from_u32(value: u32, max_value: u32) -> BlockResult<Self> {
                 if value > max_value {
-                    bail!(BlockErrorKind::InvalidArg(format!("value: {} must be <= {}", value, max_value)))
+                    bail!(BlockErrorKind::InvalidArg {
+                        msg: format!("value: {} must be <= {}", value, max_value)
+                    })
                 }
                 Ok($varname(value))
             }
@@ -464,15 +468,15 @@ macro_rules! define_HashmapE {
         impl $varname {
             /// Used for not empty Hashmaps
             pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> BlockResult<()> {
-                self.0.read_hashmap_root(slice).map_err(|e| BlockError::from(e))
+                self.0.read_hashmap_root(slice).map_err(|e| e.into())
             }
             /// Used for not empty Hashmaps
             pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> BlockResult<()> {
-                self.0.write_hashmap_root(cell).map_err(|e| BlockError::from(e))
+                self.0.write_hashmap_root(cell).map_err(|e| e.into())
             }
 
             pub fn len(&self) -> BlockResult<usize> {
-                self.0.len().map_err(|e| BlockError::from(e))
+                self.0.len().map_err(|e| e.into())
             }
             /// iterates items
             pub fn iterate<F>(&self, p: &mut F) -> BlockResult<bool>
@@ -502,9 +506,9 @@ macro_rules! define_HashmapE {
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> BlockResult<()> {
                 let key = key.write_to_new_cell()?.into();
                 let value = value.write_to_new_cell()?.into();
-                self.0.set(key, &value).map(|_|()).map_err(|e| BlockError::from(e))
+                self.0.set(key, &value).map(|_|()).map_err(|e| e.into())
             }
-            pub fn setref<K: Serializable>(&mut self, key: &K, value: &Arc<CellData>) -> BlockResult<()> {
+            pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell) -> BlockResult<()> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.setref(key, value)?;
                 Ok(())
@@ -516,7 +520,69 @@ macro_rules! define_HashmapE {
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> BlockResult<()> {
                 let key = key.write_to_new_cell()?.into();
-                self.0.remove(key).map(|_|()).map_err(|e| BlockError::from(e))
+                self.0.remove(key).map(|_|()).map_err(|e| e.into())
+            }
+        }
+
+        impl Default for $varname {
+            fn default() -> Self {
+                $varname(HashmapE::with_bit_len($bit_len))
+            }
+        }
+
+        impl Serializable for $varname {
+            fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()>{
+                self.0.write_to(cell)
+            }
+        }
+
+        impl Deserializable for $varname {
+            fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()>{
+                self.0.read_from(slice)
+            }
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! define_HashmapE_empty_val {
+    ( $varname:ident, $bit_len:expr ) => {
+        #[derive(PartialEq, Clone, Debug, Eq)]
+        pub struct $varname(HashmapE);
+
+        #[allow(dead_code)]
+        impl $varname {
+            /// Used for not empty Hashmaps
+            pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+                self.0.read_hashmap_root(slice).map_err(|e| e.into())
+            }
+            /// Used for not empty Hashmaps
+            pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> BlockResult<()> {
+                self.0.write_hashmap_root(cell).map_err(|e| e.into())
+            }
+
+            pub fn len(&self) -> BlockResult<usize> {
+                self.0.len().map_err(|e| e.into())
+            }
+            /// iterates keys
+            pub fn iterate_keys<K, F>(&self, p: &mut F) -> BlockResult<bool>
+            where K: Default + Deserializable, F: FnMut(K) -> BlockResult<bool> {
+                self.0.iterate(&mut |mut key, _| p(
+                    K::construct_from(&mut key)?
+                ))
+            }
+            pub fn add_key<K: Serializable>(&mut self, key: &K) -> BlockResult<()> {
+                let key = key.write_to_new_cell()?.into();
+                let value = SliceData::new_empty();
+                self.0.set(key, &value).map(|_|()).map_err(|e| e.into())
+            }
+            pub fn remove<K: Serializable>(&mut self, key: &K) -> BlockResult<()> {
+                let key = key.write_to_new_cell()?.into();
+                self.0.remove(key).map(|_|()).map_err(|e| e.into())
+            }
+            pub fn check_key<K: Serializable>(&self, key: &K) -> BlockResult<bool> {
+                let key = key.write_to_new_cell()?.into();
+                self.0.get(key).map(|value| value.is_some()).map_err(|e| e.into())
             }
         }
 
@@ -549,6 +615,12 @@ impl UnixTime32 {
     }
 }
 
+impl From<u32> for UnixTime32 {
+    fn from(value: u32) -> Self {
+        UnixTime32(value)
+    }
+}
+
 impl Serializable for UnixTime32 {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()>{
         self.0.write_to(cell)
@@ -567,51 +639,15 @@ impl Display for UnixTime32 {
 	}
 }
 
-pub trait GenericId: GetRepresentationHash {
-    fn id_mut_internal(&mut self) -> &mut Option<UInt256>;
-    fn id_internal(&self) -> Option<&UInt256>;
-
-    /// returns object's id (representation hash).
-    /// If id wasn't calculated early the function calculates and saves it in object.
-    fn id(&mut self) -> BlockResult<UInt256> {
-        if let Some(id) = self.id_internal() {
-            Ok(id.clone())
-        } else {
-            let hash = self.hash()?;
-            *self.id_mut_internal() = Some(hash.clone());
-            Ok(hash)
-        }
-    }
-
-    /// prepares object's id value (representation hash) stored in object.
-    /// If id wasn't calculated early the function calculates and saves it in object.
-    fn prepare_id(&mut self) -> BlockResult<()> {
-        if self.id_internal().is_none() {
-            let hash = self.hash()?;
-            *self.id_mut_internal() = Some(hash);
-        }
-        Ok(())
-    }
-
-    /// returns object's id (representation hash).
-    /// If id wasn't calculated early the function calculates it (but doesn't save in object).
-    fn calc_id(&self) -> BlockResult<UInt256> {
-        match self.id_internal() {
-            Some(id) => Ok(id.clone()),
-            None => self.hash()
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ChildCell<T: Default + Serializable + Deserializable> {
-    cell: Arc<CellData>,
+    cell: Cell,
     phantom: PhantomData<T>
 }
 
 impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
 
-    pub fn with_struct(s: T) -> BlockResult<Self> {
+    pub fn with_struct(s: &T) -> BlockResult<Self> {
         Ok(
             ChildCell {
                 cell: s.write_to_new_cell()?.into(),
@@ -620,29 +656,43 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         )
     }
 
-    pub fn write_struct(&mut self, s: T) -> BlockResult<()> {
+    pub fn write_struct(&mut self, s: &T) -> BlockResult<()> {
         self.cell = s.write_to_new_cell()?.into();
         Ok(())
     }
 
     pub fn read_struct(&self) -> BlockResult<T> {
         if self.cell.cell_type() == CellType::PrunedBranch {
-            bail!(BlockErrorKind::PrunedCellAccess(std::any::type_name::<T>().into()))
+            bail!(BlockErrorKind::PrunedCellAccess {
+                data: std::any::type_name::<T>().into()
+            })
         }
         T::construct_from(&mut SliceData::from(self.cell.clone()))
     }
 
-    pub fn cell(&self) -> &CellData {
-        self.cell.deref()
+    pub fn cell(&self) -> &Cell {
+        &self.cell
+    }
+
+    pub fn hash(&self) -> UInt256 {
+        self.cell.repr_hash()
+    }
+}
+
+impl<T: Default + Serializable + Deserializable + Clone> Default for ChildCell<T> {
+    fn default() -> Self { 
+        ChildCell::with_struct(&T::default()).unwrap()
     }
 }
 
 impl<T: Default + Serializable + Deserializable> Serializable for ChildCell<T> {
     fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
         if !builder.is_empty() {
-            bail!(BlockErrorKind::InvalidArg(format!("The `builder` must be empty")))
+            bail!(BlockErrorKind::InvalidArg {
+                msg: "The `builder` must be empty".into()
+            })
         }
-        builder.checked_append_references_and_data(&self.cell.clone().into())?;
+        *builder = BuilderData::from(&self.cell);
         Ok(())
     }
 }
@@ -650,7 +700,9 @@ impl<T: Default + Serializable + Deserializable> Serializable for ChildCell<T> {
 impl<T: Default + Serializable + Deserializable> Deserializable for ChildCell<T> {
     fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
         if !slice.is_full_cell_slice() {
-            bail!(BlockErrorKind::InvalidArg(format!("The `slice` must have zero position")))
+            bail!(BlockErrorKind::InvalidArg {
+                msg: "The `slice` must have zero position".into()
+            })
         }
         self.cell = slice.cell().clone();
         Ok(())

@@ -17,6 +17,7 @@ use std::collections::LinkedList;
 pub const ACTION_SEND_MSG: u32 = 0x0ec3c86d;
 pub const ACTION_SET_CODE: u32 = 0xad4de08e;
 pub const ACTION_RESERVE:  u32 = 0x36e6b809;
+pub const ACTION_CHANGE_LIB: u32 = 0x26fa1dd4;
 
 
 /*
@@ -71,7 +72,7 @@ impl Deserializable for OutActions {
             cell = prev_cell.into();
         }
         if !cell.is_empty() {
-            bail!(BlockErrorKind::Other("cell is not empty".into()))
+            bail!(BlockErrorKind::Other { msg: "cell is not empty".into() })
         }
         Ok(())
     }
@@ -97,7 +98,7 @@ pub enum OutAction {
     /// Action for set new code of smart-contract
     /// 
     SetCode {
-        new_code: Arc<CellData>,
+        new_code: Cell,
     },
 
     ///
@@ -110,6 +111,15 @@ pub enum OutAction {
     ReserveCurrency {
         mode: u8,
         value: CurrencyCollection,
+    },
+
+    ///
+    /// Action for change library.
+    /// 
+    ChangeLibrary {
+        mode: u8,
+        code: Option<Cell>,
+        hash: Option<UInt256>,
     },
 
     None
@@ -125,12 +135,16 @@ impl Default for OutAction {
 pub const SENDMSG_ORDINARY: u8 = 0;
 pub const SENDMSG_PAY_FEE_SEPARATELY: u8 = 1;
 pub const SENDMSG_IGNORE_ERROR: u8 = 2;
+pub const SENDMSG_DELETE_IF_EMPTY: u8 = 32;
+pub const SENDMSG_ALL_INBOUND_BALANCE: u8 = 64;
 pub const SENDMSG_ALL_BALANCE: u8 = 128;
 //mask for cheking valid flags
 pub const SENDMSG_VALID_FLAGS: u8 = 
     SENDMSG_ORDINARY 
     | SENDMSG_PAY_FEE_SEPARATELY 
     | SENDMSG_IGNORE_ERROR
+    | SENDMSG_DELETE_IF_EMPTY
+    | SENDMSG_ALL_INBOUND_BALANCE
     | SENDMSG_ALL_BALANCE;
 
 /// variants of reserve action
@@ -144,6 +158,10 @@ pub const RESERVE_VALID_MODES: u8 =
     | RESERVE_ALL_BUT 
     | RESERVE_IGNORE_ERROR;
 
+pub const CHANGE_LIB_REMOVE: u8 = 0;
+pub const SET_LIB_CODE_REMOVE: u8 = 1;
+pub const SET_LIB_CODE_ADD_PRIVATE: u8 = 1 * 2 + 1;
+pub const SET_LIB_CODE_ADD_PUBLIC: u8 = 2 * 2 + 1;
 
 ///
 /// Implementation of Output Actions
@@ -160,7 +178,7 @@ impl OutAction {
     ///
     /// Create new instance OutAction::ActionCode
     /// 
-    pub fn new_set(new_code: Arc<CellData>) -> Self {
+    pub fn new_set(new_code: Cell) -> Self {
         OutAction::SetCode { new_code }
     }
 
@@ -169,6 +187,20 @@ impl OutAction {
     /// 
     pub fn new_reserve(mode: u8, value: CurrencyCollection) -> Self {
         OutAction::ReserveCurrency { mode, value }
+    }
+
+    ///
+    /// Create new instance OutAction::ChangeLibrary
+    /// 
+    pub fn new_change_library(mode: u8, code: Option<Cell>, hash: Option<UInt256>) -> Self {
+        debug_assert!(match mode {
+            CHANGE_LIB_REMOVE => code.is_none() && hash.is_some(),
+            SET_LIB_CODE_REMOVE |
+            SET_LIB_CODE_ADD_PRIVATE |
+            SET_LIB_CODE_ADD_PUBLIC => code.is_some() && hash.is_none(),
+            _ => false
+        });
+        OutAction::ChangeLibrary { mode, code, hash }
     }
 }
 
@@ -189,7 +221,17 @@ impl Serializable for OutAction {
                 mode.write_to(cell)?;
                 value.write_to(cell)?;
             },
-            &OutAction::None => bail!(BlockErrorKind::InvalidOperation("self is None".into()))
+            &OutAction::ChangeLibrary{ref mode, ref code, ref hash} => {
+                ACTION_CHANGE_LIB.write_to(cell)?; // tag
+                mode.write_to(cell)?;
+                if let Some(value) = hash {
+                    value.write_to(cell)?;
+                }
+                if let Some(value) = code {
+                    cell.append_reference_cell(value.clone());
+                }
+            },
+            &OutAction::None => bail!(BlockErrorKind::InvalidOperation { msg: "self is None".into() })
         }
         Ok(())
     }
@@ -198,7 +240,7 @@ impl Serializable for OutAction {
 impl Deserializable for OutAction {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         if cell.remaining_bits() < std::mem::size_of::<u32>() * 8 {
-            bail!(BlockErrorKind::InvalidArg("cell can't be shorter than 32 bits".into()));
+            bail!(BlockErrorKind::InvalidArg { msg: "cell can't be shorter than 32 bits".into() });
         }
         let tag = cell.get_next_u32()?;
         match tag {
@@ -208,10 +250,10 @@ impl Deserializable for OutAction {
                 mode.read_from(cell)?;
                 msg.read_from(&mut cell.checked_drain_reference()?.into())?;
                 *self = OutAction::new_send(mode, Arc::new(msg));
-            },
+            }
             ACTION_SET_CODE => {
                 *self = OutAction::new_set(cell.checked_drain_reference()?.clone())
-            },
+            }
             ACTION_RESERVE => {
                 let mut mode = 0u8;
                 let mut value = CurrencyCollection::default();
@@ -219,7 +261,24 @@ impl Deserializable for OutAction {
                 value.read_from(cell)?;
                 *self = OutAction::new_reserve(mode, value); 
             }
-            tag => bail!(BlockErrorKind::InvalidConstructorTag(tag, "OutAction".into())),
+            ACTION_CHANGE_LIB => {
+                let mut mode = 0u8;
+                mode.read_from(cell)?;
+                match mode & 1 {
+                    0 => {
+                        let hash = cell.get_next_bytes(32)?.into();
+                        *self = OutAction::new_change_library(mode, None, Some(hash));
+                    }
+                    _ => {
+                        let code = cell.checked_drain_reference()?.clone();
+                        *self = OutAction::new_change_library(mode, Some(code), None);
+                    }
+                }
+            }
+            tag => bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag,
+                s: "OutAction".into()
+            }),
         }
         Ok(())
     }

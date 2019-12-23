@@ -13,21 +13,18 @@
 */
 
 use std::cmp::max;
-use std::sync::Arc;
-use ton_types::{SliceData, CellData, CellType, BuilderData, IBitstring, LevelMask};
-use ton_types::cells_serialization::BagOfCells;
+use ton_types::{SliceData, Cell, CellType, BuilderData, IBitstring, LevelMask, UsageTree};
 use UInt256;
-use std::collections::{HashMap};
 use super::{BlockErrorKind, MerkleUpdate, BlockResult, Serializable, Deserializable,
-    Block, BlockExtra, BlockInfo, Transaction, GetRepresentationHash, AccountBlock, BlockError, 
-    Message, InMsg, OutMsg, Account, ShardStateUnsplit};
+    Block, BlockInfo, Transaction, GetRepresentationHash, BlockError, 
+    Message, Account, ShardStateUnsplit, BlockSeqNoAndShard};
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MerkleProof {
     pub hash: UInt256,
     pub depth: u16,
-    pub proof: Arc<CellData>,
+    pub proof: Cell,
 }
 
 impl Default for MerkleProof {
@@ -35,7 +32,7 @@ impl Default for MerkleProof {
         MerkleProof {
             hash: UInt256::default(),
             depth: 0,
-            proof: Arc::new(CellData::default()),
+            proof: Cell::default(),
         }
     }
 }
@@ -43,17 +40,17 @@ impl Default for MerkleProof {
 impl Deserializable for MerkleProof {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         if CellType::from(cell.get_next_byte()?) != CellType::MerkleProof {
-            bail!(BlockErrorKind::InvalidData("invalid Merkle proof root's cell type".into()))
+            bail!(BlockErrorKind::InvalidData { msg: "invalid Merkle proof root's cell type".into() })
         }
         self.hash.read_from(cell)?;
         self.depth = cell.get_next_u16()?;
         self.proof = cell.checked_drain_reference()?.clone();
 
-        if self.hash != CellData::hash(&self.proof, 0) {
-            bail!(BlockErrorKind::WrongMerkleProof("Stored proof hash is not equal calculated one".into()));
+        if self.hash != Cell::hash(&self.proof, 0) {
+            bail!(BlockErrorKind::WrongMerkleProof { msg: "Stored proof hash is not equal calculated one".into() });
         }
-        if self.depth != CellData::depth(&self.proof, 0) {
-            bail!(BlockErrorKind::WrongMerkleProof("Stored proof depth is not equal calculated one".into()));
+        if self.depth != Cell::depth(&self.proof, 0) {
+            bail!(BlockErrorKind::WrongMerkleProof { msg: "Stored proof depth is not equal calculated one".into() });
         }
 
         Ok(())
@@ -75,17 +72,16 @@ impl Serializable for MerkleProof {
 impl MerkleProof {
 
     /// Creating of a Merkle proof which includes cells whose hashes contain in `proof_for`.
-    /// Other words, create a proof for given cells.
-    /// Remark: it include only given cells, not their referents. Cells from given to root 
-    ///         is included too.
-    pub fn create<F>(root: &Arc<CellData>, is_include: &F)
-        -> BlockResult<Self>
+    pub fn create<F>(root: &Cell, is_include: &F) -> BlockResult<Self>
         where F: Fn(UInt256) -> bool {
 
-        let bag = BagOfCells::with_root(root);
-        let proof = Self::traverse_on_create(bag.cells(), root, is_include, 0)?
-            .ok_or(BlockErrorKind::InvalidArg(
-                "`bag` doesn't contain any cell to include into proof".into()))?;
+        if !is_include(root.repr_hash()) {
+            bail!(BlockErrorKind::InvalidArg {
+                msg: "`bag` doesn't contain any cell to include into proof".into() 
+            });
+        }
+
+        let proof = Self::traverse_on_create(root, is_include, 0)?;
 
         Ok(MerkleProof {
             hash: root.repr_hash(),
@@ -94,199 +90,224 @@ impl MerkleProof {
         })
     }
 
-    fn traverse_on_create<F>(cells: &HashMap<UInt256, Arc<CellData>>, cell: &Arc<CellData>, 
+    /// Creating of a Merkle proof which includes cells whose hashes contain in `proof_for`.
+    pub fn create_by_usage_tree(root: &Cell, usage_tree: &UsageTree) -> BlockResult<Self> {
+        let visited = usage_tree.visited();
+        let is_include = |h| {
+            visited.contains(&h)
+        };
+        MerkleProof::create(root, &is_include)
+    }
+
+    fn traverse_on_create<F>(cell: &Cell, 
         is_include: &F, merkle_depth: u8)
-        -> BlockResult<Option<BuilderData>>
+        -> BlockResult<BuilderData>
         where F: Fn(UInt256) -> bool {
 
-        let mut childs = Vec::with_capacity(cell.references_used());
-        let mut has_childs = false;
-
         let child_merkle_depth = if cell.is_merkle() { merkle_depth + 1 } else { merkle_depth };
-        for child in cell.references().iter() {
-            let child_proof_cell = Self::traverse_on_create(cells, child, is_include, child_merkle_depth)?;
-            if child_proof_cell.is_some() {
-                has_childs = true;
-            }
-            childs.push(child_proof_cell);
+
+        let mut proof_cell = BuilderData::new();
+        proof_cell.set_type(cell.cell_type());
+        let mut child_mask = LevelMask::with_mask(0);
+        for child in cell.clone_references().iter() {
+            let proof_child = if is_include(child.repr_hash()) {
+                Self::traverse_on_create(child, is_include, child_merkle_depth)?
+            } else {
+                MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?
+            };
+            child_mask |= proof_child.level_mask();
+            proof_cell.append_reference(proof_child);
         }
-
-        if has_childs || is_include(cell.repr_hash()) {
-            let mut proof_cell = BuilderData::new();
-            proof_cell.set_type(cell.cell_type());
-            let mut child_mask = LevelMask::with_mask(0);
-            let mut i = 0;
-            for child_opt in childs {
-                let child = if child_opt.is_some() {
-                    child_opt.unwrap()
-                } else {
-                    let child = &cell.reference(i).unwrap();
-                    MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?
-                };
-                child_mask |= child.level_mask();
-                proof_cell.append_reference(child);
-                i += 1;
-            }
-            proof_cell.set_level_mask(if cell.is_merkle() {
-                    LevelMask::for_merkle_cell(child_mask)
-                } else {
-                    child_mask
-                });
-
-            let slice = cell.into();
-            proof_cell.append_bytestring(&slice).unwrap();
-            Ok(Some(proof_cell))
-
+        
+        proof_cell.set_level_mask(if cell.is_merkle() {
+            LevelMask::for_merkle_cell(child_mask)
         } else {
-            Ok(None)
-        }
+            child_mask
+        });
+
+        let slice = cell.into();
+        proof_cell.append_bytestring(&slice).unwrap();
+
+
+        Ok(proof_cell)
     }
 }
 
 // checks if proof contains correct block info
-pub fn check_block_info_proof(proof: &MerkleProof, block_hash: UInt256) -> BlockResult<BlockInfo> {
-    if proof.hash != block_hash {
-        bail!(BlockErrorKind::WrongMerkleProof("Proof hash is not equal given block hash".into()));
+pub fn check_block_info_proof(block: &Block, proof_hash: &UInt256, block_hash: &UInt256) -> BlockResult<BlockInfo> {
+    if proof_hash != block_hash {
+        bail!(BlockErrorKind::WrongMerkleProof { msg: "Proof hash is not equal given block hash".into() });
     }
-    Ok(Block::read_info_from(&mut SliceData::from(&proof.proof))?)
+    block.read_info()
 }
 
 /// checks if transaction with given id is exist in block.
-/// Proof must contain transaction (TODO only tr's root cell) and block info
-pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction) -> BlockResult<()> {
+/// Proof must contain transaction's root cell and block info
+pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: &UInt256) -> BlockResult<()> {
+
+    let block_virt_root = proof.proof.clone().virtualize(1);
+
+    let block: Block = Block::construct_from(&mut block_virt_root.into())
+        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof {
+            msg: format!("Error extracting block from proof: {}", e)
+        }))?;
 
     // check if block id in transaction is corresponds to block in proof
-    let block_info = match &tr.block_id {
-        Some(block_id) => check_block_info_proof(proof, block_id.clone())?,
-        None => bail!(BlockErrorKind::InvalidData("Transaction must contain a block id".into()))
-    };
+    let block_info = check_block_info_proof(&block, &proof.hash, block_id)?;
 
     // check if acc is belonged the block's shard
     if !block_info.shard.contains_account(tr.account_id().clone())? {
-        bail!(BlockErrorKind::WrongMerkleProof(
-            "Account address in transaction belongs other shardchain".into()));
+        bail!(BlockErrorKind::WrongMerkleProof {
+            msg: "Account address in transaction belongs other shardchain".into()
+        });
     }
 
     // check if transaction is potencially belonged the block by logical time
     if tr.logical_time() < block_info.start_lt || tr.logical_time() > block_info.end_lt {
-        bail!(BlockErrorKind::WrongMerkleProof(
-            "Transaction's logical time isn't belongs block's logical time interval".into()));
+        bail!(BlockErrorKind::WrongMerkleProof {
+            msg: "Transaction's logical time isn't belongs block's logical time interval".into()
+        });
     }
 
-    // read block extra
-    let mut block_extra_slice = Block::read_extra_slice_from(&mut SliceData::from(&proof.proof))
-        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof(
-                format!("Error extracting block extra from proof: {}", e))))?;
+    // read account block from block and check it
 
-    // read account blocks root
-    let account_blocks = BlockExtra::read_account_blocks_from(&mut block_extra_slice)
-        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof(
-            format!("Error extracting account blocks from proof: {}", e))))?;
+    let block_extra = block.read_extra()
+        .map_err(|e| BlockErrorKind::WrongMerkleProof {
+            msg: format!("Error extracting block extra from proof: {}", e)
+        })?;
 
-    // read transactions dict from account block
-    let mut account_block_slice = account_blocks.get_as_slice(tr.account_id())?
-        .ok_or(BlockError::from(BlockErrorKind::WrongMerkleProof(
-                "No account block in proof".into())))?;
-    let tr_dict = AccountBlock::read_transactions_from(&mut account_block_slice)
-        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof(
-            format!("Error extracting transactions dictionary from account blocks in proof: {}", e))))?;
+    let account_blocks = block_extra.read_account_blocks()
+        .map_err(|e| BlockErrorKind::WrongMerkleProof {
+            msg: format!("Error extracting account blocks from proof: {}", e)
+        })?;
+
+    let account_block = account_blocks.get(tr.account_id())?
+        .ok_or(BlockError::from(BlockErrorKind::WrongMerkleProof {
+            msg: "No account block in proof".into()
+        }))?;
 
     // find transaction
-    // TODO: read only transactions's root cell
-    let tr1 = tr_dict.get(&tr.logical_time())
-        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof(
-            format!("Error extracting transaction from dictionary in proof: {}", e))))?;
-    if let Some(tr1) = tr1 {
-        // check hash
-        if tr1.0.hash()? != tr.hash()? {
-            bail!(BlockErrorKind::WrongMerkleProof(
-                "Wrong transaction's hash in proof".into()));
+    let tr_parent_slice_opt = account_block.transactions().get_as_slice(&tr.logical_time())
+        .map_err(|e| {
+            BlockError::from(BlockErrorKind::WrongMerkleProof {
+                msg: format!("Error extracting transaction from dictionary in proof: {}", e) 
+            })
+        })?;
+    if let Some(mut tr_parent_slice) = tr_parent_slice_opt {
+        if let Ok(tr_slice) = tr_parent_slice.checked_drain_reference() {
+            // check hash
+            if tr_slice.repr_hash() != tr.hash()? {
+                bail!(BlockErrorKind::WrongMerkleProof {
+                    msg: "Wrong transaction's hash in proof".into()});
+            }
         }
     } else {
-        bail!(BlockErrorKind::WrongMerkleProof(
-            "No transaction in proof".into()));
+        bail!(BlockErrorKind::WrongMerkleProof {
+            msg: "No transaction in proof".into()
+        });
     }
     Ok(())
 }
 
 /// checks if message with given id is exist in block.
-/// Proof must contain message (TODO only message's root cell) and block info
-pub fn check_message_proof(proof: &MerkleProof, msg: &Message) -> BlockResult<()> {
+/// Proof must contain message's root cell and block info
+pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt256) -> BlockResult<()> {
+
+    let block_virt_root = proof.proof.clone().virtualize(1);
+
+    let block: Block = Block::construct_from(&mut block_virt_root.into())
+        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof {
+            msg: format!("Error extracting block from proof: {}", e)
+        }))?;
 
     // check if block id in message is corresponds to block in proof
-    let _block_info = match &msg.block_id {
-        Some(block_id) => check_block_info_proof(proof, block_id.clone())?,
-        None => bail!(BlockErrorKind::InvalidData("Message must contain a block id".into()))
-    };
+    check_block_info_proof(&block, &proof.hash, block_id)?;
 
-    // read block extra
-    let mut block_extra_slice = Block::read_extra_slice_from(&mut SliceData::from(&proof.proof))
-        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof(
-                format!("Error extracting block extra from proof: {}", e))))?;
+    // read message from block and check it
+
+    let block_extra = block.read_extra()
+        .map_err(|e| BlockErrorKind::WrongMerkleProof {
+            msg: format!("Error extracting block extra from proof: {}", e)
+        })?;
 
     let msg_hash = msg.hash()?;
     // attempt to read in msg descr, if fail - read out one
-    if let Ok(in_msg_descr) = BlockExtra::read_in_msg_descr_from(&mut block_extra_slice.clone()) {
-        let in_msg_slice = in_msg_descr.get_as_slice(&msg_hash);
-        if let Ok(Some(mut in_msg_slice)) = in_msg_slice {
-            if let Ok(msg1) = InMsg::read_message_from(&mut in_msg_slice) {
-                if msg1.hash()? != msg_hash {
-                    bail!(BlockErrorKind::WrongMerkleProof(
-                        "Wrong message's hash in proof".into()));
+    if let Ok(in_msg_descr) = block_extra.read_in_msg_descr() {
+        if let Ok(Some(in_msg)) = in_msg_descr.get(&msg_hash) {
+            if let Ok(msg_cell) = in_msg.message_cell() {
+                if msg_cell.repr_hash() != msg_hash {
+                    bail!(BlockErrorKind::WrongMerkleProof {
+                        msg: "Wrong message's hash in proof".into()});
                 } else {
                     return Ok(());
                 }
+            } else {
+                bail!(BlockErrorKind::WrongMerkleProof {
+                    msg: "Error extracting message from in message".into()});
             }
         }
     }
 
-    let out_msg_descr = BlockExtra::read_out_msg_descr_from(&mut block_extra_slice)
-        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof(
-            format!("Error extracting out msg descr from proof: {}", e))))?;
-    let out_msg_slice = out_msg_descr.get_as_slice(&msg_hash);
-    if let Ok(Some(mut out_msg_slice)) = out_msg_slice {
-        if let Ok(msg1) = OutMsg::read_message_from(&mut out_msg_slice) {
-            if msg1.hash()? != msg_hash {
-                bail!(BlockErrorKind::WrongMerkleProof(
-                    "Wrong message's hash in proof".into()));
+    let out_msg_descr = block_extra.read_out_msg_descr()
+        .map_err(|e| BlockErrorKind::WrongMerkleProof {
+            msg: format!("Error extracting out msg descr from proof: {}", e)
+        })?;
+    if let Ok(Some(out_msg)) = out_msg_descr.get(&msg_hash) {
+        if let Ok(msg_cell) = out_msg.message_cell() {
+            if msg_cell.repr_hash() != msg_hash {
+                bail!(BlockErrorKind::WrongMerkleProof {
+                    msg: "Wrong message's hash in proof".into()});
             } else {
                 return Ok(());
             }
         } else {
-            bail!(BlockErrorKind::WrongMerkleProof(
-                "Error extracting message from out message".into()));
+            bail!(BlockErrorKind::WrongMerkleProof {
+                msg: "Error extracting message from out message".into()
+            })
         }
     } else {
-        bail!(BlockErrorKind::WrongMerkleProof(
-            "No message in proof".into()));
+        bail!(BlockErrorKind::WrongMerkleProof {
+            msg: "No message in proof".into()
+        })
     }
 }
 
 /// checks if account with given address is exist in shard state.
 /// Proof must contain account's root cell
-pub fn check_account_proof(proof: &MerkleProof, acc: &Account) -> BlockResult<()> {
+/// Returns info about the block corresponds to shard state the account belongs to.
+pub fn check_account_proof(proof: &MerkleProof, acc: &Account) -> BlockResult<BlockSeqNoAndShard> {
     if acc.is_none() {
-        bail!(BlockErrorKind::InvalidData("Account can't be none".into()));
+        bail!(BlockErrorKind::InvalidData { msg: "Account can't be none".into() });
     }
 
-    let ss: ShardStateUnsplit = ShardStateUnsplit::construct_from(&mut SliceData::from(&proof.proof))?;
+    let ss_virt_root = proof.proof.clone().virtualize(1);
+    let ss: ShardStateUnsplit = ShardStateUnsplit::construct_from(&mut ss_virt_root.into())?;
 
     let accounts = ss.read_accounts()
-        .map_err(|e| BlockError::from(BlockErrorKind::WrongMerkleProof(
-            format!("Error extracting accounts dict from proof: {}", e))))?;
+        .map_err(|e| BlockErrorKind::WrongMerkleProof {
+            msg: format!("Error extracting accounts dict from proof: {}", e)
+        })?;
 
     let shard_acc = accounts.get(&acc.get_addr().unwrap().get_address());
     if let Ok(Some(shard_acc)) = shard_acc {
         let acc_root = shard_acc.account_cell();
-        let acc_hash = CellData::hash(&acc_root, (max(acc_root.level(), 1) - 1) as usize);
+        let acc_hash = Cell::hash(&acc_root, (max(acc_root.level(), 1) - 1) as usize);
         if acc.hash()? != acc_hash {
-            bail!(BlockErrorKind::WrongMerkleProof(
-                "Wrong account's hash in proof".into()));
+            bail!(BlockErrorKind::WrongMerkleProof {
+                msg: "Wrong account's hash in proof".into()
+            })
         } else {
-            return Ok(());
+            return Ok(
+                BlockSeqNoAndShard {
+                    seq_no: ss.seq_no(),
+                    vert_seq_no: ss.vert_seq_no(),
+                    shard_id: ss.shard_id().clone(),
+                }
+            );
         }
     } else {
-        bail!(BlockErrorKind::WrongMerkleProof(
-            "No account in proof".into()));
+        bail!(BlockErrorKind::WrongMerkleProof {
+            msg: "No account in proof".into()
+        })
     }
 }

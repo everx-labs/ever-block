@@ -17,11 +17,7 @@ use super::types::{InRefValue};
 use std::sync::Arc;
 use {AccountId, UInt256};
 use ton_types::{BuilderData, IBitstring, SliceData};
-use std::ops::Deref;
 use ton_types::dictionary::{HashmapE, HashmapType};
-use std::sync::RwLock;
-use cells_serialization::BagOfCells;
-use std::collections::HashMap;
 
 
 /*
@@ -103,7 +99,10 @@ impl Deserializable for ComputeSkipReason {
             0b00000000 => ComputeSkipReason::NoState,
             0b01000000 => ComputeSkipReason::BadState,
             0b10000000 => ComputeSkipReason::NoGas,
-            tag => bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "ComputeSkipReason".into()))
+            tag => bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "ComputeSkipReason".into()
+            })
         };
         Ok(())
     }
@@ -576,12 +575,12 @@ pub struct SplitMergeInfo {
 impl Serializable for SplitMergeInfo {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         if 0 != self.cur_shard_pfx_len & 0b11000000 {
-            bail!(BlockErrorKind::InvalidData("self.cur_shard_pfx_len is too long".into()));
+            bail!(BlockErrorKind::InvalidData { msg: "self.cur_shard_pfx_len is too long".into() });
         } else {
             cell.append_bits(self.cur_shard_pfx_len as usize, 6)?;
         }
         if 0 != self.acc_split_depth & 0b11000000 {
-            bail!(BlockErrorKind::InvalidData("self.acc_split_depth is too long".into()));
+            bail!(BlockErrorKind::InvalidData { msg: "self.acc_split_depth is too long".into() });
         } else {
             cell.append_bits(self.acc_split_depth as usize, 6)?;
         }
@@ -932,6 +931,83 @@ impl Default for TransactionDescr {
     }
 }
 
+impl TransactionDescr {
+    pub fn is_aborted(&self) -> bool {
+        match self {
+            TransactionDescr::Ordinary(ref desc) => { desc.aborted },
+            TransactionDescr::TickTock(ref desc) => { desc.aborted },
+            TransactionDescr::SplitPrepare(ref desc) => { desc.aborted },
+            TransactionDescr::MergePrepare(ref desc) => { desc.aborted },
+            TransactionDescr::MergeInstall(ref desc) => { desc.aborted },
+            _ => false,
+        }
+    }
+
+    pub fn compute_phase_ref(&self) -> Option<&TrComputePhase> {
+        match self {
+            TransactionDescr::Ordinary(ref desc) => Some(&desc.compute_ph),
+            TransactionDescr::TickTock(ref desc) => Some(&desc.compute_ph),
+            TransactionDescr::SplitPrepare(ref desc) => Some(&desc.compute_ph),
+            TransactionDescr::MergeInstall(ref desc) => Some(&desc.compute_ph),
+            _ => None,
+        }
+    }
+
+    pub fn is_credit_first(&self) -> Option<bool> {
+        match self {
+            TransactionDescr::Ordinary(ref tr) => Some(tr.credit_first),
+            _ => None,
+        }
+    }
+
+    fn append_to_storage_used(&mut self, cell: &Cell) {
+        match self {
+            TransactionDescr::Ordinary(ref mut desc) => {
+                if let Some(ref mut bounce) = desc.bounce {
+                    match bounce {
+                        TrBouncePhase::Nofunds(ref mut no_funds) => { no_funds.msg_size.append(cell);},
+                        TrBouncePhase::Ok(ref mut ok) => { ok.msg_size.append(cell);},
+                        _ => (),
+                    };
+                }
+                if let Some(ref mut action) = desc.action {
+                    action.tot_msg_size.append(cell);
+                }
+            },
+            TransactionDescr::TickTock(ref mut desc) => {
+                if let Some(ref mut action) = desc.action {
+                    action.tot_msg_size.append(cell);
+                }
+            },
+            TransactionDescr::SplitPrepare(ref mut desc) => {
+                if let Some(ref mut action) = desc.action {
+                    action.tot_msg_size.append(cell);
+                }
+            },
+            TransactionDescr::MergeInstall(ref mut desc) => {
+                if let Some(ref mut action) = desc.action {
+                    action.tot_msg_size.append(cell);
+                }
+            },
+            _ => (),
+        }
+    }
+
+    ///
+    /// mark the transaction as aborted
+    ///
+    pub fn mark_as_aborted(&mut self) {
+        match self {
+            TransactionDescr::Ordinary(ref mut desc) => { desc.aborted = true; },
+            TransactionDescr::TickTock(ref mut desc) => { desc.aborted = true; },
+            TransactionDescr::SplitPrepare(ref mut desc) => { desc.aborted = true; },
+            TransactionDescr::MergePrepare(ref mut desc) => { desc.aborted = true; },
+            TransactionDescr::MergeInstall(ref mut desc) => { desc.aborted = true; },
+            _ => (),
+        };
+    }
+}
+
 impl Serializable for TransactionDescr {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         match self {
@@ -1011,7 +1087,10 @@ impl Deserializable for TransactionDescr {
                 mi.read_from(cell)?;
                 *self = TransactionDescr::MergeInstall(mi);
             }
-            tag => bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "TransactionDescr".into()))
+            tag => bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "TransactionDescr".into()
+            })
         }
         Ok(())
     }
@@ -1049,7 +1128,10 @@ impl Deserializable for HashUpdate {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_byte()?;
         if tag != HASH_UPDATE_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "HashUpdate".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "HashUpdate".into()
+            })
         }
         self.old_hash.read_from(cell)?;
         self.new_hash.read_from(cell)?;
@@ -1078,33 +1160,24 @@ define_HashmapE!{OutMessages, 15, InRefValue<Message>}
 pub type TransactionId = UInt256;
 
 /*
-4.2.12. Serialization of a general transaction.
-From Lite Client v11:
-transaction$0111
-    account_addr:bits256
-    lt:uint64
+transaction$0111 
+    account_addr:bits256 
+    lt:uint64 
     prev_trans_hash:bits256
     prev_trans_lt:uint64
     now:uint32
     outmsg_cnt:uint15
     orig_status:AccountStatus
     end_status:AccountStatus
-    ^[ in_msg:(Maybe ^(Message Any))
-    out_msgs:(HashmapE 15 ^(Message Any)) ]
+    ^[  in_msg:(Maybe ^(Message Any)) 
+        out_msgs:(HashmapE 15 ^(Message Any)) ]
     total_fees:CurrencyCollection
     state_update:^(HASH_UPDATE Account)
-    description:^TransactionDescr
+    description:^TransactionDescr 
 = Transaction;
 */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Transaction {
-    // next 3 fields are stored only in JSON representation and not saved into BOC
-    id: Option<UInt256>,
-    pub block_id: Option<BlockId>,
-    pub status: TransactionProcessingStatus,
-    pub proof: Option<SliceData>,
-    pub boc: Option<SliceData>,
-
     pub account_addr: AccountId,
     pub lt: u64,
     pub prev_trans_hash: UInt256,
@@ -1113,49 +1186,11 @@ pub struct Transaction {
     pub outmsg_cnt: i16,
     pub orig_status: AccountStatus,
     pub end_status: AccountStatus,
-    pub in_msg: Option<Arc<Message>>,
+    pub in_msg: Option<ChildCell<Message>>,
     pub out_msgs: OutMessages,
     pub total_fees: CurrencyCollection,
-    pub state_update: HashUpdate,
-    pub description: TransactionDescr, // TransactionDescr,
-
-    root_cell: RwLock<Option<SliceData>>,
-}
-
-impl GenericId for Transaction {
-    fn id_mut_internal(&mut self) -> &mut Option<UInt256> {
-        &mut self.id
-    }
-
-    fn id_internal(&self) -> Option<&UInt256> {
-        self.id.as_ref()
-    }
-}
-
-impl Clone for Transaction {
-    fn clone(&self) -> Self {
-        Transaction {
-            id: self.id.clone(),
-            status: self.status.clone(),
-            block_id: self.block_id.clone(),
-            boc: self.boc.clone(),
-            proof: self.proof.clone(),
-            account_addr: self.account_addr.clone(),
-            lt: self.lt.clone(),
-            prev_trans_hash: self.prev_trans_hash.clone(),
-            prev_trans_lt: self.prev_trans_lt.clone(),
-            now: self.now.clone(),
-            outmsg_cnt: self.outmsg_cnt.clone(),
-            orig_status: self.orig_status.clone(),
-            end_status: self.end_status.clone(),
-            in_msg: self.in_msg.clone(),
-            out_msgs: self.out_msgs.clone(),
-            total_fees: self.total_fees.clone(),
-            state_update: self.state_update.clone(),
-            description: self.description.clone(),
-            root_cell: self.clone_root_cell(),
-        }
-    }
+    pub state_update: ChildCell<HashUpdate>,
+    pub description: ChildCell<TransactionDescr>,
 }
 
 impl Transaction {
@@ -1163,11 +1198,6 @@ impl Transaction {
     /// create new transaction
     pub fn with_address_and_status(address: AccountId, orig_status: AccountStatus) -> Self {
         Transaction {
-            id: None,
-            block_id: None,
-            status: TransactionProcessingStatus::default(),
-            boc: None,
-            proof: None,
             account_addr: address,
             lt: 0,
             prev_trans_hash: UInt256::from([0;32]),
@@ -1179,34 +1209,29 @@ impl Transaction {
             in_msg: None,
             out_msgs: OutMessages::default(),
             total_fees: CurrencyCollection::default(),
-            state_update: HashUpdate::default(),
-            description: TransactionDescr::default(),
-            root_cell: RwLock::new(None),
+            state_update: ChildCell::default(),
+            description: ChildCell::default(),
         }
     }
 
-    pub fn with_account_and_message(account: &Account, msg: &Message, lt: u64) -> Self {
-        Transaction {
-            id: None,
-            block_id: None,
-            status: TransactionProcessingStatus::default(),
-            boc: None,
-            proof: None,
-            account_addr: account.get_id().unwrap_or(msg.int_dst_account_id().unwrap()),
-            lt: lt,
-            prev_trans_hash: UInt256::from([0;32]),
-            prev_trans_lt: 0,
-            now: 0,            
-            outmsg_cnt: 0,
-            orig_status: account.status(),
-            end_status: account.status(),
-            in_msg: Some(Arc::new(msg.clone())),
-            out_msgs: OutMessages::default(),
-            total_fees: CurrencyCollection::default(),
-            state_update: HashUpdate::default(),
-            description: TransactionDescr::default(),
-            root_cell: RwLock::new(None),
-        }
+    pub fn with_account_and_message(account: &Account, msg: &Message, lt: u64) -> BlockResult<Self> {
+        Ok(
+            Transaction {
+                account_addr: account.get_id().unwrap_or(msg.int_dst_account_id().unwrap()),
+                lt: lt,
+                prev_trans_hash: UInt256::from([0;32]),
+                prev_trans_lt: 0,
+                now: 0,
+                outmsg_cnt: 0,
+                orig_status: account.status(),
+                end_status: account.status(),
+                in_msg: Some(ChildCell::with_struct(msg)?),
+                out_msgs: OutMessages::default(),
+                total_fees: CurrencyCollection::default(),
+                state_update: ChildCell::default(),
+                description: ChildCell::default(),
+            }
+        )
     }
 
     /// Get account address of transaction
@@ -1216,7 +1241,6 @@ impl Transaction {
 
     /// set transaction time
     pub fn set_logical_time(&mut self, lt: u64) {
-        self.reset_root_cell();
         self.lt = lt;
     }
 
@@ -1227,13 +1251,11 @@ impl Transaction {
 
     /// set end status accaunt
     pub fn set_end_status(&mut self, end_status: AccountStatus) {
-        self.reset_root_cell();
         self.end_status = end_status;
     }
 
     /// set total fees
     pub fn set_total_fees(&mut self, fees: CurrencyCollection) {
-        self.reset_root_cell();
         self.total_fees = fees;
     }
 
@@ -1242,12 +1264,16 @@ impl Transaction {
         &self.total_fees
     }
 
+    /// get mutable total fees
+    pub fn total_fees_mut(&mut self) -> &mut CurrencyCollection {
+        &mut self.total_fees
+    }
+
     ///
     /// Calculate total transaction fees
     /// transaction fees is the amount fee for all out-messages
     ///
     pub fn calc_total_fees(&mut self) -> &CurrencyCollection {
-        self.reset_root_cell();
         self.total_fees = CurrencyCollection::default();
         // TODO uncomment after merge with feature-block-builder
         /*for msg in self.out_msgs.iter() {
@@ -1259,16 +1285,25 @@ impl Transaction {
         &self.total_fees
     }
 
-    /// set input message
-    pub fn set_in_message(&mut self, msg: Arc<Message>) {
-        self.reset_root_cell();
-        self.id = msg.id_internal().cloned();
-        self.in_msg = Some(msg);
+    pub fn read_in_msg(&self) -> BlockResult<Option<Message>> {
+        Ok(
+            match self.in_msg {
+                Some(ref in_msg) => Some(in_msg.read_struct()?),
+                None => None
+            }
+        )
     }
 
-    /// get input message
-    pub fn in_message(&self) -> Option<Arc<Message>> {
-        self.in_msg.clone()
+    pub fn write_in_msg(&mut self, value: Option<&Message>) -> BlockResult<()> {
+        self.in_msg = match value {
+                Some(v) => Some(ChildCell::with_struct(v)?),
+                None => None
+            };
+        Ok(())
+    }
+
+    pub fn in_msg_cell(&self) -> Option<&Cell> {
+        self.in_msg.as_ref().map(|c| c.cell())
     }
 
     /// get output message by index
@@ -1283,10 +1318,13 @@ impl Transaction {
     }
 
     /// add output message to Hashmap
-    pub fn add_out_message(&mut self, mgs: Arc<Message>) -> BlockResult<()> {
-        self.reset_root_cell();
+    pub fn add_out_message(&mut self, mgs: &Message) -> BlockResult<()> {
         let msg_cell = mgs.write_to_new_cell()?.into();
-        self.append_to_storage_used(&msg_cell);
+
+        let mut descr = self.read_description()?;
+        descr.append_to_storage_used(&msg_cell);
+        self.write_description(&descr)?;
+
         self.out_msgs.setref(
             &U15(self.outmsg_cnt),
             &msg_cell
@@ -1295,48 +1333,33 @@ impl Transaction {
         Ok(())
     }
 
-    /// set HashUpdate update for Account
-    pub fn set_state_update(&mut self, state_update: HashUpdate) {
-        self.reset_root_cell();
-        self.state_update = state_update;
+
+    pub fn read_state_update(&self) -> BlockResult<HashUpdate> {
+        self.state_update.read_struct()
     }
 
-    /// get HashUpdate update for Account
-    pub fn get_state_update(&self) -> &HashUpdate {
-        &self.state_update
+    pub fn write_state_update(&mut self, value: &HashUpdate) -> BlockResult<()> {
+        self.state_update.write_struct(value)
     }
 
-
-    // set transaction description
-    pub fn set_transaction_description(&mut self, description: TransactionDescr) {
-        self.reset_root_cell();
-        self.description = description;
+    pub fn state_update_cell(&self) -> &Cell {
+        self.state_update.cell()
     }
 
-    pub fn in_message_ref(&self) -> Option<&Message> {
-        self.in_msg.as_ref().map(|v| v.deref())
+    pub fn read_description(&self) -> BlockResult<TransactionDescr> {
+        self.description.read_struct()
+    }
+
+    pub fn write_description(&mut self, value: &TransactionDescr) -> BlockResult<()> {
+        self.description.write_struct(value)
+    }
+
+    pub fn description_cell(&self) -> &Cell {
+        self.description.cell()
     }
 
     pub fn msg_count(&self) -> i16 {
         self.outmsg_cnt
-    }
-    ///
-    /// mark the transaction as aborted
-    ///
-    pub fn mark_as_aborted(&mut self) {
-        self.reset_root_cell();
-        match self.description {
-            TransactionDescr::Ordinary(ref mut desc) => { desc.aborted = true; },
-            TransactionDescr::TickTock(ref mut desc) => { desc.aborted = true; },
-            TransactionDescr::SplitPrepare(ref mut desc) => { desc.aborted = true; },
-            TransactionDescr::MergePrepare(ref mut desc) => { desc.aborted = true; },
-            TransactionDescr::MergeInstall(ref mut desc) => { desc.aborted = true; },
-            _ => (),
-        };
-    }
-
-    pub fn processing_status(&self) -> TransactionProcessingStatus {
-        self.status.clone()
     }
 
     /// return now time
@@ -1346,94 +1369,33 @@ impl Transaction {
 
     /// set now time
     pub fn set_now(&mut self, now: u32) {
-        self.reset_root_cell();
         self.now = now;
     }
 
-    fn append_to_storage_used(&mut self, cell: &Arc<CellData>) {
-        self.reset_root_cell();
-        match self.description {
-            TransactionDescr::Ordinary(ref mut desc) => {
-                if let Some(ref mut bounce) = desc.bounce {
-                    match bounce {
-                        TrBouncePhase::Nofunds(ref mut no_funds) => { no_funds.msg_size.append(cell);},
-                        TrBouncePhase::Ok(ref mut ok) => { ok.msg_size.append(cell);},
-                        _ => (),
-                    };
-                }
-                if let Some(ref mut action) = desc.action {
-                    action.tot_msg_size.append(cell);
-                }
-            },
-            TransactionDescr::TickTock(ref mut desc) => {
-                if let Some(ref mut action) = desc.action {
-                    action.tot_msg_size.append(cell);
-                }
-            },
-            TransactionDescr::SplitPrepare(ref mut desc) => {
-                if let Some(ref mut action) = desc.action {
-                    action.tot_msg_size.append(cell);
-                }
-            },
-            TransactionDescr::MergeInstall(ref mut desc) => {
-                if let Some(ref mut action) = desc.action {
-                    action.tot_msg_size.append(cell);
-                }
-            },
-            _ => (),
-        }
-    }
-
-    ///
-    /// Is the transaction aborted
-    ///
-    pub fn is_aborted(&self) -> bool {
-        match self.description {
-            TransactionDescr::Ordinary(ref desc) => { desc.aborted },
-            TransactionDescr::TickTock(ref desc) => { desc.aborted },
-            TransactionDescr::SplitPrepare(ref desc) => { desc.aborted },
-            TransactionDescr::MergePrepare(ref desc) => { desc.aborted },
-            TransactionDescr::MergeInstall(ref desc) => { desc.aborted },
-            _ => false,
-        }
-    }
-
-    pub fn compute_phase_ref(&self) -> Option<&TrComputePhase> {
-        match self.description {
-            TransactionDescr::Ordinary(ref desc) => Some(&desc.compute_ph),
-            TransactionDescr::TickTock(ref desc) => Some(&desc.compute_ph),
-            TransactionDescr::SplitPrepare(ref desc) => Some(&desc.compute_ph),
-            TransactionDescr::MergeInstall(ref desc) => Some(&desc.compute_ph),
-            _ => None,
-        }
-    }
-
-    pub fn is_credit_first(&self) -> Option<bool> {
-        match self.description {
-            TransactionDescr::Ordinary(ref tr) => Some(tr.credit_first),
-            _ => None,
-        }
-    }
-
-    pub fn prepare_proof_for_json(&mut self, block_info_cells: &HashMap<UInt256, Arc<CellData>>,
-        block_root: &Arc<CellData>) -> BlockResult<()> {
+    pub fn prepare_proof(&self, block_root: &Cell) -> BlockResult<Cell> {
         // proof for transaction and block info in block
-        let transaction_root = self.write_to_new_cell()?;
-        let transaction_cells = BagOfCells::with_root(&transaction_root.into())
-            .withdraw_cells();
 
-        let is_include = |h| {
-            block_info_cells.contains_key(&h) || transaction_cells.contains_key(&h)
-        };
+        let usage_tree = UsageTree::with_root(block_root.clone());
+        let block: Block = Block::construct_from(&mut usage_tree.root_slice()).unwrap();
 
-        let transaction_proof = MerkleProof::create(block_root, &is_include)?;
-        self.proof = Some(transaction_proof.write_to_new_cell()?.into());
-        Ok(())
-    }
+        block.read_info()?;
 
-    pub fn prepare_boc_for_json(&mut self) -> BlockResult<()> {
-        self.boc = Some(self.write_to_new_cell()?.into());
-        Ok(())
+        block
+            .read_extra()?
+            .read_account_blocks()?
+            .get(self.account_id())?
+                .ok_or(BlockErrorKind::InvalidArg { 
+                    msg: "Tranaction isn't belonged given block (can't find account block)".into() 
+                })?
+            .transactions()
+            .get(&self.logical_time())?
+                .ok_or(BlockErrorKind::InvalidArg { 
+                    msg:"Tranaction isn't belonged given block".into()
+                })?;
+
+        MerkleProof::create_by_usage_tree(block_root, &usage_tree)
+            .and_then(|proof| proof.write_to_new_cell())
+            .map(|cell| cell.into())
     }
 }
 
@@ -1460,11 +1422,6 @@ impl Eq for Transaction {}
 impl Default for Transaction {
     fn default() -> Self {
         Transaction {
-            id: None,
-            block_id: None,
-            status: TransactionProcessingStatus::default(),
-            proof: None,
-            boc: None,
             account_addr: AccountId::from_raw(vec![0;32], 256),
             lt: 0,
             prev_trans_hash: UInt256::from([0;32]),
@@ -1476,20 +1433,15 @@ impl Default for Transaction {
             in_msg: None,
             out_msgs: OutMessages::default(),
             total_fees: CurrencyCollection::default(),
-            state_update: HashUpdate::default(),
-            description: TransactionDescr::default(),
-            root_cell: RwLock::new(None),
+            state_update: ChildCell::default(),
+            description: ChildCell::default()
         }
     }
 }
 const TRANSACTION_TAG : usize = 0x7;
 
-impl LazySerializable for Transaction {
-    fn root_cell(&self) -> &RwLock<Option<SliceData>> {
-        &self.root_cell
-    }
-
-    fn do_write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
+impl Serializable for Transaction {
+    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
 
         builder.append_bits(TRANSACTION_TAG, 4)?;
         self.account_addr.write_to(builder)?; // account_addr: AccountId,
@@ -1519,11 +1471,16 @@ impl LazySerializable for Transaction {
 
         Ok(())
     }
+}
 
-    fn do_read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+impl Deserializable for Transaction {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_int(4)? as usize;
         if tag != TRANSACTION_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "Transaction".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "Transaction".into()
+            })
         }
         self.account_addr.read_from(cell)?; // account_addr
         self.lt = cell.get_next_u64()?; // lt
@@ -1535,9 +1492,9 @@ impl LazySerializable for Transaction {
         self.end_status.read_from(cell)?; // end_status
         let ref mut cell1 = SliceData::from(cell.checked_drain_reference()?);
         if cell1.get_next_bit()? {
-            let mut msg = Message::default();
+            let mut msg = ChildCell::default();
             msg.read_from(&mut cell1.checked_drain_reference()?.into())?;
-            self.in_msg = Some(Arc::new(msg));
+            self.in_msg = Some(msg);
         }
         self.out_msgs.read_from(cell1)?;
         self.total_fees.read_from(cell)?; // total_fees
@@ -1560,7 +1517,7 @@ define_HashmapAugE!(Transactions, 64, InRefValue<Transaction>, CurrencyCollectio
 pub struct AccountBlock {
     account_addr: AccountId,
     transactions: Transactions,      // HashmapAug 64 ^Transaction CurrencyCollection
-    state_update: HashUpdate,        // ^(HASH_UPDATE Account)
+    state_update: ChildCell<HashUpdate>,        // ^(HASH_UPDATE Account)
     tr_count: isize,                 // for HashMap key - here need Logical Time of transaction
 }
 
@@ -1577,7 +1534,7 @@ impl AccountBlock {
         AccountBlock {
             account_addr: address,
             transactions: Transactions::default(),
-            state_update: HashUpdate::default(),
+            state_update: ChildCell::default(),
             tr_count: 0
         }
     }
@@ -1588,7 +1545,7 @@ impl AccountBlock {
     }
 
     /// append serialized transaction to block (use to increase speed)
-    pub fn add_serialized_transaction(&mut self, transaction: Arc<Transaction>, transaction_cell: &Arc<CellData>) -> BlockResult<()> {
+    pub fn add_serialized_transaction(&mut self, transaction: Arc<Transaction>, transaction_cell: &Cell) -> BlockResult<()> {
         if self.tr_count < 0 {
             self.tr_count = self.transactions.len()? as isize;
         }
@@ -1601,9 +1558,14 @@ impl AccountBlock {
         Ok(())
     }
 
+    /// get hash update for Account
+    pub fn read_state_update(&self) -> BlockResult<HashUpdate> {
+        self.state_update.read_struct()
+    }
+
     /// set hash update for Account
-    pub fn set_state_update(&mut self, state_update: HashUpdate) {
-        self.state_update = state_update;
+    pub fn write_state_update(&mut self, state_update: &HashUpdate) -> BlockResult<()> {
+        self.state_update.write_struct(state_update)
     }
 
     // get Block AccountId
@@ -1623,29 +1585,29 @@ impl AccountBlock {
     /// count of transactions
     pub fn transaction_count(&self) -> BlockResult<usize> {
         if self.tr_count < 0 {
-            bail!(BlockErrorKind::InvalidData("self.tr_count is negative".into()));
+            bail!(BlockErrorKind::InvalidData { msg: "self.tr_count is negative".into() });
         }
         self.transactions.len()
     }
     /// update
-    pub fn update_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> BlockResult<()> {
+    pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> BlockResult<()> {
         if self.transactions.is_empty() {
-            bail!(BlockErrorKind::InvalidData("Why no transactions in account block?".into()))
+            bail!(BlockErrorKind::InvalidData { msg: "No transactions in account block".into() })
         } else if let Some(transaction) = self.transactions.single()? {
-            // if block has only one transaction for account just copy Merkle update from transaction
-            self.set_state_update(transaction.0.get_state_update().clone());
+            // if block has only one transaction for account just copy state update from transaction
+            self.write_state_update(&transaction.0.read_state_update()?)?;
         } else {
-            // otherwice it is need to calculate Merkle update
+            // otherwice it is need to calculate Hash update
             let old_hash = old_state.read_accounts()?.get_as_slice(&self.account_addr)?
                 .unwrap_or_default()
                 .into_cell()
                 .repr_hash();
             let new_hash = 
                 new_state.read_accounts()?.get_as_slice(&self.account_addr)?
-                .ok_or("Account should be in new shard state")?
+                .ok_or(BlockErrorKind::Other { msg: "Account should be in new shard state".into() })?
                 .into_cell()
                 .repr_hash();
-            self.set_state_update(HashUpdate::with_hashes(old_hash, new_hash));
+            self.write_state_update(&HashUpdate::with_hashes(old_hash, new_hash))?;
         }
         Ok(())
     }
@@ -1655,20 +1617,14 @@ impl AccountBlock {
         self.transactions.iterate(&mut |transaction| p(transaction.0))
     }
 
-    pub fn transactions(&self) -> &Transactions {
-        &self.transactions
+    pub fn transaction_iterate_full<F> (&self, p: &mut F) -> BlockResult<bool>
+    where F: FnMut(u64, Cell, CurrencyCollection) -> BlockResult<bool> {
+        self.transactions.iterate_slices_with_keys_and_aug(&mut |ref mut key, transaction, aug|
+            p(key.get_next_u64()?, transaction.reference(0)?, aug))
     }
 
-    pub fn read_transactions_from(slice: &mut SliceData) -> BlockResult<Transactions> {
-        let tag = slice.get_next_int(4)? as usize;
-        if tag != ACCOUNT_BLOCK_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "AccountBlock".into()))
-        }
-        AccountId::skip::<AccountId>(slice)?;
-
-        let mut trs = Transactions::default();
-        trs.read_hashmap_root(slice)?;
-        Ok(trs)
+    pub fn transactions(&self) -> &Transactions {
+        &self.transactions
     }
 }
 
@@ -1688,7 +1644,10 @@ impl Deserializable for AccountBlock {
     fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
         let tag = slice.get_next_int(4)? as usize;
         if tag != ACCOUNT_BLOCK_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag(tag as u32, "AccountBlock".into()))
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag as u32,
+                s: "AccountBlock".into()
+            })
         }
         self.account_addr.read_from(slice)?;                                 // account_addr
 
@@ -1732,7 +1691,7 @@ impl ShardAccountBlocks {
         self.add_serialized_transaction(transaction.clone(), &transaction.write_to_new_cell()?.into())
     }
 
-    pub fn add_serialized_transaction(&mut self, transaction: Arc<Transaction>, transaction_cell: &Arc<CellData>) -> BlockResult<()> {
+    pub fn add_serialized_transaction(&mut self, transaction: Arc<Transaction>, transaction_cell: &Cell) -> BlockResult<()> {
         let account_id = transaction.account_id();
         // get AccountBlock for accountId, if not exist, create it
         let mut account_block = self.get(account_id)?.unwrap_or(
@@ -1746,7 +1705,7 @@ impl ShardAccountBlocks {
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum TransactionProcessingStatus {
-    Unknown,
+    Unknown = 0,
     Preliminary,
     Proposed,
     Finalized,
@@ -1773,12 +1732,11 @@ pub fn generate_tranzaction(address : AccountId) -> Transaction {
     tr.set_logical_time(123423);
     tr.set_end_status(AccountStatus::AccStateFrozen);
     tr.set_total_fees(CurrencyCollection::with_grams(653));
-    tr.set_in_message(Arc::new(s_in_msg));
-    tr.add_out_message(Arc::new(s_out_msg1)).unwrap();
-    tr.add_out_message(Arc::new(s_out_msg2)).unwrap();
-    tr.add_out_message(Arc::new(s_out_msg3)).unwrap();
-    tr.set_state_update(s_status_update); 
-    tr.set_transaction_description(s_tr_desc);
-    tr.prepare_id().unwrap();
+    tr.write_in_msg(Some(&s_in_msg)).unwrap();
+    tr.add_out_message(&s_out_msg1).unwrap();
+    tr.add_out_message(&s_out_msg2).unwrap();
+    tr.add_out_message(&s_out_msg3).unwrap();
+    tr.write_state_update(&s_status_update).unwrap();
+    tr.write_description(&s_tr_desc).unwrap();
     tr
 }
