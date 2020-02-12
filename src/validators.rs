@@ -13,6 +13,7 @@
 */
 
 use super::*;
+use sha2::{Sha256, Digest};
 
 /*
 validator_info$_
@@ -137,9 +138,9 @@ validator#53
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ValidatorDescr {
-    public_key: SigPubKey, 
-    weight: u64,
-    adnl_addr: Option<UInt256>,
+    pub public_key: SigPubKey, 
+    pub weight: u64,
+    pub adnl_addr: Option<UInt256>,
 }
 
 impl ValidatorDescr {
@@ -161,6 +162,14 @@ impl ValidatorDescr {
             weight,
             adnl_addr
         }
+    }
+
+    pub fn compute_node_id_short(&self) -> UInt256 {
+        let mut hasher = Sha256::new();
+        let magic = [0xc6, 0xb4, 0x13, 0x48]; // magic 0x4813b4c6 from original node's code
+        hasher.input(&magic);
+        hasher.input(self.public_key.key_bytes());
+        UInt256::from(hasher.result().as_slice())
     }
 }
 
@@ -211,6 +220,17 @@ validators#11
     { main >= 1 } 
     list:(Hashmap 16 ValidatorDescr) 
 = ValidatorSet;
+
+validators_ext#12 
+    utime_since:uint32 
+    utime_until:uint32 
+    total:(## 16) 
+    main:(## 16) 
+    { main <= total } 
+    { main >= 1 } 
+    total_weight:uint64 
+    list:(HashmapE 16 ValidatorDescr) 
+= ValidatorSet;
 */
 
 define_HashmapE!{ValidatorDescriptions, 16, ValidatorDescr}
@@ -223,7 +243,8 @@ pub struct ValidatorSet {
     pub utime_since: u32,
     pub utime_until: u32, 
     pub total: Number16, 
-    pub main: Number16, 
+    pub main: Number16,
+    pub total_weight: Option<u64>,
     pub list: ValidatorDescriptions,
     list_key: u16, 
 }
@@ -235,6 +256,7 @@ impl ValidatorSet {
             utime_until: 0, 
             total: Number16::default(), 
             main: Number16::default(), 
+            total_weight: None,
             list: ValidatorDescriptions::default(), 
             list_key: 0
         }
@@ -252,6 +274,7 @@ impl ValidatorSet {
             total, 
             main, 
             list: ValidatorDescriptions::default(),
+            total_weight: None,
             list_key: 0
         }
     }
@@ -263,15 +286,21 @@ impl ValidatorSet {
 }
 
 const VALIDATOR_SET_TAG: u8 = 0x11;
+const VALIDATOR_SET_EX_TAG: u8 = 0x12;
 
 impl Serializable for ValidatorSet {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
-        cell.append_u8(VALIDATOR_SET_TAG)?;
+        cell.append_u8(if self.total_weight.is_none() { VALIDATOR_SET_TAG } else { VALIDATOR_SET_EX_TAG })?;
         self.utime_since.write_to(cell)?;
         self.utime_until.write_to(cell)?;
         self.total.write_to(cell)?;
         self.main.write_to(cell)?;
-        self.list.write_hashmap_root(cell)?;
+        if let Some(w) = self.total_weight {
+            w.write_to(cell)?;
+            self.list.write_to(cell)?;
+        } else {
+            self.list.write_hashmap_root(cell)?;
+        }
         Ok(())
     }
 }
@@ -279,7 +308,7 @@ impl Serializable for ValidatorSet {
 impl Deserializable for ValidatorSet {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         let tag = cell.get_next_byte()?;
-        if tag != VALIDATOR_SET_TAG {
+        if tag != VALIDATOR_SET_TAG && tag != VALIDATOR_SET_EX_TAG {
             bail!(BlockErrorKind::InvalidConstructorTag {
                 t: tag as u32,
                 s: "ValidatorSet".into()
@@ -289,8 +318,27 @@ impl Deserializable for ValidatorSet {
         self.utime_until.read_from(cell)?;
         self.total.read_from(cell)?;
         self.main.read_from(cell)?;
-        self.list.read_hashmap_root(cell)?;
+        if tag == VALIDATOR_SET_TAG {
+            self.total_weight = None;
+            self.list.read_hashmap_root(cell)?; // Hashmap
+        } else {
+            self.total_weight = Some(u64::construct_from(cell)?);
+            self.list.read_from(cell)?; // HashmapE
+        }
         self.list_key = self.list.len()? as u16;
+
+        if self.main > self.total {
+            bail!(BlockErrorKind::InvalidData {
+                msg: "main > total while read ValidatorSet".into()
+            })
+        }
+
+        if self.main < Number16(1) {
+            bail!(BlockErrorKind::InvalidData {
+                msg: "main < 1 while read ValidatorSet".into()
+            })
+        }
+
         Ok(())
     }
 }

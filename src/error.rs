@@ -160,3 +160,9 @@ impl From<std::io::Error> for BlockError {
         BlockError::from(BlockErrorKind::Io { error })
     }
 }
+
+impl From<ed25519_dalek::SignatureError> for BlockError {
+    fn from(inner: ed25519_dalek::SignatureError) -> BlockError {
+        BlockError::from(BlockErrorKind::Signature { inner })
+    }
+}

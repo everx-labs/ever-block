@@ -15,6 +15,7 @@
 #
 
 [package]
+build = "build.rs"
 name = "ton_block"
 version = "1.0.0"
 
@@ -32,3 +33,5 @@ hex = "^0.4.0"
 log = "0.4.8"
 num = "^0.2"
 sha2 = "^0.8"
+
+

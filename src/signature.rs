@@ -13,6 +13,7 @@
 */
 
 use super::*;
+use std::io::{Cursor, Write};
 
 /*
 ed25519_signature#5 R:bits256 s:bits256 = CryptoSignature; 
@@ -21,43 +22,100 @@ ed25519_signature#5 R:bits256 s:bits256 = CryptoSignature;
 ///
 /// CryptoSignature
 /// 
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct CryptoSignature {
-    r: UInt256,
-    s: UInt256,
-}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CryptoSignature(ed25519_dalek::Signature);
 
 impl CryptoSignature {
     pub fn new() -> Self {
-        CryptoSignature {
-            r: UInt256::default(),
-            s: UInt256::default(),
-        }
+        Self::default()
     }
 
-    pub fn with_params(
-        r: UInt256, 
-        s: UInt256) -> Self 
+    pub fn from_bytes(bytes: &[u8]) -> BlockResult<Self>
     {
-        CryptoSignature {
-            r,
-            s,
+        Ok(Self(ed25519_dalek::Signature::from_bytes(bytes)?))
+    }
+
+    pub fn from_str(string: &str) -> BlockResult<Self> {
+        let buf = hex::decode(string).map_err(|err| {
+            BlockErrorKind::InvalidData { msg: format!("error parsing hex string: {}", err) }
+        })?;
+        Self::from_bytes(&buf)
+    }
+
+    pub fn from_r_s(r: &[u8], s: &[u8]) -> BlockResult<Self>
+    {
+        if r.len() != ed25519_dalek::SIGNATURE_LENGTH / 2 {
+            bail!(BlockErrorKind::InvalidArg { msg: "`r` has invalid size".into() });
         }
+        if s.len() != ed25519_dalek::SIGNATURE_LENGTH / 2 {
+            bail!(BlockErrorKind::InvalidArg { msg: "`s` has invalid size".into() });
+        }
+        let mut sign = [0_u8; ed25519_dalek::SIGNATURE_LENGTH];
+        {
+            let mut cur = Cursor::new(&mut sign[..]);
+            cur.write(r).unwrap();
+            cur.write(s).unwrap();
+        }
+        Ok(Self(ed25519_dalek::Signature::from_bytes(&sign[..])?))
+    }
+
+    pub fn from_r_s_str(r: &str, s: &str) -> BlockResult<Self> {
+        let mut bytes = [0; ed25519_dalek::SIGNATURE_LENGTH];
+        hex::decode_to_slice(r, &mut bytes[..ed25519_dalek::SIGNATURE_LENGTH / 2]).map_err(|err| {
+            BlockErrorKind::InvalidData { msg: format!("error parsing `r` hex string: {}", err) }
+        })?;
+        hex::decode_to_slice(s, &mut bytes[ed25519_dalek::SIGNATURE_LENGTH / 2..]).map_err(|err| {
+            BlockErrorKind::InvalidData { msg: format!("error parsing `s` hex string: {}", err) }
+        })?;
+        Self::from_bytes(&bytes)
+    }
+
+    pub fn to_bytes(&self) -> [u8; ed25519_dalek::SIGNATURE_LENGTH] {
+        self.0.to_bytes()
+    }
+
+    pub fn to_r_s_bytes(&self) -> ([u8; ed25519_dalek::SIGNATURE_LENGTH / 2], [u8; ed25519_dalek::SIGNATURE_LENGTH / 2]) {
+        let mut r_bytes = [0_u8; ed25519_dalek::SIGNATURE_LENGTH / 2];
+        let mut s_bytes = [0_u8; ed25519_dalek::SIGNATURE_LENGTH / 2];
+        let bytes = self.0.to_bytes();
+        r_bytes.copy_from_slice(&bytes[..ed25519_dalek::SIGNATURE_LENGTH / 2]);
+        s_bytes.copy_from_slice(&bytes[ed25519_dalek::SIGNATURE_LENGTH / 2..]);
+        (r_bytes, s_bytes)
+    }
+
+    pub fn signature(&self) -> &ed25519_dalek::Signature {
+        &self.0
     }
 }
 
+impl Default for CryptoSignature {
+    fn default() -> Self {
+        Self(ed25519_dalek::Signature::from_bytes(&[0; ed25519_dalek::SIGNATURE_LENGTH]).unwrap())
+    }
+}
+
+const CRYPTO_SIGNATURE_TAG: u8 = 0x5;
+
 impl Serializable for CryptoSignature {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
-        self.r.write_to(cell)?;
-        self.s.write_to(cell)?;
+        cell.append_bits(CRYPTO_SIGNATURE_TAG as usize, 4)?;
+        let bytes = self.to_bytes();
+        cell.append_raw(&bytes, bytes.len() * 8)?;
         Ok(())
     }
 }
 
 impl Deserializable for CryptoSignature {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
-        self.r.read_from(cell)?;
-        self.s.read_from(cell)?;
+        let tag = cell.get_next_bits(4)?;
+        if tag[0] != 5 << 4 {
+            bail!(BlockErrorKind::InvalidConstructorTag {
+                t: tag[0] as u32,
+                s: "CryptoSignature".into()
+            })
+        }
+        let buf = cell.get_next_bits(ed25519_dalek::SIGNATURE_LENGTH * 8)?;
+        self.0 = ed25519_dalek::Signature::from_bytes(&buf)?;
         Ok(())
     }
 }
@@ -70,8 +128,8 @@ sig_pair$_ node_id_short:bits256 sign:CryptoSignature = CryptoSignaturePair;
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct CryptoSignaturePair {
-    node_id_short: UInt256,
-    sign: CryptoSignature,
+    pub node_id_short: UInt256,
+    pub sign: CryptoSignature,
 }
 
 impl CryptoSignaturePair {
@@ -117,32 +175,44 @@ ed25519_pubkey#8e81278a pubkey:bits256 = SigPubKey;
 /// SigPubKey
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct SigPubKey {
-    pubkey: UInt256,
-}
+pub struct SigPubKey(ed25519_dalek::PublicKey);
 
 const SIG_PUB_KEY_TAG: u32 = 0x8e81278a;
 
 impl SigPubKey {
     pub fn new() -> Self {
-        SigPubKey {
-            pubkey: UInt256::default(),
-        }
+        Self::default()
     }
 
-    pub fn with_params(
-        pubkey: UInt256) -> Self 
+    pub fn from_bytes(bytes: &[u8]) -> BlockResult<Self>
     {
-        SigPubKey {
-            pubkey,
-        }
+        Ok(SigPubKey(ed25519_dalek::PublicKey::from_bytes(bytes)?))
+    }
+
+    pub fn from_str(string: &str) -> BlockResult<Self> {
+        let key_buf = hex::decode(string).map_err(|err| {
+            BlockErrorKind::InvalidData { msg: format!("error parsing hex string: {}", err) }
+        })?;
+        Self::from_bytes(&key_buf)
+    }
+
+    pub fn key(&self) -> &ed25519_dalek::PublicKey {
+        &self.0
+    }
+
+    pub fn key_bytes(&self) -> &[u8; ed25519_dalek::PUBLIC_KEY_LENGTH] {
+        self.0.as_bytes()
+    }
+
+    pub fn verify_signature(&self, data: &[u8], signature: &CryptoSignature) -> bool {
+        self.0.verify::<sha2::Sha512>(data, signature.signature()).is_ok()
     }
 }
 
 impl Serializable for SigPubKey {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         cell.append_u32(SIG_PUB_KEY_TAG)?;
-        self.pubkey.write_to(cell)?;
+        cell.append_raw(self.key_bytes(), self.key_bytes().len() * 8)?;
         Ok(())
     }
 }
@@ -156,7 +226,9 @@ impl Deserializable for SigPubKey {
                 s: "SigPubKey".into()
             })
         }
-        self.pubkey.read_from(cell)?;
+        let key_buf = cell.get_next_bits(ed25519_dalek::PUBLIC_KEY_LENGTH * 8)?;
+        self.0 = ed25519_dalek::PublicKey::from_bytes(&key_buf)?;
+
         Ok(())
     }
 }
@@ -220,6 +292,10 @@ impl BlockSignaturesPure {
         self.sig_count += 1;
         let key = (self.sig_count as u16).write_to_new_cell().unwrap();
         self.signatures.set(key.into(), &signature.write_to_new_cell().unwrap().into()).unwrap();
+    }
+
+    pub fn signatures(&self) -> &HashmapE {
+        &self.signatures
     }
 }
 
@@ -351,8 +427,13 @@ impl Serializable for BlockProof {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         cell.append_u8(BLOCK_PROOF_TAG)?;
         self.proof_for.write_to(cell)?;
-        cell.append_reference(BuilderData::from(&self.root));
-        self.signatures.write_maybe_to(cell)?;
+        cell.checked_append_reference(self.root.clone())?;
+        if let Some(s) = self.signatures.as_ref() {
+            cell.append_bit_one()?;
+            cell.checked_append_reference(s.write_to_new_cell()?.into())?;
+        } else {
+            cell.append_bit_zero()?;
+        }
         Ok(())
     }
 }
@@ -362,14 +443,17 @@ impl Deserializable for BlockProof {
         let tag = cell.get_next_byte()?;
         if tag != BLOCK_PROOF_TAG {
             bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
+                t: tag as u32, 
                 s: "BlockProof".into()
             })
         }
         self.proof_for.read_from(cell)?; 
         self.root = cell.checked_drain_reference()?.clone();
-        self.signatures = BlockSignatures::read_maybe_from(cell)?;
+        self.signatures = if cell.get_next_bit()? {
+            Some(BlockSignatures::construct_from(&mut cell.checked_drain_reference()?.into())?)
+        } else {
+            None
+        };
         Ok(())
     }
 }
-

@@ -553,15 +553,29 @@ impl Serializable for McStateExtra {
 }
 
 /*
-fsm_none$0 = FutureSplitMerge;
-fsm_split$10 mc_seqno:uint32 = FutureSplitMerge;
-fsm_merge$11 mc_seqno:uint32 = FutureSplitMerge;
+fsm_none$0
+
+fsm_split$10 
+    split_utime: uint32 
+    interval: uint32
+= FutureSplitMerge;
+
+fsm_merge$11 
+    merge_utime: uint32 
+    interval: uint32 
+= FutureSplitMerge;
 */
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FutureSplitMerge {
     None,
-    Split(u32),
-    Merge(u32)
+    Split {
+        split_utime: u32,
+        interval: u32,
+    },
+    Merge {
+        merge_utime: u32, 
+        interval: u32,
+    }
 }
 
 impl Default for FutureSplitMerge {
@@ -576,9 +590,15 @@ impl Deserializable for FutureSplitMerge {
         if !slice.get_next_bit()? {
             *self = FutureSplitMerge::None;
         } else if !slice.get_next_bit()? {
-            *self = FutureSplitMerge::Split(slice.get_next_u32()?);
+            *self = FutureSplitMerge::Split {
+                split_utime: slice.get_next_u32()?,
+                interval: slice.get_next_u32()?,
+            };
         } else {
-            *self = FutureSplitMerge::Merge(slice.get_next_u32()?);
+            *self = FutureSplitMerge::Merge {
+                merge_utime: slice.get_next_u32()?,
+                interval: slice.get_next_u32()?,
+            };
         }
         Ok(())
     }
@@ -590,15 +610,17 @@ impl Serializable for FutureSplitMerge {
             FutureSplitMerge::None => {
                 cell.append_bit_zero()?;
             },
-            FutureSplitMerge::Split(mc_seqno) => {
+            FutureSplitMerge::Split { split_utime, interval } => {
                 cell.append_bit_one()?;
                 cell.append_bit_zero()?;
-                mc_seqno.write_to(cell)?;
+                split_utime.write_to(cell)?;
+                interval.write_to(cell)?;
             },
-            FutureSplitMerge::Merge(mc_seqno) => {
+            FutureSplitMerge::Merge { merge_utime, interval } => {
                 cell.append_bit_one()?;
                 cell.append_bit_one()?;
-                mc_seqno.write_to(cell)?;
+                merge_utime.write_to(cell)?;
+                interval.write_to(cell)?;
             }
         }
         Ok(())

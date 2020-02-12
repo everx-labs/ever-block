@@ -1249,6 +1249,16 @@ impl Transaction {
         self.lt
     }
 
+    /// get hash of previous transaction
+    pub fn prev_trans_hash(&self) -> UInt256 {
+        self.prev_trans_hash.clone()
+    }
+
+    /// get logical time of previous transaction
+    pub fn prev_trans_lt(&self) -> u64 {
+        self.prev_trans_lt
+    }
+
     /// set end status accaunt
     pub fn set_end_status(&mut self, end_status: AccountStatus) {
         self.end_status = end_status;
@@ -1295,10 +1305,7 @@ impl Transaction {
     }
 
     pub fn write_in_msg(&mut self, value: Option<&Message>) -> BlockResult<()> {
-        self.in_msg = match value {
-                Some(v) => Some(ChildCell::with_struct(v)?),
-                None => None
-            };
+        self.in_msg = value.map(|v| ChildCell::with_struct(v)).transpose()?;
         Ok(())
     }
 
@@ -1540,12 +1547,12 @@ impl AccountBlock {
     }
 
     /// add transaction to block
-    pub fn add_transaction(&mut self, transaction: Arc<Transaction>) -> BlockResult<()> {
-        self.add_serialized_transaction(transaction.clone(), &transaction.write_to_new_cell()?.into())
+    pub fn add_transaction(&mut self, transaction: &Transaction) -> BlockResult<()> {
+        self.add_serialized_transaction(transaction, &transaction.write_to_new_cell()?.into())
     }
 
     /// append serialized transaction to block (use to increase speed)
-    pub fn add_serialized_transaction(&mut self, transaction: Arc<Transaction>, transaction_cell: &Cell) -> BlockResult<()> {
+    pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> BlockResult<()> {
         if self.tr_count < 0 {
             self.tr_count = self.transactions.len()? as isize;
         }
@@ -1687,18 +1694,18 @@ impl ShardAccountBlocks {
     // }
 
     /// adds transaction to account by id from transaction
-    pub fn add_transaction(&mut self, transaction: Arc<Transaction>) -> BlockResult<()> {
-        self.add_serialized_transaction(transaction.clone(), &transaction.write_to_new_cell()?.into())
+    pub fn add_transaction(&mut self, transaction: &Transaction) -> BlockResult<()> {
+        self.add_serialized_transaction(transaction, &transaction.write_to_new_cell()?.into())
     }
 
-    pub fn add_serialized_transaction(&mut self, transaction: Arc<Transaction>, transaction_cell: &Cell) -> BlockResult<()> {
+    pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> BlockResult<()> {
         let account_id = transaction.account_id();
         // get AccountBlock for accountId, if not exist, create it
         let mut account_block = self.get(account_id)?.unwrap_or(
             AccountBlock::with_address(account_id.clone())
         );
         // append transaction to AccountBlock
-        account_block.add_serialized_transaction(transaction.clone(), transaction_cell)?;
+        account_block.add_serialized_transaction(transaction, transaction_cell)?;
         self.set(account_id, &account_block, &transaction.total_fees())
     }
 }

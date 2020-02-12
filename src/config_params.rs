@@ -14,7 +14,7 @@
 
 use super::*;
 use ::{BlockResult, BlockErrorKind};
-
+use std::ops::Deref;
 
 /*
 1.6.3. Quick access through the header of masterchain blocks
@@ -116,8 +116,11 @@ pub enum ConfigParamEnum {
     ConfigParam29(ConfigParam29),
     ConfigParam31(ConfigParam31),
     ConfigParam32(ConfigParam32),
+    ConfigParam33(ConfigParam33),
     ConfigParam34(ConfigParam34),
+    ConfigParam35(ConfigParam35),
     ConfigParam36(ConfigParam36),
+    ConfigParam37(ConfigParam37),
     ConfigParam39(ConfigParam39),
     ConfigParamAny(u32, SliceData),
 }
@@ -162,8 +165,11 @@ impl ConfigParamEnum {
             29 => { read_config!(ConfigParam29, ConfigParam29, slice) },
             31 => { read_config!(ConfigParam31, ConfigParam31, slice) },
             32 => { read_config!(ConfigParam32, ConfigParam32, slice) },
+            33 => { read_config!(ConfigParam33, ConfigParam33, slice) },
             34 => { read_config!(ConfigParam34, ConfigParam34, slice) },
+            35 => { read_config!(ConfigParam35, ConfigParam35, slice) },
             36 => { read_config!(ConfigParam36, ConfigParam36, slice) },
+            37 => { read_config!(ConfigParam37, ConfigParam37, slice) },
             39 => { read_config!(ConfigParam39, ConfigParam39, slice) },
             index @ _ => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
         }
@@ -197,8 +203,11 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam29(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(29)},
             ConfigParamEnum::ConfigParam31(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(31)},
             ConfigParamEnum::ConfigParam32(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(32)},
+            ConfigParamEnum::ConfigParam33(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(33)},
             ConfigParamEnum::ConfigParam34(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(34)},
+            ConfigParamEnum::ConfigParam35(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(35)},
             ConfigParamEnum::ConfigParam36(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(36)},
+            ConfigParamEnum::ConfigParam37(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(37)},
             ConfigParamEnum::ConfigParam39(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(39)},
             ConfigParamEnum::ConfigParamAny(index, slice) => { cell.append_reference_cell(slice.into_cell()); Ok(*index)},
         }
@@ -665,7 +674,12 @@ impl Serializable for ConfigParam16 {
 }
 
 /*
-_ min_stake:Grams max_stake:Grams max_stake_factor:uint32 = ConfigParam 17;
+_ 
+    min_stake: Grams 
+    max_stake: Grams 
+    min_total_stake: Grams 
+    max_stake_factor: uint32 
+= ConfigParam 17;
 */
 
 ///
@@ -675,6 +689,7 @@ _ min_stake:Grams max_stake:Grams max_stake_factor:uint32 = ConfigParam 17;
 pub struct ConfigParam17 {
     pub min_stake: Grams,
     pub max_stake: Grams,
+    pub min_total_stake: Grams,
     pub max_stake_factor: u32,
 }
 
@@ -688,6 +703,7 @@ impl Deserializable for ConfigParam17 {
     fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
         self.min_stake.read_from(cell)?;
         self.max_stake.read_from(cell)?;
+        self.min_total_stake.read_from(cell)?;
         self.max_stake_factor.read_from(cell)?;
         Ok(())
     }
@@ -697,6 +713,7 @@ impl Serializable for ConfigParam17 {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         self.min_stake.write_to(cell)?;
         self.max_stake.write_to(cell)?;
+        self.min_total_stake.write_to(cell)?;
         self.max_stake_factor.write_to(cell)?;
         Ok(())
     }
@@ -769,7 +786,7 @@ impl Serializable for StoragePrices {
 /// 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConfigParam18 {
-    map: HashmapE,
+    pub map: HashmapE,
     index: u32
 }
 
@@ -944,6 +961,11 @@ impl Deserializable for GasFlatPfx {
         self.flat_gas_limit.read_from(cell)?;
         self.flat_gas_price.read_from(cell)?;
         self.other = Arc::new(GasLimitsPrices::construct_from(cell)?);
+        if let GasLimitsPrices::FlatPfx(_) = self.other.deref() {
+            bail!(BlockErrorKind::InvalidData {
+                msg: "GasFlatPfx.other can't be GasFlatPfx".into()
+            });
+        }
         Ok(())
     }
 }
@@ -952,6 +974,11 @@ impl Serializable for GasFlatPfx {
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         self.flat_gas_limit.write_to(cell)?;
         self.flat_gas_price.write_to(cell)?;
+        if let GasLimitsPrices::FlatPfx(_) = self.other.deref() {
+            bail!(BlockErrorKind::InvalidData {
+                msg: "GasFlatPfx.other can't be GasFlatPfx".into()
+            });
+        }
         self.other.write_to(cell)?;
         Ok(())
     }
@@ -1330,18 +1357,23 @@ macro_rules! define_configparams {
     }
 }
 
-/*
-_ prev_validators:ValidatorSet = ConfigParam 32;
-*/
+// _ prev_validators:ValidatorSet = ConfigParam 32;
 define_configparams!(ConfigParam32, prev_validators);
-/*
-_ cur_validators:ValidatorSet = ConfigParam 34;
-*/
+
+// _ prev_temp_validators: ValidatorSet = ConfigParam 33;
+define_configparams!(ConfigParam33, prev_temp_validators);
+
+// _ cur_validators:ValidatorSet = ConfigParam 34;
 define_configparams!(ConfigParam34, cur_validators);
-/*
-_ next_validators:ValidatorSet = ConfigParam 36;
-*/
+
+// _ cur_temp_validators: ValidatorSet = ConfigParam 35;
+define_configparams!(ConfigParam35, cur_temp_validators);
+
+//_ next_validators:ValidatorSet = ConfigParam 36;
 define_configparams!(ConfigParam36, next_validators);
+
+// _ next_temp_validators: ValidatorSet = ConfigParam 37;
+define_configparams!(ConfigParam37, next_temp_validators);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WorkchainFormat {

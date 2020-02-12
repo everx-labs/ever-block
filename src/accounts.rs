@@ -16,7 +16,7 @@ use ton_types::IBitstring;
 use AccountId;
 use super::*;
 use std::fmt;
-use ton_types::cells_serialization:: BagOfCells;
+use ton_types::cells_serialization::BagOfCells;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -598,12 +598,11 @@ impl Account {
         storage_stat: &StorageInfo,
         storage: &AccountStorage,
     ) -> Self {
-        let account = Account::Account(AccountStuff {
+        Account::Account(AccountStuff {
             addr: addr.clone(),
             storage_stat: storage_stat.clone(),
             storage: storage.clone()
-        });
-        account
+        })
     }
 
     pub fn is_none(&self) -> bool {
@@ -723,6 +722,16 @@ impl Account {
             }
         }
         false
+    }
+
+    /// set new library code
+    pub fn set_library(&mut self, _new_code: Cell) -> bool {
+        unimplemented!()
+    }
+
+    /// delete library code
+    pub fn delete_library(&mut self, _hash: UInt256) -> bool {
+        unimplemented!()
     }
 
     /// Activate account with new StateInit
@@ -969,10 +978,12 @@ pub fn generate_test_account() -> Account {
     balance.set_other(7, 10000100);
 
     let acc_st = AccountStorage {
-            last_trans_lt: 0,
-            balance: balance,
-            state: AccountState::with_state(stinit),
-        };
-
-    Account::with_storage(&MsgAddressInt::with_standart(Some(anc), 0, acc_id).unwrap(), &st_info, &acc_st)
+        last_trans_lt: 0,
+        balance: balance,
+        state: AccountState::with_state(stinit),
+    };
+    let addr = MsgAddressInt::with_standart(Some(anc), 0, acc_id).unwrap();
+    let mut account = Account::with_storage(&addr, &st_info, &acc_st);
+    account.update_storage_stat().unwrap();
+    account
 }
