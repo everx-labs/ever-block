@@ -1,7 +1,6 @@
 G_giturl = ""
 G_gitcred = 'TonJenSSH'
 G_docker_creds = "TonJenDockerHub"
-G_image_base = "rust:1.40"
 G_image_target = ""
 G_docker_image = null
 G_build = "none"
@@ -112,7 +111,7 @@ pipeline {
                     docker.withRegistry('', G_docker_creds) {
                         G_docker_image.withRun() {c -> 
                             docker.image(params.dockerImage_ton_labs_types).withRun() { ton_types_dep ->
-                                docker.image(G_image_base).inside("--volumes-from ${c.id} --volumes-from ${ton_types_dep.id}") {
+                                docker.image("rust:latest").inside("--volumes-from ${c.id} --volumes-from ${ton_types_dep.id}") {
                                     sh """
                                         cd /tonlabs/ton-labs-block
                                         cargo update
@@ -135,7 +134,7 @@ pipeline {
                     docker.withRegistry('', G_docker_creds) {
                         G_docker_image.withRun() {c -> 
                             docker.image(params.dockerImage_ton_labs_types).withRun() { ton_types_dep ->
-                                docker.image(G_image_base).inside("--volumes-from ${c.id} --volumes-from ${ton_types_dep.id}") {
+                                docker.image("rust:latest").inside("--volumes-from ${c.id} --volumes-from ${ton_types_dep.id}") {
                                     sh """
                                         cd /tonlabs/ton-labs-block
                                         cargo update
