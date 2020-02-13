@@ -17,6 +17,7 @@ use {ExceptionCode, UInt256};
 use super::*;
 use dictionary::HashmapE;
 use std::cmp::Ordering;
+use std::io::{Cursor, Write};
 
 
 /*
@@ -258,6 +259,12 @@ pub enum BlkPrevInfo {
     },
 }
 
+impl Default for BlkPrevInfo {
+    fn default() -> BlkPrevInfo {
+        BlkPrevInfo::Block{ prev: ExtBlkRef::default() }
+    }
+}
+
 impl BlkPrevInfo {
 
     pub fn default_block() -> Self {
@@ -420,6 +427,20 @@ impl Block {
 
     pub fn extra_cell(&self) -> &Cell {
         self.extra.cell()
+    }
+
+    const DATA_FOR_SIGN_SIZE: usize = 4 + 32 + 32;
+    const DATA_FOR_SIGN_TAG: [u8; 4] = [0x70, 0x6e, 0x0b, 0xc5];
+
+    pub fn build_data_for_sign(root_hash: &UInt256, file_hash: &UInt256) -> [u8; Self::DATA_FOR_SIGN_SIZE] {
+        let mut data = [0_u8; Self::DATA_FOR_SIGN_SIZE];
+        {
+            let mut cur = Cursor::new(&mut data[..]);
+            cur.write(&Self::DATA_FOR_SIGN_TAG).unwrap();
+            cur.write(root_hash.as_slice()).unwrap();
+            cur.write(file_hash.as_slice()).unwrap();
+        }
+        data
     }
 }
 
@@ -1009,6 +1030,14 @@ impl ShardStateUnsplit {
 
     pub fn write_accounts(&mut self, value: &ShardAccounts) -> BlockResult<()> {
         self.accounts.write_struct(value)
+    }
+    
+    pub fn insert_account(&mut self, acc: &ShardAccount) -> BlockResult<()> {
+        // TODO: split depth
+        let depth_balance_info = DepthBalanceInfo::new(0, acc.read_account()?.get_balance().unwrap())?;
+        let mut accounts = self.read_accounts()?;
+        accounts.set(&acc.account_cell().repr_hash(), acc, &depth_balance_info)?;
+        self.write_accounts(&accounts)
     }
 
     pub fn overload_history(&self) -> u64 {

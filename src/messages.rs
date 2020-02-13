@@ -24,7 +24,7 @@ use cell::IBitstring;
 use dictionary::{HashmapE, HashmapType};
 use std::fmt;
 use std::str::FromStr;
-use {AccountId, ExceptionCode, UInt256};
+use {AccountId, UInt256};
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -46,11 +46,6 @@ workchain_id:int32 address:(addr_len * Bit) = MsgAddressInt;
 _ MsgAddressInt = MsgAddress;
 _ MsgAddressExt = MsgAddress;
  */
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct AnycastInfo{
-    pub rewrite_pfx: SliceData,         // depth length
-}
 
 impl AnycastInfo {
     pub fn with_rewrite_pfx(pfx: SliceData) -> BlockResult<Self> {
@@ -58,6 +53,7 @@ impl AnycastInfo {
             bail!(BlockErrorKind::InvalidArg { msg: "pfx can't be longer than 2^5-1 bits".into() })
         }
         Ok(Self {
+            depth: Number5(pfx.remaining_bits() as u32),
             rewrite_pfx: pfx
         })
     }
@@ -65,32 +61,16 @@ impl AnycastInfo {
         if pfx.remaining_bits() > Number5::get_max_len() {
             bail!(BlockErrorKind::InvalidArg { msg: "pfx can't be longer than 2^5-1 bits".into() })
         }
+        self.depth = Number5(pfx.remaining_bits() as u32);
         self.rewrite_pfx = pfx;
         Ok(())
     }
 }
 
-impl Default for AnycastInfo {
-    fn default() -> Self{
-        AnycastInfo { rewrite_pfx: SliceData::default() }
-    }
-}
-
 impl Serializable for AnycastInfo {
-
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
-        let depth = Number5(self.rewrite_pfx.remaining_bits() as u32);
-        depth.write_to(cell)?;                                       // write depth
+        self.depth.write_to(cell)?;                                  // write depth
         cell.checked_append_references_and_data(&self.rewrite_pfx)?; // write rewrite_pfx
-        Ok(())
-    } 
-}
-
-impl Deserializable for AnycastInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
-        let mut depth = Number5::default();
-        depth.read_from(cell)?;                                    // read depth
-        self.rewrite_pfx = cell.get_next_slice(depth.0 as usize)?; // read depth bit into rewrite_pfx
         Ok(())
     } 
 }
@@ -113,26 +93,13 @@ _ MsgAddressInt = MsgAddress;
 _ MsgAddressExt = MsgAddress;
  */
 
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MsgAddrVar {
-    pub anycast: Option<AnycastInfo>,
-    pub workchain_id: i32,
-    pub address: SliceData,
-}
-
 impl MsgAddrVar {
     pub fn with_address(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> BlockResult<MsgAddrVar> {
         if address.remaining_bits() > Number9::get_max_len(){
             bail!(BlockErrorKind::InvalidArg { msg: "address can't be longer than 2^9-1 bits".into() });
         }
-        Ok(MsgAddrVar { anycast, workchain_id, address })
-    }
-}
-
-impl Default for MsgAddrVar {
-    fn default() -> Self{
-        MsgAddrVar { anycast: None, workchain_id: 0, address: SliceData::default() }
+        let addr_len = Number9(address.remaining_bits() as u32);
+        Ok(MsgAddrVar { anycast, addr_len, workchain_id, address })
     }
 }
 
@@ -144,17 +111,6 @@ impl Serializable for MsgAddrVar {
         addr_len.write_to(cell)?;                                      // addr_len
         cell.append_i32(self.workchain_id)?;                           // workchain_id
         cell.checked_append_references_and_data(&self.address)?;       // address
-        Ok(())
-    } 
-}
-
-impl Deserializable for MsgAddrVar {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
-        self.anycast = AnycastInfo::read_maybe_from(cell)?;            // anycast
-        let mut addr_len = Number9::default();
-        addr_len.read_from(cell)?;                                     // addr_len
-        self.workchain_id = cell.get_next_i32()?;                       // workchain_id
-        self.address = cell.get_next_slice(addr_len.0 as usize)?;      // address
         Ok(())
     } 
 }
@@ -171,13 +127,6 @@ impl fmt::Display for MsgAddrVar {
             write!(f, "{}:{:x}", self.workchain_id, self.address)
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct MsgAddrStd {
-    pub anycast: Option<AnycastInfo>,
-    pub workchain_id: i8,
-    pub address: AccountId,
 }
 
 impl MsgAddrStd {
@@ -202,16 +151,6 @@ impl Serializable for MsgAddrStd {
     } 
 }
 
-impl Deserializable for MsgAddrStd {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
-        self.anycast = AnycastInfo::read_maybe_from(cell)?;     // anycast
-        self.workchain_id.read_from(cell)?;                     // workchain_id
-        self.address = cell.get_next_slice(256)?;               // address
-
-        Ok(())
-    } 
-}
-
 impl fmt::Display for MsgAddrStd {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(anycast) = &self.anycast {
@@ -221,46 +160,32 @@ impl fmt::Display for MsgAddrStd {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct MsgAddrExt(pub SliceData);
-
 impl MsgAddrExt {
     pub fn with_address(address: SliceData) -> BlockResult<Self>{
         if address.remaining_bits() > Number9::get_max_len(){
             bail!(BlockErrorKind::InvalidArg { msg: "address can't be longer than 2^9-1 bits".into() });
         }
-        Ok(MsgAddrExt(address))
+        Ok(MsgAddrExt {
+            len: Number9(address.remaining_bits() as u32),
+            external_address: address
+        })
     }
 }
 
 impl Serializable for MsgAddrExt {
 
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
-        let len = Number9(self.0.remaining_bits() as u32);
+        let len = Number9(self.external_address.remaining_bits() as u32);
         len.write_to(cell)?;                               // write len
-        cell.checked_append_references_and_data(&self.0)?; // write address
-        Ok(())
-    } 
-}
-
-impl Deserializable for MsgAddrExt {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
-        let len = Number9::construct_from::<Number9>(cell)?; // read len
-        self.0 = cell.get_next_slice(len.0 as usize)?;       // read address
+        cell.checked_append_references_and_data(&self.external_address)?; // write address
         Ok(())
     } 
 }
 
 impl fmt::Display for MsgAddrExt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, ":{:x}", self.0)
+        write!(f, ":{:x}", self.external_address)
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum MsgAddressExt {
-    AddrNone,
-    AddrExtern(MsgAddrExt),
 }
 
 impl MsgAddressExt {
@@ -306,24 +231,6 @@ impl Serializable for MsgAddressExt {
     } 
 }
 
-impl Deserializable for MsgAddressExt {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
-        let fb = cell.get_next_bit()?;
-        let sb = cell.get_next_bit()?;
-
-        if !fb && !sb {
-            *self = MsgAddressExt::AddrNone;                        // MesAddress::AddrNone
-        }
-        if !fb && sb {
-            let mut ext = MsgAddrExt::default();                     // MesAddress::AddrExtern
-            ext.read_from(cell)?;
-            *self = MsgAddressExt::AddrExtern(ext);
-        }
-
-        Ok(())
-    } 
-}
-
 impl fmt::Display for MsgAddressExt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -331,15 +238,6 @@ impl fmt::Display for MsgAddressExt {
             MsgAddressExt::AddrExtern(addr) => write!(f, "{}", addr),
         }
     }
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum MsgAddress{
-    AddrNone,
-    AddrExt(MsgAddrExt),
-    AddrStd(MsgAddrStd),
-    AddrVar(MsgAddrVar),
 }
 
 impl MsgAddress {
@@ -358,7 +256,7 @@ impl MsgAddress {
     pub fn get_address(&self) -> SliceData {
         match self {
             MsgAddress::AddrNone => SliceData::default(),
-            MsgAddress::AddrExt(addr_ext) => addr_ext.0.clone(),
+            MsgAddress::AddrExt(addr_ext) => addr_ext.external_address.clone(),
             MsgAddress::AddrStd(addr_std) => addr_std.address.clone(),
             MsgAddress::AddrVar(addr_var) => addr_var.address.clone()
         }
@@ -423,8 +321,17 @@ impl FromStr for MsgAddress {
                 msg: format!("anycast is not correct: {}", err)
             })?;
 
-        if (workchain_id / 128 == 0) && (parts[len - 1].len() == 64) {
-            Ok(MsgAddress::with_standart(anycast, workchain_id as i8, address)?)
+        if workchain_id < 128 && workchain_id >= -128 {
+            if address.remaining_bits() != 256 {
+                bail!(BlockErrorKind::InvalidArg {
+                        msg: format!("account address should be 256 bits long in workchain {}", workchain_id)
+                });
+            };
+            if parts[len - 1].len() == 64 {
+                Ok(MsgAddress::with_standart(anycast, workchain_id as i8, address)?)
+            } else {
+                Ok(MsgAddress::with_variant(anycast, workchain_id, address)?)
+            }
         } else {
             Ok(MsgAddress::with_variant(anycast, workchain_id, address)?)
         }
@@ -461,44 +368,9 @@ impl Serializable for MsgAddress {
     } 
 }
 
-impl Deserializable for MsgAddress {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
-        let fb = cell.get_next_bit()?;
-        let sb = cell.get_next_bit()?;
-
-        if !fb && !sb {
-            *self = MsgAddress::AddrNone;                               // MesAddress::AddrNone
-        }
-        if !fb && sb {
-            let mut ext = MsgAddrExt::default();                        // MesAddress::AddrExt
-            ext.read_from(cell)?;
-            *self = MsgAddress::AddrExt(ext);
-        }
-        if fb && !sb {
-            let mut std = MsgAddrStd::default();                        // MesAddress::AddrStd
-            std.read_from(cell)?;
-            *self = MsgAddress::AddrStd(std);
-        }
-        if fb && sb {
-            let mut var = MsgAddrVar::default();                        // MesAddress::AddrVar
-            var.read_from(cell)?;
-            *self = MsgAddress::AddrVar(var);
-        }
-
-        Ok(())
-    } 
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum MsgAddressInt{
-    AddrNone,
-    AddrStd(MsgAddrStd),
-    AddrVar(MsgAddrVar),
-}
-
 impl Default for MsgAddressInt {
     fn default() -> Self {
-        MsgAddressInt::AddrNone
+        MsgAddressInt::AddrStd(MsgAddrStd::default())
     }
 }
 
@@ -506,7 +378,6 @@ impl FromStr for MsgAddressInt {
     type Err = failure::Error;
     fn from_str(string: &str) -> BlockResult<Self> {
         match MsgAddress::from_str(string)? {
-            MsgAddress::AddrNone => Ok(MsgAddressInt::AddrNone),
             MsgAddress::AddrStd(addr) => Ok(MsgAddressInt::AddrStd(addr)),
             MsgAddress::AddrVar(addr) => Ok(MsgAddressInt::AddrVar(addr)),
             _ => bail!(BlockErrorKind::Other {
@@ -525,21 +396,18 @@ impl MsgAddressInt {
     }
     pub fn get_address(&self) -> SliceData {
         match self {
-            MsgAddressInt::AddrNone => SliceData::default(),
             MsgAddressInt::AddrStd(addr_std) => addr_std.address.write_to_new_cell().unwrap().into(),
             MsgAddressInt::AddrVar(addr_var) => addr_var.address.clone()
         }
     }
     pub fn get_workchain_id(&self) -> i32 {
         match self {
-            MsgAddressInt::AddrNone => 0,
             MsgAddressInt::AddrStd(addr_std) => addr_std.workchain_id as i32,
             MsgAddressInt::AddrVar(addr_var) => addr_var.workchain_id
         }
     }
     pub fn get_rewrite_pfx(&self) -> Option<AnycastInfo> {
         match self {
-            MsgAddressInt::AddrNone => None,
             MsgAddressInt::AddrStd(addr_std) => addr_std.anycast.clone(),
             MsgAddressInt::AddrVar(addr_var) => addr_var.anycast.clone()
         }
@@ -550,9 +418,6 @@ impl Serializable for MsgAddressInt {
 
     fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
         match self {
-            MsgAddressInt::AddrNone => {
-                cell.append_raw(&[0x00], 2)?;    // $00 prefix AddrNone
-            }
             MsgAddressInt::AddrStd(std) => {
                 cell.append_raw(&[0x80], 2)?;    // $10 prefix AddrStd
                 std.write_to(cell)?;                                    // MsgAddrStd
@@ -567,22 +432,9 @@ impl Serializable for MsgAddressInt {
     } 
 }
 
-impl Deserializable for MsgAddressInt {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
-        *self = match cell.get_next_int(2)? {
-            0b00 => MsgAddressInt::AddrNone,
-            0b10 => MsgAddressInt::AddrStd(MsgAddrStd::construct_from::<MsgAddrStd>(cell)?),
-            0b11 => MsgAddressInt::AddrVar(MsgAddrVar::construct_from::<MsgAddrVar>(cell)?),
-            _ => return Err(ExceptionCode::CellUnderflow)?
-        };
-        Ok(())
-    } 
-}
-
 impl fmt::Display for MsgAddressInt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            MsgAddressInt::AddrNone => write!(f, ""),
             MsgAddressInt::AddrStd(addr) => write!(f, "{}", addr),
             MsgAddressInt::AddrVar(addr) => write!(f, "{}", addr),
         }
@@ -629,12 +481,87 @@ impl fmt::Display for InternalMessageHeader {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MsgAddressIntOrNone {
+    None,
+    Some(MsgAddressInt)
+}
+
+impl MsgAddressIntOrNone {
+    pub fn get_type(&self) -> u8 {
+        match self {
+            MsgAddressIntOrNone::None       => 0b00,
+            MsgAddressIntOrNone::Some(addr) => 
+                match addr {
+                    MsgAddressInt::AddrStd(_) => 0b10,
+                    MsgAddressInt::AddrVar(_) => 0b11,
+                }
+        }
+    }
+}
+
+impl Default for MsgAddressIntOrNone {
+    fn default() -> Self {
+        MsgAddressIntOrNone::None
+    }
+}
+
+impl fmt::Display for MsgAddressIntOrNone {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MsgAddressIntOrNone::None       => write!(f, ""),
+            MsgAddressIntOrNone::Some(addr) => write!(f, "{}", addr),
+        }
+    }
+}
+
+impl Serializable for MsgAddressIntOrNone {
+    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+        match self {
+            MsgAddressIntOrNone::None       => {
+                cell.append_raw(&[0x00], 2)?;
+                ()
+            },
+            MsgAddressIntOrNone::Some(addr) => addr.write_to(cell)?,
+        }
+        Ok(())
+    } 
+}
+
+impl Deserializable for MsgAddressIntOrNone {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    
+        let addr_type = cell.get_next_int(2)? as u8;
+        match addr_type & 0b11 {
+            0b00 => {
+                *self = MsgAddressIntOrNone::None;
+            }
+            0b10 => {
+                let mut std = MsgAddrStd::default();
+                std.read_from(cell)?;
+                *self = MsgAddressIntOrNone::Some(MsgAddressInt::AddrStd(std));
+            }
+            0b11 => {
+                let mut var = MsgAddrVar::default();
+                var.read_from(cell)?;
+                *self = MsgAddressIntOrNone::Some(MsgAddressInt::AddrVar(var));
+            }
+            _ => {
+                bail!(BlockErrorKind::Other { msg: "Wrong type of address".into() });
+            }
+        }
+        Ok(())
+    } 
+}
+
+
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InternalMessageHeader {
     pub ihr_disabled: bool,
     pub bounce: bool,
     pub bounced: bool,
-    pub src: MsgAddressInt,
+    pub src: MsgAddressIntOrNone,
     pub dst: MsgAddressInt,
     pub value: CurrencyCollection, 
     pub ihr_fee: Grams,
@@ -649,7 +576,7 @@ impl Default for InternalMessageHeader {
             ihr_disabled: false,
             bounce: false,
             bounced: false,
-            src: MsgAddressInt::default(),
+            src: MsgAddressIntOrNone::None,
             dst: MsgAddressInt::default(),
             value: CurrencyCollection::default(), 
             ihr_fee: Grams::zero(),
@@ -674,7 +601,7 @@ impl InternalMessageHeader {
             ihr_disabled: false,
             bounce: false,
             bounced: false,
-            src: src,
+            src: MsgAddressIntOrNone::Some(src),
             dst: dst,
             value: value, 
             ihr_fee: Grams::zero(),
@@ -698,22 +625,22 @@ impl InternalMessageHeader {
     ///
     /// Get value tansfered message
     ///
-    pub fn get_value(&self) -> CurrencyCollection {
-        self.value.clone()
+    pub fn value(&self) -> &CurrencyCollection {
+        &self.value
     }
 
     ///
     /// Get IHR fee for message
     ///
-    pub fn get_ihr_fee(&self) -> Grams {
-        self.ihr_fee.clone()
+    pub fn ihr_fee(&self) -> &Grams {
+        &self.ihr_fee
     }
 
     ///
     /// Get forwarding fee for message transfer
     ///
-    pub fn get_fwd_fee(&self) -> Grams {
-        self.fwd_fee.clone()
+    pub fn fwd_fee(&self) -> &Grams {
+        &self.fwd_fee
     }
 }
 
@@ -726,7 +653,6 @@ impl Serializable for InternalMessageHeader{
             .append_bit_bool(self.bounce)?
             .append_bit_bool(self.bounced)?;
 
-        
         self.src.write_to(cell)?;
         self.dst.write_to(cell)?;
         
@@ -814,7 +740,7 @@ impl fmt::Display for ExtOutMessageHeader {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ExtOutMessageHeader {
-    pub src: MsgAddressInt,
+    pub src: MsgAddressIntOrNone,
     pub dst: MsgAddressExt,
     pub created_lt: u64,
     pub created_at: UnixTime32,
@@ -823,7 +749,7 @@ pub struct ExtOutMessageHeader {
 impl ExtOutMessageHeader {
     pub fn with_addresses(src: MsgAddressInt, dst: MsgAddressExt) -> ExtOutMessageHeader {
         ExtOutMessageHeader {
-            src: src,
+            src: MsgAddressIntOrNone::Some(src),
             dst: dst,
             created_lt: 0, // Logical Time will be set on block builder
             created_at: UnixTime32::default(), // UNIX time too
@@ -896,14 +822,12 @@ impl CommonMsgInfo {
         match self  {
             CommonMsgInfo::IntMsgInfo(header) => {
                 match header.dst {
-                    MsgAddressInt::AddrNone => None,
                     MsgAddressInt::AddrStd(ref std) => Some(std.address.clone()),
                     MsgAddressInt::AddrVar(ref _var) => unimplemented!(), // TODO 
                 }
             },
             CommonMsgInfo::ExtInMsgInfo(header) => {
                 match header.dst {
-                    MsgAddressInt::AddrNone => None,
                     MsgAddressInt::AddrStd(ref std) => Some(std.address.clone()),
                     MsgAddressInt::AddrVar(ref _var) => unimplemented!(), // TODO 
                 }
@@ -1017,11 +941,13 @@ pub type MessageId = UInt256;
 ///
 /// 
 
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone)]
 pub struct Message {
     header: CommonMsgInfo,
     init: Option<StateInit>,
     body: Option<SliceData>,
+    body_to_ref: Option<bool>,
+    init_to_ref: Option<bool>,
 }
 
 impl fmt::Display for Message {
@@ -1039,6 +965,16 @@ impl fmt::Display for Message {
     }
 }
 
+impl PartialEq for Message {
+    fn eq(&self, other: &Message) -> bool {
+        self.header == other.header &&
+        self.init == other.init &&
+        self.body == other.body
+    }
+}
+
+impl Eq for Message {}
+
 impl Message {
     
     ///
@@ -1049,6 +985,8 @@ impl Message {
             header: CommonMsgInfo::IntMsgInfo(h),
             init: None,
             body: None,
+            body_to_ref: None,
+            init_to_ref: None,
         }
     }
 
@@ -1060,6 +998,8 @@ impl Message {
             header: CommonMsgInfo::ExtInMsgInfo(h),
             init: None,
             body: None,
+            body_to_ref: None,
+            init_to_ref: None,
         }
     }
 
@@ -1071,6 +1011,8 @@ impl Message {
             header: CommonMsgInfo::ExtOutMsgInfo(h),
             init: None,
             body: None,
+            body_to_ref: None,
+            init_to_ref: None,
         }
     }
 
@@ -1079,6 +1021,8 @@ impl Message {
     }
 
     pub fn header_mut(&mut self) -> &mut CommonMsgInfo {
+        self.body_to_ref = None;
+        self.init_to_ref = None;
         &mut self.header
     }
 
@@ -1091,6 +1035,8 @@ impl Message {
     }
 
     pub fn state_init_mut(&mut self) -> &mut Option<StateInit> {
+        self.body_to_ref = None;
+        self.init_to_ref = None;
         &mut self.init
     }
 
@@ -1099,6 +1045,8 @@ impl Message {
     }
 
     pub fn body_mut(&mut self) -> &mut Option<SliceData> {
+        self.body_to_ref = None;
+        self.init_to_ref = None;
         &mut self.body
     }
 
@@ -1106,19 +1054,17 @@ impl Message {
     /// Get source account ID for internal message
     /// For other types of messages, function returned None
     ///
-    pub fn get_int_src_account_id(&self) -> Option<AccountId>{
-        match self.header {
-            CommonMsgInfo::IntMsgInfo(ref header) => {
-                if let MsgAddressInt::AddrStd(ref addr_std) = header.src {
-                    return Some(addr_std.address.clone());
-                }
-            },
-            CommonMsgInfo::ExtOutMsgInfo(ref header) => {
-                if let MsgAddressInt::AddrStd(ref addr_std) = header.src {
-                    return Some(addr_std.address.clone());
-                }
-            },
-            _ => (),
+    pub fn get_int_src_account_id(&self) -> Option<AccountId> {
+        let addr = match self.header {
+            CommonMsgInfo::IntMsgInfo(ref header)    => &header.src,
+            CommonMsgInfo::ExtOutMsgInfo(ref header) => &header.src,
+            _ => &MsgAddressIntOrNone::None,
+        };
+        if let MsgAddressIntOrNone::Some(ref addr_int) = addr {
+            if let MsgAddressInt::AddrStd(ref addr_std) = addr_int {
+                return Some(addr_std.address.clone());
+            }
+            // TODO: What about AddrVar?
         }
         None
     }
@@ -1154,6 +1100,8 @@ impl Message {
     /// Internal and External outbound messages
     ///
     pub fn set_at_and_lt(&mut self, at: u32, lt: u64) {
+        self.body_to_ref = None;
+        self.init_to_ref = None;
         match self.header {
             CommonMsgInfo::IntMsgInfo(ref mut header) => {
                 header.created_at = UnixTime32(at);
@@ -1194,6 +1142,8 @@ impl Message {
     /// Get value transmitted by the message
     ///
     pub fn get_value_mut<'a>(&'a mut self) -> Option<&'a mut CurrencyCollection> {
+        self.body_to_ref = None;
+        self.init_to_ref = None;
         self.header.get_value_mut()
     }
 
@@ -1242,7 +1192,6 @@ impl Message {
         match &self.header {
             CommonMsgInfo::IntMsgInfo(ref imi) => {
                 match imi.dst {
-                    MsgAddressInt::AddrNone => None,
                     MsgAddressInt::AddrStd(ref addr) => {
                         Some(addr.workchain_id as i32)
                     }
@@ -1256,7 +1205,6 @@ impl Message {
             }
             CommonMsgInfo::ExtInMsgInfo(ref eimi) => {
                 match &eimi.dst {
-                    MsgAddressInt::AddrNone => None,
                     MsgAddressInt::AddrStd(ref addr) => {
                         Some(addr.workchain_id as i32)
                     }
@@ -1272,30 +1220,17 @@ impl Message {
     /// Get source workchain of message
     /// 
     pub fn src_workchain_id(&self) -> Option<i32> {
-        match self.header() {
-            CommonMsgInfo::IntMsgInfo(ref imi) => {
-                match imi.src {
-                    MsgAddressInt::AddrNone => None,
-                    MsgAddressInt::AddrStd(ref addr) => {
-                        Some(addr.workchain_id as i32)
-                    }
-                    MsgAddressInt::AddrVar(ref addr) => {
-                        Some(addr.workchain_id)
-                    }
-                }
-            }
-            CommonMsgInfo::ExtInMsgInfo(_) => {
-                None
-            }
-            CommonMsgInfo::ExtOutMsgInfo(ref eimi) => {
-                match &eimi.src {
-                    MsgAddressInt::AddrNone => None,
-                    MsgAddressInt::AddrStd(ref addr) => {
-                        Some(addr.workchain_id as i32)
-                    }
-                    MsgAddressInt::AddrVar(ref addr) => {
-                        Some(addr.workchain_id)
-                    }
+        let addr1 = match self.header() {
+            CommonMsgInfo::IntMsgInfo(ref imi)      => &imi.src,
+            CommonMsgInfo::ExtOutMsgInfo(ref eimi)  => &eimi.src,
+            CommonMsgInfo::ExtInMsgInfo(_)          => &MsgAddressIntOrNone::None
+        };
+        match addr1 {
+            MsgAddressIntOrNone::None => None,
+            MsgAddressIntOrNone::Some(ref addr) => {
+                match addr {
+                    MsgAddressInt::AddrStd(ref addr) => Some(addr.workchain_id as i32),
+                    MsgAddressInt::AddrVar(ref addr) => Some(addr.workchain_id)
                 }
             }
         }
@@ -1361,6 +1296,9 @@ impl Serializable for Message
             self.body.as_ref().map(|s| (s.remaining_bits(), s.remaining_references())).unwrap_or((0, 0));
 
         let (body_to_ref, init_to_ref) = 
+        if let (Some(b), Some(i)) = (self.body_to_ref, self.init_to_ref) {
+            (b, i)
+        } else {
             if header_bits + state_bits + body_bits <= MAX_DATA_BITS &&
                 header_refs + state_refs + body_refs <= MAX_REFERENCES_COUNT {
                 // all fits into one cell
@@ -1378,7 +1316,8 @@ impl Serializable for Message
                     // only header fits
                     (true, true)
                 }
-            };
+            }
+        };
 
         // write StateInit
         match self.init {
@@ -1435,9 +1374,11 @@ impl Deserializable for Message {
                 let mut r = cell.checked_drain_reference()?.into();
                 init.read_from(&mut r)?;
                 self.init = Some(init);
+                self.init_to_ref = Some(true);
             } else { // read from current cell
                 init.read_from(cell)?;
                 self.init = Some(init);
+                self.init_to_ref = Some(false);
             }  
         }
 
@@ -1449,10 +1390,12 @@ impl Deserializable for Message {
         // serialization of the type X.
 
         self.body = if cell.get_next_bit()? { // body in reference
+            self.body_to_ref = Some(true);
             Some(cell.checked_drain_reference()?.into())
         } else if cell.is_empty() { // no body
             None
         } else { // body is leftover
+            self.body_to_ref = Some(false);
             Some(cell.clone())
         };
         Ok(())
@@ -1466,7 +1409,7 @@ impl InternalMessageHeader {
             ihr_disabled: false,
             bounce: false,
             bounced: false,
-            src: MsgAddressInt::default(),
+            src: MsgAddressIntOrNone::default(),
             dst: MsgAddressInt::default(),
             value: CurrencyCollection::default(), 
             ihr_fee: Grams::zero(),
@@ -1858,4 +1801,159 @@ pub fn generate_big_msg() -> Message {
     *msg.body_mut() = Some(body.into());
 
     msg
+}
+
+///////////////////////////////////////////////////////////////////////////////
+/// 
+/// Auto-generated code
+/// 
+///
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AnycastInfo {
+    pub depth: Number5,
+    pub rewrite_pfx: SliceData,
+}
+
+impl Deserializable for AnycastInfo {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+        self.depth.read_from(cell)?;
+        self.rewrite_pfx = cell.get_next_slice(self.depth.0 as usize)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct MsgAddrExt {
+    pub len: Number9,
+    pub external_address: SliceData,
+}
+
+impl Deserializable for MsgAddrExt {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+        self.len.read_from(cell)?;
+        self.external_address = cell.get_next_slice(self.len.0 as usize)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum MsgAddressExt {
+    AddrNone,
+    AddrExtern(MsgAddrExt),
+}
+
+impl Deserializable for MsgAddressExt {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+        let bits = cell.get_next_bits(2)?[0] >> 6;
+        if bits == 0 {
+            *self = MsgAddressExt::AddrNone;
+        }
+        if bits == 1 {
+            let mut data = MsgAddrExt::default();
+            data.read_from(cell)?;
+            *self = MsgAddressExt::AddrExtern(data);
+        }
+        // TODO: add error checking!
+        Ok(())
+    }
+}
+
+// TODO: default Default is not working for MsgAddrStd
+#[derive(Clone, Debug, /*Default,*/ PartialEq, Eq, Hash)]
+pub struct MsgAddrStd {
+    pub anycast: Option<AnycastInfo>,
+    pub workchain_id: i8,
+    pub address: AccountId,
+}
+
+impl Deserializable for MsgAddrStd {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+        self.anycast = AnycastInfo::read_maybe_from(cell)?;
+        self.workchain_id.read_from(cell)?;
+        self.address = cell.get_next_slice(256)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct MsgAddrVar {
+    pub anycast: Option<AnycastInfo>,
+    pub addr_len: Number9,
+    pub workchain_id: i32,
+    pub address: SliceData,
+}
+
+impl Deserializable for MsgAddrVar {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+        self.anycast = AnycastInfo::read_maybe_from(cell)?;
+        self.addr_len.read_from(cell)?;
+        self.workchain_id.read_from(cell)?;
+        self.address = cell.get_next_slice(self.addr_len.0 as usize)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum MsgAddressInt {
+    AddrStd(MsgAddrStd),
+    AddrVar(MsgAddrVar),
+}
+
+impl Deserializable for MsgAddressInt {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+        *self = match cell.get_next_int(2)? {
+            0b10 => MsgAddressInt::AddrStd(MsgAddrStd::construct_from::<MsgAddrStd>(cell)?),
+            0b11 => MsgAddressInt::AddrVar(MsgAddrVar::construct_from::<MsgAddrVar>(cell)?),
+            _ => return Err(BlockErrorKind::Other { msg: "Wrong type of address".into() })?
+        };
+        // TODO: fix autogen for error checking!
+        /*
+        let bits = cell.get_next_bits(2)?[0] >> 6;
+        if bits == 2 {
+            let mut data = MsgAddrStd::default();
+            data.read_from(cell)?;
+            *self = MsgAddressInt::AddrStd(data);
+        }
+        if bits == 3 {
+            let mut data = MsgAddrVar::default();
+            data.read_from(cell)?;
+            *self = MsgAddressInt::AddrVar(data);
+        }
+        */
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum MsgAddress {
+    AddrNone,
+    AddrExt(MsgAddrExt),
+    AddrStd(MsgAddrStd),
+    AddrVar(MsgAddrVar),
+}
+
+impl Deserializable for MsgAddress {
+    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+        let bits = cell.get_next_bits(2)?[0] >> 6;
+        if bits == 0 {
+            *self = MsgAddress::AddrNone;
+        }
+        if bits == 1 {
+            let mut data = MsgAddrExt::default();
+            data.read_from(cell)?;
+            *self = MsgAddress::AddrExt(data);
+        }
+        if bits == 2 {
+            let mut data = MsgAddrStd::default();
+            data.read_from(cell)?;
+            *self = MsgAddress::AddrStd(data);
+        }
+        if bits == 3 {
+            let mut data = MsgAddrVar::default();
+            data.read_from(cell)?;
+            *self = MsgAddress::AddrVar(data);
+        }
+        Ok(())
+    }
 }

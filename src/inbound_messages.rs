@@ -41,8 +41,8 @@ macro_rules! write_ctor_tag {
 //3.2.7. Augmentation of InMsgDescr
 #[derive(Default, PartialEq, Eq, Clone, Debug)]
 pub struct ImportFees {
-    fees_collected: Grams,
-    value_imported: CurrencyCollection,
+    pub fees_collected: Grams,
+    pub value_imported: CurrencyCollection,
 }
 
 impl Augmentable for ImportFees {
@@ -193,8 +193,78 @@ impl InMsg {
         )
     }
 
-    pub fn get_fee<'a>(&'a self) -> Option<&'a ImportFees> {
-        None
+    pub fn get_fee(&self) -> BlockResult<Option<ImportFees>> {
+        let mut fees = ImportFees::default();
+        match self {
+            InMsg::External(ref _x) => {
+                //println!("InMsg::External");
+            }
+            InMsg::IHR(ref x) =>  {
+                //println!("InMsg::IHR");
+                let msg = x.read_message()?;
+
+                // fees_collected = in_msg.ihr_fees (or msg.ihr_fees, it should be equal)
+                fees.fees_collected.add(&x.ihr_fee())?;
+
+                // value_imported = msg.ihr_fee + msg.value
+                fees.value_imported.add(&msg.header().get_value().unwrap())?;
+                fees.value_imported.grams.add(&msg.header().fee()?.unwrap())?;
+            }
+            InMsg::Immediatelly(ref x) => {
+                //println!("InMsg::Immediatelly");
+                // value_imported = 0
+                // fees_collected = in_msg.fwd_fees 
+                fees.fees_collected.add(&x.fwd_fee())?;
+            }
+            InMsg::Final(ref x) => {
+                //println!("InMsg::Final");
+                let env = x.read_message()?;
+                let msg = env.read_message()?;
+
+                // fees_collected = envelop.fwd_fee_remaining
+                fees.fees_collected.add(&env.fwd_fee_remaining())?;
+
+                // value_imported = msg.value + msg.ihr_fee + envelop.fwd_fee_remaining
+                fees.value_imported.add(&msg.header().get_value().unwrap())?;
+                fees.value_imported.grams.add(env.fwd_fee_remaining())?;
+
+                if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
+                    fees.value_imported.grams.add(header.ihr_fee())?;
+                }
+
+            }
+            InMsg::Transit(ref x) => {
+                //println!("InMsg::Transit");
+                let env = x.read_in_message()?;
+                let msg = env.read_message()?;
+
+                // fees_collected = in_msg.transit_fee
+                fees.fees_collected.add(&x.transit_fee())?;
+
+                // value_imported = msg.value + msg.ihr_fee + envelop.fwd_fee_remaining
+                fees.value_imported.add(&msg.header().get_value().unwrap())?;
+                if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
+                    fees.value_imported.grams.add(header.ihr_fee())?;
+                }
+
+            }
+            InMsg::DiscardedFinal(ref x) => {
+                //println!("InMsg::DiscardedFinal");
+                // fees_collected := in_msg.fwd_fee
+                fees.fees_collected.add(&x.fwd_fee())?;
+                // value_imported := in_msg.fwd_fee
+                fees.value_imported.grams.add(&x.fwd_fee())?;
+            }
+            InMsg::DiscardedTransit(ref x) => {
+                //println!("InMsg::DiscardedTransit");
+                // fees_collected := in_msg.fwd_fee
+                fees.fees_collected.add(&x.fwd_fee())?;
+                // value_imported := in_msg.fwd_fee
+                fees.value_imported.grams.add(&x.fwd_fee())?;
+            }
+            _ => return Ok(None)
+        }
+        Ok(Some(fees))
     }
 }
 
@@ -592,9 +662,8 @@ define_HashmapAugE!(InMsgDescr, 256, InMsg, ImportFees);
 impl InMsgDescr {
     /// insert new or replace existing
     pub fn insert(&mut self, in_msg: &InMsg) -> BlockResult<()> {
-        let msg = in_msg.read_message()?;
-        let hash = msg.hash()?;
-        self.set(&hash, &in_msg, in_msg.get_fee().unwrap_or(&ImportFees::default()))
+        let hash = in_msg.message_cell()?.repr_hash();
+        self.set(&hash, &in_msg, &in_msg.get_fee()?.unwrap_or_default())
     }
 
     /// insert or replace existion record

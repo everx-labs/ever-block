@@ -340,6 +340,53 @@ impl OutMsg {
             OutMsg::None => None,
         }
     }
+
+    pub fn exported_value(&self) -> BlockResult<Option<CurrencyCollection>> {
+        let mut exported = CurrencyCollection::default();
+        match self {
+            OutMsg::New(ref x) => {
+                let env = x.read_out_message()?;
+                let msg = env.read_message()?;
+                // exported value = msg.value + msg.ihr_fee + fwd_fee_remaining
+                exported.add(&msg.header().get_value().unwrap())?;
+                if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
+                    exported.grams.add(&header.ihr_fee)?;
+                }
+                exported.grams.add(&env.fwd_fee_remaining())?;
+            }
+            OutMsg::Transit(ref x) => {
+                let env = x.read_out_message()?;
+                let msg = env.read_message()?;
+                // exported value = msg.value + msg.ihr_fee + fwd_fee_remaining
+                exported.add(&msg.header().get_value().unwrap())?;
+                if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
+                    exported.grams.add(&header.ihr_fee)?;
+                }
+                exported.grams.add(&env.fwd_fee_remaining())?;
+            }
+            OutMsg::TransitRequired(ref x) => {
+                let env = x.read_out_message()?;
+                let msg = env.read_message()?;
+                // exported value = msg.value + msg.ihr_fee + fwd_fee_remaining
+                exported.add(&msg.header().get_value().unwrap())?;
+                if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
+                    exported.grams.add(&header.ihr_fee)?;
+                }
+                exported.grams.add(&env.fwd_fee_remaining())?;
+            }
+            // for other types - no value exported
+            //OutMsg::External(ref x) => 
+            //OutMsg::Immediately(ref x) => 
+            //OutMsg::Dequeue(ref x) => 
+            //OutMsg::DequeueImmediately(ref x) =>
+            _ => return Ok(None)
+        }
+        Ok(Some(exported))
+    }
+
+    pub fn at_and_lt(&self) -> BlockResult<Option<(u32, u64)>> {
+        Ok(None)
+    }
 }
 
 ///internal helper macros for reading InMsg variants

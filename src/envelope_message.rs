@@ -359,8 +359,8 @@ impl MsgEnvelope {
     ///
     /// Get remaining fee of envelope
     ///
-    pub fn get_fwd_fee_remaining(&self) -> Grams {
-        self.fwd_fee_remaining.clone()
+    pub fn fwd_fee_remaining(&self) -> &Grams {
+        &self.fwd_fee_remaining
     }
 
     ///

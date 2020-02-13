@@ -209,9 +209,34 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
     Ok(())
 }
 
+fn check_transaction_id(given_id: Option<UInt256>, tr_cell: Option<&Cell>) -> BlockResult<()> {
+    let existing_id = tr_cell.map(|c| c.repr_hash());
+    match (given_id, existing_id) {
+        (None, Some(_)) => {
+            bail!(BlockErrorKind::WrongMerkleProof {
+                msg: "Invalid transaction id: None is passed, but the transaction exists in a block".into()
+            })
+        },
+        (Some(_), None) => {
+            bail!(BlockErrorKind::WrongMerkleProof {
+                msg: "Invalid transaction id: it is passed, but the transaction doesn't exists in a block".into()
+            })
+        },
+        (None, None) => Ok(()),
+        (Some(id1), Some(id2)) => {
+            if id1 != id2 {
+                bail!(BlockErrorKind::WrongMerkleProof {
+                    msg: "Invalid transaction id".into()
+                })
+            }
+            Ok(())
+        }
+    }
+}
+
 /// checks if message with given id is exist in block.
 /// Proof must contain message's root cell and block info
-pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt256) -> BlockResult<()> {
+pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt256, tr_id: Option<UInt256>) -> BlockResult<()> {
 
     let block_virt_root = proof.proof.clone().virtualize(1);
 
@@ -234,6 +259,7 @@ pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt25
     // attempt to read in msg descr, if fail - read out one
     if let Ok(in_msg_descr) = block_extra.read_in_msg_descr() {
         if let Ok(Some(in_msg)) = in_msg_descr.get(&msg_hash) {
+            check_transaction_id(tr_id, in_msg.transaction_cell())?;
             if let Ok(msg_cell) = in_msg.message_cell() {
                 if msg_cell.repr_hash() != msg_hash {
                     bail!(BlockErrorKind::WrongMerkleProof {
@@ -254,6 +280,7 @@ pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt25
         })?;
     if let Ok(Some(out_msg)) = out_msg_descr.get(&msg_hash) {
         if let Ok(msg_cell) = out_msg.message_cell() {
+            check_transaction_id(tr_id, out_msg.transaction_cell())?;
             if msg_cell.repr_hash() != msg_hash {
                 bail!(BlockErrorKind::WrongMerkleProof {
                     msg: "Wrong message's hash in proof".into()});
