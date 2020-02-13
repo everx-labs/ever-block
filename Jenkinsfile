@@ -138,7 +138,7 @@ pipeline {
                                     sh """
                                         cd /tonlabs/ton-labs-block
                                         cargo update
-                                        cargo test --release --features ci_run
+                                        cargo test --release
                                     """
                                 }
                             }
