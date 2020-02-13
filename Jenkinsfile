@@ -44,7 +44,7 @@ pipeline {
             description: 'tvm-linker branch for upstairs test'
         )
         string(
-            name:'ton_labs_sdk_branch',
+            name:'ton_sdk_branch',
             defaultValue: 'master',
             description: 'ton-sdk branch for upstairs test'
         )
