@@ -1,5 +1,5 @@
-ARG TON_TYPES_IMAGE=tonlabs/ton-labs-types:latest
-ARG TON_BLOCK_IMAGE=tonlabs/ton-labs-block:latest
+ARG TON_LABS_TYPES_IMAGE=tonlabs/ton-labs-types:latest
+ARG TON_LABS_BLOCK_IMAGE=tonlabs/ton-labs-block:latest
 
 FROM alpine:latest as ton-labs-block-src
 RUN addgroup --gid 1000 jenkins && \
@@ -10,8 +10,8 @@ WORKDIR /tonlabs/ton-labs-block
 VOLUME /tonlabs/ton-labs-block
 USER jenkins
 
-FROM $TON_TYPES_IMAGE as ton-labs-types-src
-FROM $TON_BLOCK_IMAGE as ton-labs-block-source
+FROM $TON_LABS_TYPES_IMAGE as ton-labs-types-src
+FROM $TON_LABS_BLOCK_IMAGE as ton-labs-block-source
 FROM alpine:latest as ton-labs-block-full
 RUN addgroup --gid 1000 jenkins && \
     adduser -D -G jenkins jenkins
