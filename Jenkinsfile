@@ -5,8 +5,10 @@ G_image_target = ""
 G_docker_image = null
 G_build = "none"
 G_test = "none"
+G_binversion = "NotSet"
 
 pipeline {
+    tools {nodejs "Node12.8.0"}
     options {
         buildDiscarder logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '', daysToKeepStr: '', numToKeepStr: '1')
         disableConcurrentBuilds()
@@ -18,6 +20,11 @@ pipeline {
         }
     }
     parameters {
+        string(
+            name:'common_version',
+            defaultValue: '',
+            description: 'Common version'
+        )
         string(
             name:'dockerImage_ton_labs_types',
             defaultValue: 'tonlabs/ton-labs-types:latest',
@@ -50,6 +57,30 @@ pipeline {
         )
     }
     stages {
+        stage('Versioning') {
+            steps {
+                script {
+                    withAWS(credentials: 'CI_bucket_writer', region: 'eu-central-1') {
+                        identity = awsIdentity()
+                        s3Download bucket: 'sdkbinaries.tonlabs.io', file: 'version.json', force: true, path: 'version.json'
+                    }
+                    if(params.common_version) {
+                        G_binversion = sh (script: "node tonVersion.js --set ${params.common_version} .", returnStdout: true).trim()
+                    } else {
+                        G_binversion = sh (script: "node tonVersion.js .", returnStdout: true).trim()
+                    }
+
+
+                    withAWS(credentials: 'CI_bucket_writer', region: 'eu-central-1') {
+                        identity = awsIdentity()
+                        s3Upload \
+                            bucket: 'sdkbinaries.tonlabs.io', \
+                            includePathPattern:'version.json', path: '', \
+                            workingDir:'.'
+                    }
+                }
+            }
+        }
         stage('Collect commit data') {
             steps {
                 sshagent([G_gitcred]) {
@@ -107,21 +138,21 @@ pipeline {
             }
         }
         stage('Build') {
+            agent {
+                dockerfile {
+                    registryCredentialsId "${G_docker_creds}"
+                    additionalBuildArgs "--target ton-labs-types-rust " + 
+                                        "--build-arg \"TON_LABS_TYPES_IMAGE=${params.dockerImage_ton_labs_types}\" " +
+                                        "--build-arg \"TON_LABS_BLOCK_IMAGE=${G_image_target}\""
+                }
+            }
             steps {
                 script {
-                    docker.withRegistry('', G_docker_creds) {
-                        G_docker_image.withRun() {c -> 
-                            docker.image(params.dockerImage_ton_labs_types).withRun() { ton_types_dep ->
-                                docker.image("rust:latest").inside("--volumes-from ${c.id} --volumes-from ${ton_types_dep.id}") {
-                                    sh """
-                                        cd /tonlabs/ton-labs-block
-                                        cargo update
-                                        cargo build --release
-                                    """
-                                }
-                            }
-                        }
-                    }
+                    sh """
+                        cd /tonlabs/ton-labs-block
+                        cargo update
+                        cargo build --release
+                    """
                 }
             }
             post {
@@ -130,21 +161,21 @@ pipeline {
             }
         }
         stage('Tests') {
+            agent {
+                dockerfile {
+                    registryCredentialsId "${G_docker_creds}"
+                    additionalBuildArgs "--target ton-labs-types-rust " + 
+                                        "--build-arg \"TON_LABS_TYPES_IMAGE=${params.dockerImage_ton_labs_types}\" " +
+                                        "--build-arg \"TON_LABS_BLOCK_IMAGE=${G_image_target}\""
+                }
+            }
             steps {
                 script {
-                    docker.withRegistry('', G_docker_creds) {
-                        G_docker_image.withRun() {c -> 
-                            docker.image(params.dockerImage_ton_labs_types).withRun() { ton_types_dep ->
-                                docker.image("rust:latest").inside("--volumes-from ${c.id} --volumes-from ${ton_types_dep.id}") {
-                                    sh """
-                                        cd /tonlabs/ton-labs-block
-                                        cargo update
-                                        cargo test --release
-                                    """
-                                }
-                            }
-                        }
-                    }
+                    sh """
+                        cd /tonlabs/ton-labs-block
+                        cargo update
+                        cargo test --release
+                    """
                 }
             }
             post {
@@ -290,6 +321,36 @@ Tests: **${G_test}**"""
                     cleanWs notFailBuild: true
                 }
             } 
+        }
+        success {
+            script {
+                def cause = "${currentBuild.getBuildCauses()}"
+                echo "${cause}"
+                if(!cause.matches('upstream')) {
+                    sh "node tonVersion.js --release"
+                    withAWS(credentials: 'CI_bucket_writer', region: 'eu-central-1') {
+                        identity = awsIdentity()
+                        s3Upload \
+                            bucket: 'sdkbinaries.tonlabs.io', \
+                            includePathPattern:'version.json', workingDir:'.'
+                    }
+                }
+            }
+        }
+        failure {
+            script {
+                def cause = "${currentBuild.getBuildCauses()}"
+                echo "${cause}"
+                if(!cause.matches('upstream')) {
+                    sh "node tonVersion.js --decline"
+                    withAWS(credentials: 'CI_bucket_writer', region: 'eu-central-1') {
+                        identity = awsIdentity()
+                        s3Upload \
+                            bucket: 'sdkbinaries.tonlabs.io', \
+                            includePathPattern:'version.json', workingDir:'.'
+                    }
+                }
+            }
         }
     }
 }
