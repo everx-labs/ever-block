@@ -136,7 +136,7 @@ pub const SENDMSG_ORDINARY: u8 = 0;
 pub const SENDMSG_PAY_FEE_SEPARATELY: u8 = 1;
 pub const SENDMSG_IGNORE_ERROR: u8 = 2;
 pub const SENDMSG_DELETE_IF_EMPTY: u8 = 32;
-pub const SENDMSG_ALL_INBOUND_BALANCE: u8 = 64;
+pub const SENDMSG_REMAINING_MSG_BALANCE: u8 = 64;
 pub const SENDMSG_ALL_BALANCE: u8 = 128;
 //mask for cheking valid flags
 pub const SENDMSG_VALID_FLAGS: u8 = 
@@ -144,7 +144,7 @@ pub const SENDMSG_VALID_FLAGS: u8 =
     | SENDMSG_PAY_FEE_SEPARATELY 
     | SENDMSG_IGNORE_ERROR
     | SENDMSG_DELETE_IF_EMPTY
-    | SENDMSG_ALL_INBOUND_BALANCE
+    | SENDMSG_REMAINING_MSG_BALANCE
     | SENDMSG_ALL_BALANCE;
 
 /// variants of reserve action

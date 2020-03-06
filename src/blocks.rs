@@ -752,8 +752,12 @@ impl ShardIdent {
     pub fn shard_prefix_as_str_with_tag(&self) -> String {
         format!(
             "{:x}",
-            self.shard_prefix | (1 << (63 - self.shard_pfx_bits))
+            self.shard_prefix_with_tag()
         )
+    }
+
+    pub fn shard_prefix_with_tag(&self) -> u64 {
+        self.shard_prefix | (1 << (63 - self.shard_pfx_bits))
     }
 }
 

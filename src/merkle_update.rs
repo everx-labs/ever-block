@@ -15,7 +15,7 @@
 use ton_types::{SliceData, Cell, CellType, BuilderData, IBitstring, LevelMask};
 use UInt256;
 use ton_types::cells_serialization::{BagOfCells};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use super::*;
 
 
@@ -136,35 +136,8 @@ impl MerkleUpdate {
 
     /// Applies update to given tree of cells by returning new updated one
     pub fn apply_for(&self, old_root: &Cell) -> BlockResult<Cell> {
-        let old_bag = BagOfCells::with_root(old_root);
-        let old_cells = old_bag.withdraw_cells();
-        self._apply_for(old_root, old_cells)
-    }
 
-    pub fn apply_many_for<I>(mut updates: I, old_root: &Cell) -> BlockResult<Cell> 
-        where I: Iterator<Item = MerkleUpdate> {
-
-        if let Some(first_update) = updates.next() {
-            let old_bag = BagOfCells::with_root(old_root);
-            let old_cells = old_bag.withdraw_cells();
-            let mut new_root = first_update._apply_for(old_root, old_cells)?;
-
-            for update in updates {
-                let old_bag = BagOfCells::with_root(&new_root);
-                let old_cells = old_bag.withdraw_cells();
-                new_root = update._apply_for(&new_root, old_cells)?;
-            }
-
-            Ok(new_root)
-        } else {
-            bail!(BlockErrorKind::InvalidArg { msg: "updates".into() })
-        }
-    }
-
-    fn _apply_for(&self, old_root: &Cell, old_cells: HashMap<UInt256, Cell>)
-        -> BlockResult<Cell> {
-
-        self.check(&old_root.repr_hash())?;
+        let old_cells = self.check(old_root)?;
 
         // cells for new bag
         if self.new_hash == self.old_hash {
@@ -182,22 +155,25 @@ impl MerkleUpdate {
 
     /// Check the update corresponds given bag.
     /// The function is called from `apply_for`
-    pub fn check(&self, old_repr_hash: &UInt256) -> BlockResult<()> {
+    pub fn check(&self, old_root: &Cell) -> BlockResult<HashMap<UInt256, Cell>> {
 
         // check that hash of `old_tree` is equal old hash from `self`
-        if &self.old_hash != old_repr_hash {
+        if self.old_hash != old_root.repr_hash() {
             bail!(BlockErrorKind::WrongMerkleUpdate { msg: "old bag's hash mismatch".into() });
         }
 
         // traversal along `self.new` and check all pruned branches,
-        // all new tree's pruned brunches have to be contained in old one
-        let old_bag = BagOfCells::with_root(&self.old);
-        let old_cells = old_bag.withdraw_cells();
-        if !Self::traverse_on_check(&old_cells, &self.new) {
+        // all new tree's pruned branches have to be contained in old one
+        let mut known_cells = HashSet::new();
+        Self::traverse_old_on_check(&self.old, &mut known_cells, &mut HashSet::new(), 0);
+        if !Self::traverse_new_on_check(&self.new, &known_cells, &mut HashSet::new(), 0) {
             bail!(BlockErrorKind::WrongMerkleUpdate { msg: "old and new trees mismatch".into() });
         }
 
-        Ok(())
+        let mut known_cells_vals = HashMap::new();
+        Self::collate_old_cells(old_root, &known_cells, &mut known_cells_vals, &mut HashSet::new(), 0);
+
+        Ok(known_cells_vals)
     }
 
     /// Recursive traverse merkle update tree while merkle update applying
@@ -347,19 +323,48 @@ impl MerkleUpdate {
         Ok(result)
     }
 
-    // Checks all pruned brunches from new tree are exist in old tree
-    fn traverse_on_check(old_cells: &HashMap<UInt256, Cell>, new_cell: &Cell) -> bool {
-        for child in new_cell.clone_references().iter() {
-            if child.cell_type() == CellType::PrunedBranch {
-                if !old_cells.contains_key(&child.repr_hash()) {
+    fn traverse_old_on_check(cell: &Cell, known_cells: &mut HashSet<UInt256>, visited: &mut HashSet<UInt256>, merkle_depth: u8) {
+        if visited.insert(cell.repr_hash()) {
+            known_cells.insert(cell.hash(merkle_depth as usize));
+            if cell.cell_type() != CellType::PrunedBranch {
+                let child_merkle_depth = if cell.is_merkle() { merkle_depth + 1 } else { merkle_depth };
+                for child in cell.clone_references().iter() {
+                    Self::traverse_old_on_check(child, known_cells, visited, child_merkle_depth);
+                }
+            }
+        }
+    }
+
+    // Checks all pruned branches from new tree are exist in old tree
+    fn traverse_new_on_check(cell: &Cell, known_cells: &HashSet<UInt256>, visited: &mut HashSet<UInt256>, merkle_depth: u8) -> bool{
+        if visited.insert(cell.repr_hash()) {
+            if cell.cell_type() == CellType::PrunedBranch {
+                if cell.level() == merkle_depth + 1 &&
+                    !known_cells.contains(&cell.hash(merkle_depth as usize)) {
                     return false;
                 }
             } else {
-                if !Self::traverse_on_check(old_cells, child) {
-                    return false;
+                let child_merkle_depth = if cell.is_merkle() { merkle_depth + 1 } else { merkle_depth };
+                for child in cell.clone_references().iter() {
+                    if !Self::traverse_new_on_check(child, known_cells, visited, child_merkle_depth) {
+                        return false;
+                    }
                 }
             }
         }
         true
+    }
+
+    fn collate_old_cells(cell: &Cell, known_cells_hashes: &HashSet<UInt256>, known_cells: &mut HashMap<UInt256, Cell>, visited: &mut HashSet<UInt256>, merkle_depth: u8) {
+        if visited.insert(cell.repr_hash()) {
+            let hash = cell.hash(merkle_depth as usize);
+            if known_cells_hashes.contains(&hash) {
+                known_cells.insert(hash, cell.clone());
+                let child_merkle_depth = if cell.is_merkle() { merkle_depth + 1 } else { merkle_depth };
+                for child in cell.clone_references().iter() {
+                    Self::collate_old_cells(&child, known_cells_hashes, known_cells, visited, child_merkle_depth);
+                }
+            }
+        }
     }
 }
