@@ -72,7 +72,7 @@ impl EnqueuedMsg {
 }
 
 impl Serializable for EnqueuedMsg {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.enqueued_lt.write_to(cell)?;
         cell.append_reference(self.out_msg.write_to_new_cell()?);
         Ok(())
@@ -80,7 +80,7 @@ impl Serializable for EnqueuedMsg {
 }
 
 impl Deserializable for EnqueuedMsg {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.enqueued_lt.read_from(cell)?;
         let mut msg_e = MsgEnvelope::default();
         msg_e.read_from(&mut cell.checked_drain_reference()?.into())?;
@@ -96,7 +96,7 @@ define_HashmapAugE!(OutMsgDescr, 256, OutMsg, CurrencyCollection);
 
 impl OutMsgDescr {
     /// insert new or replace existing
-    pub fn insert(&mut self, out_msg: &OutMsg) -> BlockResult<()> {
+    pub fn insert(&mut self, out_msg: &OutMsg) -> Result<()> {
         let msg = out_msg.read_message()?;
         let hash = msg.hash()?;
         let value = match out_msg {
@@ -114,13 +114,11 @@ impl OutMsgDescr {
 
     /// insert or replace existion record
     /// use to improve speed
-    pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, exported: &CurrencyCollection ) -> BlockResult<()> {
+    pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, exported: &CurrencyCollection ) -> Result<()> {
         if self.0.set(key.clone(), msg_slice, exported).is_ok() {
             Ok(())
         } else {
-            bail!(BlockErrorKind::Other {
-                msg: "Error insert serialized message".into()
-            })
+            failure::bail!(BlockError::Other("Error insert serialized message".to_string()))
         }
     }
 }
@@ -134,7 +132,7 @@ define_HashmapAugE!(OutMsgQueue, 352, OutMsg, MsgTime);
 type MsgTime = u64;
 
 impl Augmentable for MsgTime {
-    fn calc(&mut self, other: &Self) -> BlockResult<()> {
+    fn calc(&mut self, other: &Self) -> Result<()> {
         if *self > *other {
             *self = *other;
         }
@@ -144,7 +142,7 @@ impl Augmentable for MsgTime {
 
 impl OutMsgQueue {
     /// insert OutMessage to OutMsgQueue
-    pub fn insert(&mut self, address: u64, msg: &OutMsg, msg_lt: u64) -> BlockResult<()> {
+    pub fn insert(&mut self, address: u64, msg: &OutMsg, msg_lt: u64) -> Result<()> {
         let key = OutMsgQueueKey::with_workchain_id_and_message(0, address, &msg).unwrap();
         self.set(&key, &msg, &msg_lt)
     }
@@ -165,7 +163,7 @@ pub struct OutMsgQueueKey{
 
 impl OutMsgQueueKey {
     pub fn with_workchain_id_and_message(id: i32, address: u64, out_msg: &OutMsg )
-    -> BlockResult<OutMsgQueueKey> {
+    -> Result<OutMsgQueueKey> {
         let hash = out_msg.hash()?;
         Ok(OutMsgQueueKey {
             workchain_id: id,
@@ -180,7 +178,7 @@ impl OutMsgQueueKey {
 }
 
 impl Serializable for OutMsgQueueKey {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.workchain_id.write_to(cell)?;
         self.address.write_to(cell)?;
         self.hash.write_to(cell)?;
@@ -189,7 +187,7 @@ impl Serializable for OutMsgQueueKey {
 }
 
 impl Deserializable for OutMsgQueueKey {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.workchain_id.read_from(slice)?;
         self.address.read_from(slice)?;
         self.hash.read_from(slice)?;
@@ -244,7 +242,7 @@ impl OutMsgQueueInfo {
 }
 
 impl Serializable for OutMsgQueueInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.out_queue.write_to(cell)?;
         self.proc_info.write_to(cell)?;
         self.ihr_pending.write_to(cell)?;
@@ -254,7 +252,7 @@ impl Serializable for OutMsgQueueInfo {
 }
 
 impl Deserializable for OutMsgQueueInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.out_queue.read_from(cell)?;
         self.proc_info.read_from(cell)?;
         self.ihr_pending.read_from(cell)?;
@@ -295,7 +293,7 @@ impl OutMsg {
     ///
     /// the function returns the message
     ///
-    pub fn read_message(&self) -> BlockResult<Message> {
+    pub fn read_message(&self) -> Result<Message> {
         Ok(
             match self {
                 OutMsg::External(ref x) => x.read_message()?,
@@ -313,7 +311,7 @@ impl OutMsg {
     ///
     /// the function returns the message cell (if exists)
     ///
-    pub fn message_cell(&self) -> BlockResult<Cell> {
+    pub fn message_cell(&self) -> Result<Cell> {
         Ok(
             match self {
                 OutMsg::External(ref x) => x.message_cell().clone(),
@@ -341,7 +339,7 @@ impl OutMsg {
         }
     }
 
-    pub fn exported_value(&self) -> BlockResult<Option<CurrencyCollection>> {
+    pub fn exported_value(&self) -> Result<Option<CurrencyCollection>> {
         let mut exported = CurrencyCollection::default();
         match self {
             OutMsg::New(ref x) => {
@@ -384,7 +382,7 @@ impl OutMsg {
         Ok(Some(exported))
     }
 
-    pub fn at_and_lt(&self) -> BlockResult<Option<(u32, u64)>> {
+    pub fn at_and_lt(&self) -> Result<Option<(u32, u64)>> {
         Ok(None)
     }
 }
@@ -408,7 +406,7 @@ macro_rules! write_out_ctor_tag {
 
 
 impl Serializable for OutMsg {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             OutMsg::External(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_EXT)),
             OutMsg::Immediately(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_IMM)),
@@ -417,14 +415,15 @@ impl Serializable for OutMsg {
             OutMsg::Dequeue(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_DEQ)),
             OutMsg::DequeueImmediately(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_DEQ_IMM)),
             OutMsg::TransitRequired(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_TRDEQ)),
-            OutMsg::None => 
-                bail!(BlockErrorKind::InvalidOperation { msg: "OutMsg::None can't be sirialized".into() }),
+            OutMsg::None => failure::bail!(
+                BlockError::InvalidOperation("OutMsg::None can't be serialized".to_string())
+            )
         }
     }
 }
 
 impl Deserializable for OutMsg {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag: u8 = (cell.get_next_bits(3)?[0] & 0xE0) >> 5;
         *self =  match tag {
             OUT_MSG_EXT => read_out_msg_descr!(cell, OutMsgExternal, External),
@@ -434,10 +433,12 @@ impl Deserializable for OutMsg {
             OUT_MSG_DEQ_IMM => read_out_msg_descr!(cell, OutMsgDequeueImmediately, DequeueImmediately),
             OUT_MSG_DEQ =>  read_out_msg_descr!(cell, OutMsgDequeue, Dequeue),
             OUT_MSG_TRDEQ => read_out_msg_descr!(cell, OutMsgTransitRequired, TransitRequired),
-            tag => bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "OutMsg".into()
-            }),
+            tag => failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "OutMsg".to_string()
+                }
+            )
         };
         Ok(())
     }
@@ -454,7 +455,7 @@ pub struct OutMsgExternal {
 }
 
 impl OutMsgExternal {
-    pub fn with_params(msg: &Message, tr: &Transaction) -> BlockResult<Self> {
+    pub fn with_params(msg: &Message, tr: &Transaction) -> Result<Self> {
         Ok(
             OutMsgExternal {
                 msg: ChildCell::with_struct(msg)?,
@@ -463,7 +464,7 @@ impl OutMsgExternal {
         )
     }
 
-    pub fn read_message(&self) -> BlockResult<Message> {
+    pub fn read_message(&self) -> Result<Message> {
         self.msg.read_struct()
     }
 
@@ -471,7 +472,7 @@ impl OutMsgExternal {
         self.msg.cell()
     }
 
-    pub fn read_transaction(&self) -> BlockResult<Transaction> {
+    pub fn read_transaction(&self) -> Result<Transaction> {
         self.transaction.read_struct()
     }
 
@@ -481,7 +482,7 @@ impl OutMsgExternal {
 }
 
 impl Serializable for OutMsgExternal {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(self.msg.write_to_new_cell()?);
         cell.append_reference(self.transaction.write_to_new_cell()?);
         Ok(())
@@ -489,7 +490,7 @@ impl Serializable for OutMsgExternal {
 }
 
 impl Deserializable for OutMsgExternal {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
@@ -508,7 +509,7 @@ pub struct OutMsgImmediately {
 }
 
 impl OutMsgImmediately {
-    pub fn with_params(env: &MsgEnvelope, tr: &Transaction, reimport: &InMsg) -> BlockResult<Self> {
+    pub fn with_params(env: &MsgEnvelope, tr: &Transaction, reimport: &InMsg) -> Result<Self> {
         Ok(
             OutMsgImmediately{
                 out_msg: ChildCell::with_struct(env)?,
@@ -518,7 +519,7 @@ impl OutMsgImmediately {
         )
     }
 
-    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+    pub fn read_out_message(&self) -> Result<MsgEnvelope> {
         self.out_msg.read_struct()
     }
 
@@ -526,7 +527,7 @@ impl OutMsgImmediately {
         self.out_msg.cell()
     }
 
-    pub fn read_transaction(&self) -> BlockResult<Transaction> {
+    pub fn read_transaction(&self) -> Result<Transaction> {
         self.transaction.read_struct()
     }
 
@@ -534,7 +535,7 @@ impl OutMsgImmediately {
         self.transaction.cell()
     }
 
-    pub fn read_reimport_message(&self) -> BlockResult<InMsg> {
+    pub fn read_reimport_message(&self) -> Result<InMsg> {
         self.reimport.read_struct()
     }
 
@@ -544,7 +545,7 @@ impl OutMsgImmediately {
 }
 
 impl Serializable for OutMsgImmediately {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(self.out_msg.write_to_new_cell()?);
         cell.append_reference(self.transaction.write_to_new_cell()?);
         cell.append_reference(self.reimport.write_to_new_cell()?);
@@ -553,7 +554,7 @@ impl Serializable for OutMsgImmediately {
 }
 
 impl Deserializable for OutMsgImmediately {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.reimport.read_from(&mut cell.checked_drain_reference()?.into())?;
@@ -572,7 +573,7 @@ pub struct OutMsgNew {
 }
 
 impl OutMsgNew {
-    pub fn with_params(msg: &MsgEnvelope, tr: &Transaction) -> BlockResult<Self> {
+    pub fn with_params(msg: &MsgEnvelope, tr: &Transaction) -> Result<Self> {
         Ok(
             OutMsgNew {
                 out_msg: ChildCell::with_struct(msg)?,
@@ -581,7 +582,7 @@ impl OutMsgNew {
         )
     }
 
-    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+    pub fn read_out_message(&self) -> Result<MsgEnvelope> {
         self.out_msg.read_struct()
     }
 
@@ -589,7 +590,7 @@ impl OutMsgNew {
         self.out_msg.cell()
     }
 
-    pub fn read_transaction(&self) -> BlockResult<Transaction> {
+    pub fn read_transaction(&self) -> Result<Transaction> {
         self.transaction.read_struct()
     }
 
@@ -599,7 +600,7 @@ impl OutMsgNew {
 }
 
 impl Serializable for OutMsgNew {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(self.out_msg.write_to_new_cell()?);
         cell.append_reference(self.transaction.write_to_new_cell()?);
         Ok(())
@@ -607,7 +608,7 @@ impl Serializable for OutMsgNew {
 }
 
 impl Deserializable for OutMsgNew {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
@@ -625,7 +626,7 @@ pub struct OutMsgTransit {
 }
 
 impl OutMsgTransit {
-    pub fn with_params(env: &MsgEnvelope, imported: &InMsg) -> BlockResult<Self> {
+    pub fn with_params(env: &MsgEnvelope, imported: &InMsg) -> Result<Self> {
         Ok(
             OutMsgTransit{
                 out_msg: ChildCell::with_struct(env)?,
@@ -634,7 +635,7 @@ impl OutMsgTransit {
         )
     }
 
-    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+    pub fn read_out_message(&self) -> Result<MsgEnvelope> {
         self.out_msg.read_struct()
     }
 
@@ -642,7 +643,7 @@ impl OutMsgTransit {
         self.out_msg.cell()
     }
 
-    pub fn read_imported(&self) -> BlockResult<InMsg> {
+    pub fn read_imported(&self) -> Result<InMsg> {
         self.imported.read_struct()
     }
 
@@ -652,7 +653,7 @@ impl OutMsgTransit {
 }
 
 impl Serializable for OutMsgTransit {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(self.out_msg.write_to_new_cell()?);
         cell.append_reference(self.imported.write_to_new_cell()?);
         Ok(())
@@ -660,7 +661,7 @@ impl Serializable for OutMsgTransit {
 }
 
 impl Deserializable for OutMsgTransit {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.imported.read_from(&mut cell.checked_drain_reference()?.into())?; 
         Ok(())
@@ -678,7 +679,7 @@ pub struct OutMsgDequeueImmediately {
 }
 
 impl OutMsgDequeueImmediately {
-    pub fn with_params(env: &MsgEnvelope, reimport: &InMsg) -> BlockResult<Self> {
+    pub fn with_params(env: &MsgEnvelope, reimport: &InMsg) -> Result<Self> {
         Ok(
             OutMsgDequeueImmediately{
                 out_msg: ChildCell::with_struct(env)?,
@@ -687,7 +688,7 @@ impl OutMsgDequeueImmediately {
         )
     }
 
-    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+    pub fn read_out_message(&self) -> Result<MsgEnvelope> {
         self.out_msg.read_struct()
     }
 
@@ -695,7 +696,7 @@ impl OutMsgDequeueImmediately {
         self.out_msg.cell()
     }
 
-    pub fn read_reimport_message(&self) -> BlockResult<InMsg> {
+    pub fn read_reimport_message(&self) -> Result<InMsg> {
         self.reimport.read_struct()
     }
 
@@ -705,7 +706,7 @@ impl OutMsgDequeueImmediately {
 }
 
 impl Serializable for OutMsgDequeueImmediately {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(self.out_msg.write_to_new_cell()?);
         cell.append_reference(self.reimport.write_to_new_cell()?);
         Ok(())
@@ -713,7 +714,7 @@ impl Serializable for OutMsgDequeueImmediately {
 }
 
 impl Deserializable for OutMsgDequeueImmediately {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.reimport.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
@@ -731,7 +732,7 @@ pub struct OutMsgDequeue {
 }
 
 impl OutMsgDequeue {
-    pub fn with_params(env: &MsgEnvelope, lt: u64) -> BlockResult<Self> {
+    pub fn with_params(env: &MsgEnvelope, lt: u64) -> Result<Self> {
         Ok(
             OutMsgDequeue{
                 out_msg: ChildCell::with_struct(env)?,
@@ -740,7 +741,7 @@ impl OutMsgDequeue {
         )
     }
 
-    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+    pub fn read_out_message(&self) -> Result<MsgEnvelope> {
         self.out_msg.read_struct()
     }
 
@@ -754,7 +755,7 @@ impl OutMsgDequeue {
 }
 
 impl Serializable for OutMsgDequeue {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(self.out_msg.write_to_new_cell()?);
         self.import_block_lt.write_to(cell)?;
         Ok(())
@@ -762,7 +763,7 @@ impl Serializable for OutMsgDequeue {
 }
 
 impl Deserializable for OutMsgDequeue {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.import_block_lt.read_from(cell)?; 
         Ok(())
@@ -780,7 +781,7 @@ pub struct OutMsgTransitRequired {
 }
 
 impl OutMsgTransitRequired {
-    pub fn with_params(env: &MsgEnvelope, imported: &InMsg) -> BlockResult<Self> {
+    pub fn with_params(env: &MsgEnvelope, imported: &InMsg) -> Result<Self> {
         Ok(
             OutMsgTransitRequired{
                 out_msg: ChildCell::with_struct(env)?,
@@ -789,7 +790,7 @@ impl OutMsgTransitRequired {
         )
     }
 
-    pub fn read_out_message(&self) -> BlockResult<MsgEnvelope> {
+    pub fn read_out_message(&self) -> Result<MsgEnvelope> {
         self.out_msg.read_struct()
     }
 
@@ -797,7 +798,7 @@ impl OutMsgTransitRequired {
         self.out_msg.cell()
     }
 
-    pub fn read_imported(&self) -> BlockResult<InMsg> {
+    pub fn read_imported(&self) -> Result<InMsg> {
         self.imported.read_struct()
     }
 
@@ -807,7 +808,7 @@ impl OutMsgTransitRequired {
 }
 
 impl Serializable for OutMsgTransitRequired {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(self.out_msg.write_to_new_cell()?);
         cell.append_reference(self.imported.write_to_new_cell()?);
         Ok(())
@@ -815,7 +816,7 @@ impl Serializable for OutMsgTransitRequired {
 }
 
 impl Deserializable for OutMsgTransitRequired {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.imported.read_from(&mut cell.checked_drain_reference()?.into())?; 
         Ok(())

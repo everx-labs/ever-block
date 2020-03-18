@@ -39,7 +39,7 @@ pub type OutActions = LinkedList<OutAction>;
 /// Implementation of Serializable for OutActions
 /// 
 impl Serializable for OutActions {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
 
         let mut builder = BuilderData::new();
 
@@ -62,7 +62,7 @@ impl Serializable for OutActions {
 /// Implementation of Deserializable for OutActions
 /// 
 impl Deserializable for OutActions {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let mut cell = cell.clone();
         while cell.remaining_references() != 0 {
             let prev_cell = cell.checked_drain_reference()?.clone();
@@ -72,7 +72,7 @@ impl Deserializable for OutActions {
             cell = prev_cell.into();
         }
         if !cell.is_empty() {
-            bail!(BlockErrorKind::Other { msg: "cell is not empty".into() })
+            failure::bail!(BlockError::Other("cell is not empty".to_string()))
         }
         Ok(())
     }
@@ -205,7 +205,7 @@ impl OutAction {
 }
 
 impl Serializable for OutAction {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             &OutAction::SendMsg{ref mode, ref out_msg} => {
                 ACTION_SEND_MSG.write_to(cell)?; // tag
@@ -231,16 +231,20 @@ impl Serializable for OutAction {
                     cell.append_reference_cell(value.clone());
                 }
             },
-            &OutAction::None => bail!(BlockErrorKind::InvalidOperation { msg: "self is None".into() })
+            &OutAction::None => failure::bail!(
+                BlockError::InvalidOperation("self is None".to_string())
+            )
         }
         Ok(())
     }
 }
 
 impl Deserializable for OutAction {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         if cell.remaining_bits() < std::mem::size_of::<u32>() * 8 {
-            bail!(BlockErrorKind::InvalidArg { msg: "cell can't be shorter than 32 bits".into() });
+            failure::bail!(
+                BlockError::InvalidArg("cell can't be shorter than 32 bits".to_string())
+            )
         }
         let tag = cell.get_next_u32()?;
         match tag {
@@ -275,10 +279,12 @@ impl Deserializable for OutAction {
                     }
                 }
             }
-            tag => bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag,
-                s: "OutAction".into()
-            }),
+            tag => failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag,
+                    s: "OutAction".to_string()
+                }
+            )
         }
         Ok(())
     }

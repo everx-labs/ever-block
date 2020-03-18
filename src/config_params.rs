@@ -13,7 +13,6 @@
 */
 
 use super::*;
-use ::{BlockResult, BlockErrorKind};
 use std::ops::Deref;
 
 /*
@@ -43,7 +42,7 @@ impl ConfigParams {
     }
 
     /// get config by index
-    pub fn config(&self, index: u32) -> BlockResult<Option<ConfigParamEnum>> {
+    pub fn config(&self, index: u32) -> Result<Option<ConfigParamEnum>> {
         let key = index.write_to_new_cell().unwrap();
         if let Ok(Some(slice)) = self.config_params.get(key.into()) {
             if let Ok(cell) = slice.reference(0) {
@@ -54,7 +53,7 @@ impl ConfigParams {
     }
 
     /// set config
-    pub fn set_config(&mut self, config: ConfigParamEnum) -> BlockResult<()> {
+    pub fn set_config(&mut self, config: ConfigParamEnum) -> Result<()> {
 
         let mut value = BuilderData::new();
         let index = config.write_to_cell(&mut value)?;
@@ -66,7 +65,7 @@ impl ConfigParams {
 }
 
 impl Deserializable for ConfigParams {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.config_addr.read_from(cell)?;
         *self.config_params.data_mut() = Some(cell.checked_drain_reference()?.clone());
         Ok(())
@@ -75,7 +74,7 @@ impl Deserializable for ConfigParams {
 
 
 impl Serializable for ConfigParams {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.config_params.is_empty() {
             // Due to ChildCell it is need sometimes to serialize default ConfigParams.
             // So need to wtite something.
@@ -100,6 +99,7 @@ pub enum ConfigParamEnum {
     ConfigParam7(ConfigParam7),
     ConfigParam8(ConfigParam8),
     ConfigParam9(ConfigParam9),
+    ConfigParam11(ConfigParam11),
     ConfigParam12(ConfigParam12),
     ConfigParam14(ConfigParam14),
     ConfigParam15(ConfigParam15),
@@ -138,7 +138,7 @@ macro_rules! read_config {
 impl ConfigParamEnum {
     
     /// read config from cell
-    pub fn construct_from_slice_and_number(slice: &mut SliceData, index: u32) -> BlockResult<ConfigParamEnum> {
+    pub fn construct_from_slice_and_number(slice: &mut SliceData, index: u32) -> Result<ConfigParamEnum> {
         match index {
             0 => { read_config!(ConfigParam0, ConfigParam0, slice) },
             1 => { read_config!(ConfigParam1, ConfigParam1, slice) },
@@ -149,6 +149,7 @@ impl ConfigParamEnum {
             7 => { read_config!(ConfigParam7, ConfigParam7, slice) },
             8 => { read_config!(ConfigParam8, ConfigParam8, slice) },
             9 => { read_config!(ConfigParam9, ConfigParam9, slice) },
+            11 => { read_config!(ConfigParam11, ConfigParam11, slice) },
             12 => { read_config!(ConfigParam12, ConfigParam12, slice) },
             14 => { read_config!(ConfigParam14, ConfigParam14, slice) },
             15 => { read_config!(ConfigParam15, ConfigParam15, slice) },
@@ -176,7 +177,7 @@ impl ConfigParamEnum {
     }
 
     /// Save config to cell
-    pub fn write_to_cell(&self, cell: &mut BuilderData) -> BlockResult<u32> {
+    pub fn write_to_cell(&self, cell: &mut BuilderData) -> Result<u32> {
         match self {
             ConfigParamEnum::ConfigParam0(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(0)},
             ConfigParamEnum::ConfigParam1(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(1)},
@@ -187,6 +188,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam7(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(7)},
             ConfigParamEnum::ConfigParam8(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(8)},
             ConfigParamEnum::ConfigParam9(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(9)},
+            ConfigParamEnum::ConfigParam11(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(11)},
             ConfigParamEnum::ConfigParam12(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(12)},
             ConfigParamEnum::ConfigParam14(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(14)},
             ConfigParamEnum::ConfigParam15(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(15)},
@@ -233,14 +235,14 @@ impl ConfigParam0 {
 }
 
 impl Deserializable for ConfigParam0 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.config_addr.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam0 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.config_addr.write_to(cell)?;
         Ok(())
     }
@@ -265,14 +267,14 @@ impl ConfigParam1 {
 }
 
 impl Deserializable for ConfigParam1 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.elector_addr.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam1 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.elector_addr.write_to(cell)?;
         Ok(())
     }
@@ -293,14 +295,14 @@ impl ConfigParam2 {
 }
 
 impl Deserializable for ConfigParam2 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.minter_addr.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam2 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.minter_addr.write_to(cell)?;
         Ok(())
     }
@@ -321,14 +323,14 @@ impl ConfigParam3 {
 }
 
 impl Deserializable for ConfigParam3 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.fee_collector_addr.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam3 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.fee_collector_addr.write_to(cell)?;
         Ok(())
     }
@@ -349,14 +351,14 @@ impl ConfigParam4 {
 }
 
 impl Deserializable for ConfigParam4 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.dns_root_addr.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam4 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.dns_root_addr.write_to(cell)?;
         Ok(())
     }
@@ -378,7 +380,7 @@ impl ConfigParam6 {
 }
 
 impl Deserializable for ConfigParam6 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.mint_new_price.read_from(cell)?;
         self.mint_add_price.read_from(cell)?;
         Ok(())
@@ -386,7 +388,7 @@ impl Deserializable for ConfigParam6 {
 }
 
 impl Serializable for ConfigParam6 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.mint_new_price.write_to(cell)?;
         self.mint_add_price.write_to(cell)?;
         Ok(())
@@ -410,14 +412,14 @@ impl ConfigParam7 {
 }
 
 impl Deserializable for ConfigParam7 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.to_mint.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam7 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.to_mint.write_to(cell)?;
         Ok(())
     }
@@ -444,13 +446,15 @@ impl GlobalVersion {
 const GLOBAL_VERSION_TAG: u8 = 0xC4;
 
 impl Deserializable for GlobalVersion {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != GLOBAL_VERSION_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "GlobalVersion".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "GlobalVersion".to_string()
+                }
+            )
         }
         self.version.read_from(cell)?;
         self.capabilities.read_from(cell)?;
@@ -459,7 +463,7 @@ impl Deserializable for GlobalVersion {
 }
 
 impl Serializable for GlobalVersion {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(GLOBAL_VERSION_TAG)?;
         self.version.write_to(cell)?;
         self.capabilities.write_to(cell)?;
@@ -479,14 +483,14 @@ impl ConfigParam8 {
 }
 
 impl Deserializable for ConfigParam8 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.global_version.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam8 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.global_version.write_to(cell)?;
         Ok(())
     }
@@ -511,14 +515,14 @@ impl ConfigParam9 {
 }
 
 impl Deserializable for ConfigParam9 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.mandatory_params.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam9 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.mandatory_params.write_to(cell)?;
         Ok(())
     }
@@ -546,13 +550,15 @@ impl BlockCreateFees {
 const BLOCK_CREATE_FEES: u8 = 0x6b;
 
 impl Deserializable for BlockCreateFees {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != BLOCK_CREATE_FEES {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "BlockCreateFees".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "BlockCreateFees".to_string()
+                }
+            )
         }
         self.masterchain_block_fee.read_from(cell)?;
         self.basechain_block_fee.read_from(cell)?;
@@ -561,7 +567,7 @@ impl Deserializable for BlockCreateFees {
 }
 
 impl Serializable for BlockCreateFees {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(BLOCK_CREATE_FEES)?;
         self.masterchain_block_fee.write_to(cell)?;
         self.basechain_block_fee.write_to(cell)?;
@@ -581,14 +587,14 @@ impl ConfigParam14 {
 }
 
 impl Deserializable for ConfigParam14 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.block_create_fees.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam14 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.block_create_fees.write_to(cell)?;
         Ok(())
     }
@@ -612,7 +618,7 @@ impl ConfigParam15 {
 }
 
 impl Deserializable for ConfigParam15 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.validators_elected_for.read_from(cell)?;
         self.elections_start_before.read_from(cell)?;
         self.elections_end_before.read_from(cell)?;
@@ -622,7 +628,7 @@ impl Deserializable for ConfigParam15 {
 }
 
 impl Serializable for ConfigParam15 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.validators_elected_for.write_to(cell)?;
         self.elections_start_before.write_to(cell)?;
         self.elections_end_before.write_to(cell)?;
@@ -656,7 +662,7 @@ impl ConfigParam16 {
 }
 
 impl Deserializable for ConfigParam16 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.max_validators.read_from(cell)?;
         self.max_main_validators.read_from(cell)?;
         self.min_validators.read_from(cell)?;
@@ -665,7 +671,7 @@ impl Deserializable for ConfigParam16 {
 }
 
 impl Serializable for ConfigParam16 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.max_validators.write_to(cell)?;
         self.max_main_validators.write_to(cell)?;
         self.min_validators.write_to(cell)?;
@@ -700,7 +706,7 @@ impl ConfigParam17 {
 }
 
 impl Deserializable for ConfigParam17 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.min_stake.read_from(cell)?;
         self.max_stake.read_from(cell)?;
         self.min_total_stake.read_from(cell)?;
@@ -710,7 +716,7 @@ impl Deserializable for ConfigParam17 {
 }
 
 impl Serializable for ConfigParam17 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.min_stake.write_to(cell)?;
         self.max_stake.write_to(cell)?;
         self.min_total_stake.write_to(cell)?;
@@ -752,13 +758,15 @@ impl StoragePrices {
 const STORAGE_PRICES_TAG: u8 = 0xCC;
 
 impl Deserializable for StoragePrices {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != STORAGE_PRICES_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "StoragePrices".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "StoragePrices".to_string()
+                }
+            )
         }
         self.utime_since.read_from(cell)?;
         self.bit_price_ps.read_from(cell)?;
@@ -770,7 +778,7 @@ impl Deserializable for StoragePrices {
 }
 
 impl Serializable for StoragePrices {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(STORAGE_PRICES_TAG)?;
         self.utime_since.write_to(cell)?;
         self.bit_price_ps.write_to(cell)?;
@@ -806,17 +814,14 @@ impl ConfigParam18 {
     }
 
     /// get length
-    pub fn len(&self) -> BlockResult<usize> {
+    pub fn len(&self) -> Result<usize> {
         self.map.len().map_err(|e| e.into())
     } 
 
     /// get value by index
-    pub fn get(&self, index: u32) -> BlockResult<StoragePrices> {
+    pub fn get(&self, index: u32) -> Result<StoragePrices> {
         let key = index.write_to_new_cell().unwrap().into();
-        let mut s = self.map.get(key)?
-            .ok_or(BlockErrorKind::InvalidIndex {
-                index: index as usize
-            })?;
+        let mut s = self.map.get(key)?.ok_or(BlockError::InvalidIndex(index as usize))?;
         StoragePrices::construct_from(&mut s)
     }
 
@@ -830,7 +835,7 @@ impl ConfigParam18 {
 
 
 impl Deserializable for ConfigParam18 {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.map.read_hashmap_root(slice)?;
         self.index = self.map.len()? as u32;
         Ok(())
@@ -838,9 +843,9 @@ impl Deserializable for ConfigParam18 {
 }
 
 impl Serializable for ConfigParam18 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.map.is_empty() {
-            bail!(BlockErrorKind::InvalidOperation { msg: "self.map is empty".into() })
+            failure::bail!(BlockError::InvalidOperation("self.map is empty".to_string()))
         }
         self.map.write_hashmap_root(cell)?;
         Ok(())
@@ -889,7 +894,7 @@ pub struct GasPrices {
 }
 
 impl Deserializable for GasPrices {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.gas_price.read_from(cell)?;
         self.gas_limit.read_from(cell)?;
         self.gas_credit.read_from(cell)?;
@@ -901,7 +906,7 @@ impl Deserializable for GasPrices {
 }
 
 impl Serializable for GasPrices {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.gas_price.write_to(cell)?;
         self.gas_limit.write_to(cell)?;
         self.gas_credit.write_to(cell)?;
@@ -924,7 +929,7 @@ pub struct GasPricesEx {
 }
 
 impl Deserializable for GasPricesEx {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.gas_price.read_from(cell)?;
         self.gas_limit.read_from(cell)?;
         self.special_gas_limit.read_from(cell)?;
@@ -937,7 +942,7 @@ impl Deserializable for GasPricesEx {
 }
 
 impl Serializable for GasPricesEx {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.gas_price.write_to(cell)?;
         self.gas_limit.write_to(cell)?;
         self.special_gas_limit.write_to(cell)?;
@@ -957,27 +962,27 @@ pub struct GasFlatPfx {
 }
 
 impl Deserializable for GasFlatPfx {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.flat_gas_limit.read_from(cell)?;
         self.flat_gas_price.read_from(cell)?;
         self.other = Arc::new(GasLimitsPrices::construct_from(cell)?);
         if let GasLimitsPrices::FlatPfx(_) = self.other.deref() {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "GasFlatPfx.other can't be GasFlatPfx".into()
-            });
+            failure::bail!(
+                BlockError::InvalidData("GasFlatPfx.other can't be GasFlatPfx".to_string())
+            )
         }
         Ok(())
     }
 }
 
 impl Serializable for GasFlatPfx {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.flat_gas_limit.write_to(cell)?;
         self.flat_gas_price.write_to(cell)?;
         if let GasLimitsPrices::FlatPfx(_) = self.other.deref() {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "GasFlatPfx.other can't be GasFlatPfx".into()
-            });
+            failure::bail!(
+                BlockError::InvalidData("GasFlatPfx.other can't be GasFlatPfx".to_string())
+            )
         }
         self.other.write_to(cell)?;
         Ok(())
@@ -1008,16 +1013,18 @@ const GAS_PRICES_EXT_TAG: u8 = 0xDE;
 const GAS_FLAT_PFX_TAG: u8 = 0xD1;
 
 impl Deserializable for GasLimitsPrices {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = match cell.get_next_byte()? {
             GAS_PRICES_TAG => GasLimitsPrices::Std(GasPrices::construct_from(cell)?),
             GAS_PRICES_EXT_TAG => GasLimitsPrices::Ex(GasPricesEx::construct_from(cell)?),
             GAS_FLAT_PFX_TAG => GasLimitsPrices::FlatPfx(GasFlatPfx::construct_from(cell)?),
             tag => {
-                bail!(BlockErrorKind::InvalidConstructorTag {
-                    t: tag as u32,
-                    s: "GasLimitsPrices".into()
-                })
+                failure::bail!(
+                    BlockError::InvalidConstructorTag {
+                        t: tag as u32,
+                        s: "GasLimitsPrices".to_string()
+                    }
+                )
             }
         };
         Ok(())
@@ -1025,7 +1032,7 @@ impl Deserializable for GasLimitsPrices {
 }
 
 impl Serializable for GasLimitsPrices {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             GasLimitsPrices::Std(gp) => {
                 cell.append_u8(GAS_PRICES_TAG)?;
@@ -1090,13 +1097,15 @@ impl MsgForwardPrices {
 const MSG_FWD_PRICES_TAG: u8 = 0xEA;
 
 impl Deserializable for MsgForwardPrices {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != MSG_FWD_PRICES_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "MsgForwardPrices".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "MsgForwardPrices".to_string()
+                }
+            )
         }
         self.lump_price.read_from(cell)?;
         self.bit_price.read_from(cell)?;
@@ -1109,7 +1118,7 @@ impl Deserializable for MsgForwardPrices {
 }
 
 impl Serializable for MsgForwardPrices {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(MSG_FWD_PRICES_TAG)?;
         self.lump_price.write_to(cell)?;
         self.bit_price.write_to(cell)?;
@@ -1159,13 +1168,15 @@ impl CatchainConfig {
 const CATCHAIN_CONFIG_TAG: u8 = 0xC1;
 
 impl Deserializable for CatchainConfig {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != CATCHAIN_CONFIG_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "CatchainConfig".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "CatchainConfig".to_string()
+                }
+            )
         }
         self.mc_catchain_lifetime.read_from(cell)?;
         self.shard_catchain_lifetime.read_from(cell)?;
@@ -1176,7 +1187,7 @@ impl Deserializable for CatchainConfig {
 }
 
 impl Serializable for CatchainConfig {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(CATCHAIN_CONFIG_TAG)?;
         self.mc_catchain_lifetime.write_to(cell)?;
         self.shard_catchain_lifetime.write_to(cell)?;
@@ -1226,13 +1237,15 @@ impl ConsensusConfig {
 const CONSENSUS_CONFIG_TAG: u8 = 0xD6;
 
 impl Deserializable for ConsensusConfig {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != CONSENSUS_CONFIG_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "ConsensusConfig".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "ConsensusConfig".to_string()
+                }
+            )
         }
         self.round_candidates.read_from(cell)?;
         self.next_candidate_delay_ms.read_from(cell)?;
@@ -1247,7 +1260,7 @@ impl Deserializable for ConsensusConfig {
 }
 
 impl Serializable for ConsensusConfig {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(CONSENSUS_CONFIG_TAG)?;
         self.round_candidates.write_to(cell)?;
         self.next_candidate_delay_ms.write_to(cell)?;
@@ -1273,14 +1286,14 @@ impl ConfigParam29 {
 }
 
 impl Deserializable for ConfigParam29 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.consensus_config.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam29 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.consensus_config.write_to(cell)?;
         Ok(())
     }
@@ -1311,14 +1324,14 @@ impl ConfigParam31 {
 }
 
 impl Deserializable for ConfigParam31 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.fundamental_smc_addr.read_from(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam31 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.fundamental_smc_addr.write_to(cell)?;
         Ok(())
     }
@@ -1342,14 +1355,14 @@ macro_rules! define_configparams {
         }
 
         impl Deserializable for $cpname {
-            fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+            fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
                 self.$pname.read_from(cell)?;
                 Ok(())
             }
         }
 
         impl Serializable for $cpname {
-            fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+            fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
                 self.$pname.write_to(cell)?;
                 Ok(())
             }
@@ -1383,7 +1396,7 @@ pub enum WorkchainFormat {
 
 
 impl Deserializable for WorkchainFormat {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         cell.get_next_bits(3)?;
         *self = match cell.get_next_bit()? {
             true => {
@@ -1402,7 +1415,7 @@ impl Deserializable for WorkchainFormat {
 }
 
 impl Serializable for WorkchainFormat {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(0, 3)?;
         match self {
             WorkchainFormat::Basic(ref val) => {
@@ -1455,7 +1468,7 @@ impl WorkchainFormat1 {
 
 
 impl Deserializable for WorkchainFormat1 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.vm_version.read_from(cell)?;
         self.vm_mode.read_from(cell)?;
         Ok(())
@@ -1463,7 +1476,7 @@ impl Deserializable for WorkchainFormat1 {
 }
 
 impl Serializable for WorkchainFormat1 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.vm_version.write_to(cell)?;
         self.vm_mode.write_to(cell)?;
         Ok(())
@@ -1512,7 +1525,7 @@ impl WorkchainFormat0 {
     ///
     /// Create new instance of WorkchainFormat0
     /// 
-    pub fn with_params(min_addr_len: u16, max_addr_len: u16, addr_len_step: u16, workchain_type_id: u32 ) -> BlockResult<WorkchainFormat0> {
+    pub fn with_params(min_addr_len: u16, max_addr_len: u16, addr_len_step: u16, workchain_type_id: u32 ) -> Result<WorkchainFormat0> {
         if min_addr_len >= 64 && min_addr_len <= max_addr_len &&
            max_addr_len <= 1023 && addr_len_step <= 1023 &&
            workchain_type_id >= 1 {
@@ -1526,10 +1539,13 @@ impl WorkchainFormat0 {
                )
            }
         else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "min_addr_len >= 64 && min_addr_len <= max_addr_len \
-                    && max_addr_len <= 1023 && addr_len_step <= 1023 && workchain_type_id >= 1".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "min_addr_len >= 64 && min_addr_len <= max_addr_len \
+                     && max_addr_len <= 1023 && addr_len_step <= 1023 \
+                     && workchain_type_id >= 1".to_string()
+                )
+            )
         }
     }
 
@@ -1543,14 +1559,16 @@ impl WorkchainFormat0 {
     ///
     /// Setter for min_addr_len
     /// 
-    pub fn set_min_addr_len(&mut self, min_addr_len: u16) -> BlockResult<()> {
+    pub fn set_min_addr_len(&mut self, min_addr_len: u16) -> Result<()> {
         if min_addr_len >= 64 && min_addr_len <= 1023 {
             self.min_addr_len = min_addr_len;
             Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: min_addr_len >= 64 && min_addr_len <= 1023".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "should: min_addr_len >= 64 && min_addr_len <= 1023".to_string()
+                )
+            )
         }
     }    
 
@@ -1564,14 +1582,17 @@ impl WorkchainFormat0 {
     ///
     /// Setter for max_addr_len
     /// 
-    pub fn set_max_addr_len(&mut self, max_addr_len: u16) -> BlockResult<()> {
+    pub fn set_max_addr_len(&mut self, max_addr_len: u16) -> Result<()> {
         if max_addr_len >= 64 && max_addr_len <= 1024 && self.min_addr_len <= max_addr_len {
             self.max_addr_len = max_addr_len;
             Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: max_addr_len >= 64 && max_addr_len <= 1024 && self.min_addr_len <= max_addr_len".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "should: max_addr_len >= 64 && max_addr_len <= 1024 \
+                     && self.min_addr_len <= max_addr_len".to_string()
+                )
+            )
         }
     }        
 
@@ -1585,14 +1606,14 @@ impl WorkchainFormat0 {
     ///
     /// Setter for min_addr_len
     /// 
-    pub fn set_addr_len_step(&mut self, addr_len_step: u16) -> BlockResult<()> {
+    pub fn set_addr_len_step(&mut self, addr_len_step: u16) -> Result<()> {
         if addr_len_step <= 1024 {
             self.addr_len_step = addr_len_step;
             Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: addr_len_step <= 1024".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData("should: addr_len_step <= 1024".to_string())
+            )
         }
     }       
 
@@ -1606,20 +1627,20 @@ impl WorkchainFormat0 {
     ///
     /// Setter for min_addr_len
     /// 
-    pub fn set_workchain_type_id(&mut self, workchain_type_id: u32) -> BlockResult<()> {
+    pub fn set_workchain_type_id(&mut self, workchain_type_id: u32) -> Result<()> {
         if workchain_type_id >= 1 {
             self.workchain_type_id = workchain_type_id;
             Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: workchain_type_id >= 1".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData("should: workchain_type_id >= 1".to_string())
+            )
         }
     } 
 }
 
 impl Deserializable for WorkchainFormat0 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let mut val = Number12::default();
         val.read_from(cell)?;
         self.min_addr_len = val.0 as u16;
@@ -1635,15 +1656,18 @@ impl Deserializable for WorkchainFormat0 {
            self.workchain_type_id >= 1 {
                 Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: min_addr_len >= 64 && min_addr_len <= max_addr_len && max_addr_len <= 1023 && addr_len_step <= 1023".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "should: min_addr_len >= 64 && min_addr_len <= max_addr_len \
+                     && max_addr_len <= 1023 && addr_len_step <= 1023".to_string()
+                )
+            )
         }
     }
 }
 
 impl Serializable for WorkchainFormat0 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.min_addr_len >= 64 && self.min_addr_len <= self.max_addr_len &&
            self.max_addr_len <= 1023 && self.addr_len_step <= 1023 &&
            self.workchain_type_id >= 1 {
@@ -1657,9 +1681,12 @@ impl Serializable for WorkchainFormat0 {
                 id.write_to(cell)?;
                 Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: min_addr_len >= 64 && min_addr_len <= max_addr_len && max_addr_len <= 1023 && addr_len_step <= 1023".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "should: min_addr_len >= 64 && min_addr_len <= max_addr_len \
+                     && max_addr_len <= 1023 && addr_len_step <= 1023".to_string()
+                )
+            )
         }
     }
 }
@@ -1739,14 +1766,16 @@ impl WorkchainDescr {
     ///
     /// Setter for min_split
     /// 
-    pub fn set_min_split(&mut self, min_split: u8) -> BlockResult<()> {
+    pub fn set_min_split(&mut self, min_split: u8) -> Result<()> {
         if min_split <= 60 {
             self.min_split = min_split;
             Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: min_split <= max_split && max_split <= 60".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "should: min_split <= max_split && max_split <= 60".to_string()
+                )
+            )
         }
     } 
 
@@ -1767,14 +1796,16 @@ impl WorkchainDescr {
     ///
     /// Setter for max_split
     /// 
-    pub fn set_max_split(&mut self, max_split: u8) -> BlockResult<()> {
+    pub fn set_max_split(&mut self, max_split: u8) -> Result<()> {
         if self.min_split <= max_split && max_split <= 60 {
             self.max_split = max_split;
             Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: min_split <= max_split && max_split <= 60".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "should: min_split <= max_split && max_split <= 60".to_string()
+                )
+            )
         }
     } 
 
@@ -1783,13 +1814,15 @@ impl WorkchainDescr {
 const WORKCHAIN_DESCRIPTOR_TAG : u8 = 0xA6;
 
 impl Deserializable for WorkchainDescr {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != WORKCHAIN_DESCRIPTOR_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "WorkchainDescr".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "WorkchainDescr".to_string()
+                }
+            )
         }
         self.enabled_since.read_from(cell)?;
         let mut min = Number8::default();
@@ -1817,7 +1850,7 @@ impl Deserializable for WorkchainDescr {
 }
 
 impl Serializable for WorkchainDescr {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.min_split <= self.max_split && self.max_split <= 60 {
 
             cell.append_u8(WORKCHAIN_DESCRIPTOR_TAG)?;
@@ -1860,13 +1893,155 @@ impl Serializable for WorkchainDescr {
 
             Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "should: min_split <= max_split && max_split <= 60".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "should: min_split <= max_split && max_split <= 60".to_string()
+                )
+            )
         }
     }
 }
 
+/*
+cfg_vote_cfg#36
+    min_tot_rounds: uint8
+    max_tot_rounds: uint8
+    min_wins: uint8
+    max_losses: uint8
+    min_store_sec: uint32
+    max_store_sec: uint32
+    bit_price: uint32
+    cell_price: uint32
+= ConfigProposalSetup;
+
+cfg_vote_setup#91
+    normal_params: ^ConfigProposalSetup
+    critical_params: ^ConfigProposalSetup
+= ConfigVotingSetup;
+
+_ ConfigVotingSetup = ConfigParam 11;
+*/
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ConfigProposalSetup {
+    pub min_tot_rounds: u8,
+    pub max_tot_rounds: u8,
+    pub min_wins: u8,
+    pub max_losses: u8,
+    pub min_store_sec: u32,
+    pub max_store_sec: u32,
+    pub bit_price: u32,
+    pub cell_price: u32,
+}
+
+const CONFIG_PROPOSAL_SETUP_TAG : u8 = 0x36;
+
+impl Deserializable for ConfigProposalSetup {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_byte()?;
+        if tag != CONFIG_PROPOSAL_SETUP_TAG {
+            failure::bail!(BlockError::InvalidConstructorTag {
+                t: tag as u32,
+                s: "ConfigProposalSetup".into()
+            })
+        }
+        self.min_tot_rounds.read_from(slice)?;
+        self.max_tot_rounds.read_from(slice)?;
+        self.min_wins.read_from(slice)?;
+        self.max_losses.read_from(slice)?;
+        self.min_store_sec.read_from(slice)?;
+        self.max_store_sec.read_from(slice)?;
+        self.bit_price.read_from(slice)?;
+        self.cell_price.read_from(slice)?;
+        Ok(())
+    }
+}
+
+impl Serializable for ConfigProposalSetup {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        cell.append_u8(CONFIG_PROPOSAL_SETUP_TAG)?;
+        self.min_tot_rounds.write_to(cell)?;
+        self.max_tot_rounds.write_to(cell)?;
+        self.min_wins.write_to(cell)?;
+        self.max_losses.write_to(cell)?;
+        self.min_store_sec.write_to(cell)?;
+        self.max_store_sec.write_to(cell)?;
+        self.bit_price.write_to(cell)?;
+        self.cell_price.write_to(cell)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ConfigVotingSetup {
+    normal_params: ChildCell<ConfigProposalSetup>,
+    critical_params: ChildCell<ConfigProposalSetup>,
+}
+
+impl ConfigVotingSetup {
+
+    pub fn new(normal_params: &ConfigProposalSetup, critical_params: &ConfigProposalSetup) -> Result<Self> {
+        Ok(
+            ConfigVotingSetup {
+                normal_params: ChildCell::with_struct(normal_params)?,
+                critical_params: ChildCell::with_struct(critical_params)?,
+            }
+        )
+    }
+
+    pub fn read_normal_params(&self) -> Result<ConfigProposalSetup> {
+        self.normal_params.read_struct()
+    }
+
+    pub fn write_normal_params(&mut self, value: &ConfigProposalSetup) -> Result<()> {
+        self.normal_params.write_struct(value)
+    }
+
+    pub fn normal_params_cell(&self) -> &Cell {
+        self.normal_params.cell()
+    }
+
+    pub fn read_critical_params(&self) -> Result<ConfigProposalSetup> {
+        self.critical_params.read_struct()
+    }
+
+    pub fn write_critical_params(&mut self, value: &ConfigProposalSetup) -> Result<()> {
+        self.critical_params.write_struct(value)
+    }
+
+    pub fn critical_params_cell(&self) -> &Cell {
+        self.critical_params.cell()
+    }
+}
+
+const CONFIG_VOTING_SETUP_TAG : u8 = 0x91;
+
+impl Deserializable for ConfigVotingSetup {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_byte()?;
+        if tag != CONFIG_VOTING_SETUP_TAG {
+            bail!(BlockError::InvalidConstructorTag {
+                t: tag as u32,
+                s: "ConfigVotingSetup".into()
+            })
+        }
+        self.normal_params.read_from(&mut slice.checked_drain_reference()?.into())?;
+        self.critical_params.read_from(&mut slice.checked_drain_reference()?.into())?;
+
+        Ok(())
+    }
+}
+
+impl Serializable for ConfigVotingSetup {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        cell.append_u8(CONFIG_VOTING_SETUP_TAG)?;
+        cell.append_reference(self.normal_params.write_to_new_cell()?);
+        cell.append_reference(self.critical_params.write_to_new_cell()?);
+        Ok(())
+    }
+}
+
+pub type ConfigParam11 = ConfigVotingSetup;
 
 /*
 _ workchains:(HashmapE 32 WorkchainDescr) = ConfigParam 12;
@@ -1891,12 +2066,12 @@ impl ConfigParam12 {
     }
 
     /// get length
-    pub fn len(&self) -> BlockResult<usize> {
+    pub fn len(&self) -> Result<usize> {
         Ok(self.workchains.len()?)
     } 
 
     /// get value by index
-    pub fn get(&self, workchain_id: u32) -> BlockResult<Option<WorkchainDescr>> {
+    pub fn get(&self, workchain_id: u32) -> Result<Option<WorkchainDescr>> {
         self.workchains.get(&workchain_id)
     }
 
@@ -1908,14 +2083,14 @@ impl ConfigParam12 {
 
 
 impl Deserializable for ConfigParam12 {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.workchains.read_from(slice)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam12 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.workchains.write_to(cell)?;
         Ok(())
     }
@@ -1988,13 +2163,15 @@ impl ValidatorTempKey {
 }
 
 impl Deserializable for ValidatorTempKey {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?; // TODO what is tag length in bits???
         if tag != VALIDATOR_TEMP_KEY_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "ValidatorTempKey".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "ValidatorTempKey".to_string()
+                }
+            )
         }
         self.adnl_addr.read_from(slice)?;
         self.temp_public_key.read_from(slice)?;
@@ -2005,7 +2182,7 @@ impl Deserializable for ValidatorTempKey {
 }
 
 impl Serializable for ValidatorTempKey {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(VALIDATOR_TEMP_KEY_TAG)?; // TODO what is tag length in bits???
         self.adnl_addr.write_to(cell)?;
         self.temp_public_key.write_to(cell)?;
@@ -2046,13 +2223,15 @@ impl ValidatorSignedTempKey {
 }
 
 impl Deserializable for ValidatorSignedTempKey {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?; // TODO what is tag length in bits???
         if tag != VALIDATOR_SIGNED_TEMP_KEY_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "ValidatorSignedTempKey".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "ValidatorSignedTempKey".to_string()
+                }
+            )
         }
         self.signature.read_from(slice)?;
         self.key.read_from(&mut slice.checked_drain_reference()?.into())?;
@@ -2061,7 +2240,7 @@ impl Deserializable for ValidatorSignedTempKey {
 }
 
 impl Serializable for ValidatorSignedTempKey {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(VALIDATOR_SIGNED_TEMP_KEY_TAG)?; // TODO what is tag length in bits???
         self.signature.write_to(cell)?;
         cell.append_reference(self.key.write_to_new_cell()?);
@@ -2093,22 +2272,22 @@ impl ConfigParam39 {
     }
 
     /// get length
-    pub fn len(&self) -> BlockResult<usize> {
+    pub fn len(&self) -> Result<usize> {
         Ok(self.validator_keys.len()?)
     } 
 
     /// get value by key
-    pub fn get(&self, key: UInt256) -> BlockResult<ValidatorSignedTempKey> {
+    pub fn get(&self, key: UInt256) -> Result<ValidatorSignedTempKey> {
         self.validator_keys.get(key.write_to_new_cell().unwrap().into())
-            .map(|ref mut s| -> BlockResult<ValidatorSignedTempKey> 
+            .map(|ref mut s| -> Result<ValidatorSignedTempKey> 
                 {
                     let mut sp = ValidatorSignedTempKey::default(); 
                     if let Some(s) = s {
                        sp.read_from(s)?
                     } else {
-                        bail!(BlockErrorKind::NotFound {
-                            item_name: "ValidatorSignedTempKey".into()
-                        });
+                        failure::bail!(
+                            BlockError::NotFound("ValidatorSignedTempKey".to_string())
+                        )
                     }; 
                     Ok(sp)
                 }).unwrap()
@@ -2122,7 +2301,7 @@ impl ConfigParam39 {
 }
 
 impl Deserializable for ConfigParam39 {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.validator_keys = HashmapE::with_bit_len(256);
         self.validator_keys.read_from(slice)?;
         Ok(())
@@ -2130,7 +2309,7 @@ impl Deserializable for ConfigParam39 {
 }
 
 impl Serializable for ConfigParam39 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.validator_keys.write_to(cell)?;
         Ok(())
     }
@@ -2163,12 +2342,20 @@ impl ParamLimits {
         Self::default()
     }
 
-    pub fn with_limits(underload: u32, soft_limit: u32, hard_limit: u32) -> BlockResult<Self> {
+    pub fn with_limits(underload: u32, soft_limit: u32, hard_limit: u32) -> Result<Self> {
         if underload > soft_limit { 
-            bail!(BlockErrorKind::InvalidArg { msg: "`underload` have to be less or equal `soft_limit`".into() });
+            failure::bail!(
+                BlockError::InvalidArg(
+                    "`underload` have to be less or equal `soft_limit`".to_string() 
+                )
+            )
         }
         if soft_limit > hard_limit { 
-            bail!(BlockErrorKind::InvalidArg { msg: "`soft_limit` have to be less or equal `hard_limit`".into() });
+            failure::bail!(
+                BlockError::InvalidArg(
+                   "`soft_limit` have to be less or equal `hard_limit`".to_string() 
+                )
+            )
         }
         Ok(ParamLimits{ underload, soft_limit, hard_limit })
     }
@@ -2177,9 +2364,13 @@ impl ParamLimits {
         self.underload
     }
 
-    pub fn set_underload(&mut self, underload: u32) -> BlockResult<()>{
+    pub fn set_underload(&mut self, underload: u32) -> Result<()>{
         if underload > self.soft_limit { 
-            bail!(BlockErrorKind::InvalidArg { msg: "`underload` have to be less or equal `soft_limit`".into() });
+            failure::bail!(
+                BlockError::InvalidArg(
+                    "`underload` have to be less or equal `soft_limit`".to_string() 
+                )
+            )
         }
         self.underload = underload;
         Ok(())
@@ -2189,9 +2380,13 @@ impl ParamLimits {
         self.soft_limit
     }
 
-    pub fn set_soft_limit(&mut self, soft_limit: u32) -> BlockResult<()>{
+    pub fn set_soft_limit(&mut self, soft_limit: u32) -> Result<()>{
         if soft_limit > self.hard_limit { 
-            bail!(BlockErrorKind::InvalidArg { msg: "`soft_limit` have to be less or equal `hard_limit`".into() });
+            failure::bail!(
+                BlockError::InvalidArg(
+                    "`soft_limit` have to be less or equal `hard_limit`".to_string() 
+                )
+            )
         }
         self.soft_limit = soft_limit;
         Ok(())
@@ -2201,11 +2396,13 @@ impl ParamLimits {
         self.hard_limit
     }
 
-    pub fn set_hard_limit(&mut self, hard_limit: u32) -> BlockResult<()>{
+    pub fn set_hard_limit(&mut self, hard_limit: u32) -> Result<()>{
         if self.soft_limit > hard_limit { 
-            bail!(BlockErrorKind::InvalidArg {
-                msg: "`hard_limit` have to be larger or equal `soft_limit`".into()
-            });
+            failure::bail!(
+                BlockError::InvalidArg(
+                    "`hard_limit` have to be larger or equal `soft_limit`".to_string()
+                )
+            )
         }
         self.hard_limit = hard_limit;
         Ok(())
@@ -2213,33 +2410,39 @@ impl ParamLimits {
 }
 
 impl Deserializable for ParamLimits {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
         if tag != PARAM_LIMITS_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "ParamLimits".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "ParamLimits".to_string()
+                }
+            )
         }
         self.underload.read_from(slice)?;
         self.soft_limit.read_from(slice)?;
         self.hard_limit.read_from(slice)?;
         if self.underload > self.soft_limit {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "`underload` have to be less or equal `soft_limit`".into()
-            });
+            failure::bail!(
+                BlockError::InvalidData(
+                    "`underload` have to be less or equal `soft_limit`".to_string()
+                )
+            )
         }
         if self.soft_limit > self.hard_limit {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "`soft_limit` have to be less or equal `hard_limit`".into()
-            });
+            failure::bail!( 
+                BlockError::InvalidData(
+                    "`soft_limit` have to be less or equal `hard_limit`".to_string()
+                )
+            )
         }
         Ok(())
     }
 }
 
 impl Serializable for ParamLimits {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(PARAM_LIMITS_TAG)?;
         self.underload.write_to(cell)?;
         self.soft_limit.write_to(cell)?;
@@ -2302,13 +2505,15 @@ impl BlockLimits {
 }
 
 impl Deserializable for BlockLimits {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
         if tag != BLOCK_LIMITS_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "BlockLimits".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "BlockLimits".to_string()
+                }
+            )
         }
         self.bytes.read_from(slice)?;
         self.gas.read_from(slice)?;
@@ -2318,7 +2523,7 @@ impl Deserializable for BlockLimits {
 }
 
 impl Serializable for BlockLimits {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(BLOCK_LIMITS_TAG)?;
         self.bytes.write_to(cell)?;
         self.gas.write_to(cell)?;
