@@ -22,11 +22,11 @@ use std::marker::PhantomData;
 use ton_types::GasConsumer;
 use ExceptionCode;
 
-type AugResult<Y> = BlockResult<(Option<SliceData>, Y)>;
+type AugResult<Y> = Result<(Option<SliceData>, Y)>;
 
 /// trait for types used as Augment to calc aug on forks
 pub trait Augmentable: Clone + Default + Serializable + Deserializable {
-    fn calc(&mut self, other: &Self) -> BlockResult<()>;
+    fn calc(&mut self, other: &Self) -> Result<()>;
 }
 
 /// Dummy for test purposes without augs
@@ -34,19 +34,19 @@ pub trait Augmentable: Clone + Default + Serializable + Deserializable {
 pub struct Dummy {}
 
 impl Serializable for Dummy {
-    fn write_to(&self, _cell: &mut BuilderData) -> BlockResult<()>{
+    fn write_to(&self, _cell: &mut BuilderData) -> Result<()>{
         Ok(())
     } 
 }
 
 impl Deserializable for Dummy {
-    fn read_from(&mut self, _slice: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, _slice: &mut SliceData) -> Result<()>{
         Ok(())
     }
 }
 
 impl Augmentable for Dummy {
-    fn calc(&mut self, _other: &Self) -> BlockResult<()> {
+    fn calc(&mut self, _other: &Self) -> Result<()> {
         Ok(())
     }
 }
@@ -58,16 +58,16 @@ macro_rules! define_HashmapAugE {
         pub struct $varname(HashmapAugE<$x_type, $y_type>);
 
         impl $varname {
-            pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+            pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
                 self.0.read_hashmap_root(slice)
             }
-            pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> BlockResult<()> {
+            pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> Result<()> {
                 self.0.write_hashmap_root(cell)
             }
-            pub fn len(&self) -> BlockResult<usize> {
+            pub fn len(&self) -> Result<usize> {
                 self.0.len()
             }
-            pub fn single(&self) -> BlockResult<Option<$x_type>> {
+            pub fn single(&self) -> Result<Option<$x_type>> {
                 match self.0.single()? {
                     Some(ref mut slice) => Some(Self::construct_from::<$x_type>(slice)).transpose(),
                     None => Ok(None)
@@ -76,66 +76,66 @@ macro_rules! define_HashmapAugE {
             pub fn is_empty(&self) -> bool {
                 self.0.is_empty()
             }
-            pub fn iterate<F>(&self, p: &mut F) -> BlockResult<bool>
-            where F: FnMut($x_type) -> BlockResult<bool> {
+            pub fn iterate<F>(&self, p: &mut F) -> Result<bool>
+            where F: FnMut($x_type) -> Result<bool> {
                 self.0.iterate(&mut |_, ref mut slice| p(Self::construct_from::<$x_type>(slice)?))
             }
-            pub fn iterate_with_keys<F>(&self, p: &mut F) -> BlockResult<bool>
-            where F: FnMut(SliceData, $x_type) -> BlockResult<bool> {
+            pub fn iterate_with_keys<F>(&self, p: &mut F) -> Result<bool>
+            where F: FnMut(SliceData, $x_type) -> Result<bool> {
                 self.0.iterate(&mut |key, ref mut slice| p(key, Self::construct_from::<$x_type>(slice)?))
             }
-            pub fn iterate_with_keys_and_aug<F>(&self, p: &mut F) -> BlockResult<bool>
-            where F: FnMut(SliceData, $x_type, $y_type) -> BlockResult<bool> {
+            pub fn iterate_with_keys_and_aug<F>(&self, p: &mut F) -> Result<bool>
+            where F: FnMut(SliceData, $x_type, $y_type) -> Result<bool> {
                 self.0.iterate_with_aug(&mut |key, ref mut slice, aug| p(key, Self::construct_from::<$x_type>(slice)?, aug))
             }
-            pub fn iterate_slices_with_keys_and_aug<F>(&self, p: &mut F) -> BlockResult<bool>
-            where F: FnMut(SliceData, SliceData, $y_type) -> BlockResult<bool> {
+            pub fn iterate_slices_with_keys_and_aug<F>(&self, p: &mut F) -> Result<bool>
+            where F: FnMut(SliceData, SliceData, $y_type) -> Result<bool> {
                 self.0.iterate_with_aug(&mut |key, slice, aug| p(key, slice, aug))
             }
-            pub fn iterate_slices<F>(&self, p: &mut F) -> BlockResult<bool>
-            where F: FnMut(SliceData, SliceData) -> BlockResult<bool> {
+            pub fn iterate_slices<F>(&self, p: &mut F) -> Result<bool>
+            where F: FnMut(SliceData, SliceData) -> Result<bool> {
                 self.0.iterate(p)
             }
             /// sets item to hashmapaug
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type, aug: &$y_type)
-            -> BlockResult<()> {
+            -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
                 let value = value.write_to_new_cell()?.into();
                 self.0.set(key, &value, aug).map(|_|())
             }
             /// sets item to hashmapaug as ref
             pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell, aug: &$y_type)
-            -> BlockResult<()> {
+            -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
                 let value = value.write_to_new_cell()?.into();
                 self.0.set(key, &value, aug).map(|_|())
             }
             /// returns item from hasmapaug
-            pub fn get<K: Serializable>(&self, key: &K) -> BlockResult<Option<$x_type>> {
+            pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.hashmap_get(key, &mut 0)?
                     .map(|ref mut slice| Self::construct_from::<$x_type>(slice)).transpose()
             }
             /// returns item from hasmapaug as slice
-            pub fn get_as_slice<K: Serializable>(&self, key: &K) -> BlockResult<Option<SliceData>> {
+            pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.get(key).map_err(|e| e.into())
             }
             /// removes item from hashmapaug
-            pub fn remove<K: Serializable>(&mut self, key: &K) -> BlockResult<bool> {
+            pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.remove(key).map(|result| result.is_some())
             }
             // /// sets item to hashmapaug, returns previously set item
             // pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type, aug: &$y_type)
-            // -> BlockResult<Option<$x_type>> {
+            // -> Result<Option<$x_type>> {
             //     let key = key.write_to_new_cell()?.into();
             //     let value = value.write_to_new_cell()?.into();
             //     self.0.set(key, value, aug)?
             //         .map(|ref mut slice| Self::construct_from::<$x_type>(slice)).transpose()
             // }
             // /// removes item from hashmapaug
-            // pub fn remove<K: Serializable>(&mut self, key: &K) -> BlockResult<Option<$x_type>> {
+            // pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<Option<$x_type>> {
             //     let key = key.write_to_new_cell()?.into();
             //     self.0.remove(key)?
             //         .map(|ref mut slice| Self::construct_from::<$x_type>(slice)).transpose()
@@ -153,7 +153,7 @@ macro_rules! define_HashmapAugE {
         }
 
         impl Serializable for $varname {
-            fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()>{
+            fn write_to(&self, cell: &mut BuilderData) -> Result<()>{
                 if let Some(root) = self.0.data() {
                     cell.append_bit_one()?;
                     cell.append_reference_cell(root.clone());
@@ -166,7 +166,7 @@ macro_rules! define_HashmapAugE {
         }
 
         impl Deserializable for $varname {
-            fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()>{
+            fn read_from(&mut self, slice: &mut SliceData) -> Result<()>{
                 self.0 = HashmapAugE::with_data($bit_len, slice);
                 Ok(())
             }
@@ -204,11 +204,15 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapType for
     fn check_key(bit_len: usize, key: &SliceData) -> bool {
         bit_len == key.remaining_bits()
     }
-    fn make_cell_with_label(key: SliceData, max: usize) -> Result<BuilderData, ExceptionCode> {
+    fn make_cell_with_label(key: SliceData, max: usize) -> Result<BuilderData> {
         hm_label(&key, max)
     }
-    fn make_cell_with_label_and_data(key: SliceData, max: usize, _is_leaf: bool, data: &SliceData)
-    -> Result<BuilderData, ExceptionCode> {
+    fn make_cell_with_label_and_data(
+        key: SliceData, 
+        max: usize, 
+        _is_leaf: bool, 
+        data: &SliceData
+    ) -> Result<BuilderData> {
         let mut builder = hm_label(&key, max)?;
         // automatically adds reference with data if space is not enought
         if builder.checked_append_references_and_data(data).is_err() {
@@ -217,7 +221,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapType for
         }
         Ok(builder)
     }
-    fn is_fork(_slice: &mut SliceData) -> Result<bool, ExceptionCode> {
+    fn is_fork(_slice: &mut SliceData) -> Result<bool> {
         panic!("Should not be called")
     }
     fn is_leaf(_slice: &mut SliceData) -> bool {
@@ -240,16 +244,22 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapType for
         if self.is_empty() || key.is_empty() || !Self::check_key(bit_len, &key) {
             return Ok(None);
         }
-        let mut cursor = SliceData::from_cell_ref(self.data().unwrap(), gas_consumer);
-        let mut label = cursor.get_label(bit_len);
+        let data = if let Some(data) = self.data() {
+            data
+        } else {
+            return Ok(None)
+        };
+        let mut cursor = gas_consumer.load_cell(data.clone());
+        let mut label = cursor.get_label(bit_len)?;
         while SliceData::erase_prefix(&mut key, &label) && !key.is_empty() {
             let next_index = key.get_next_bit_int()? as usize;
-            cursor = SliceData::from_cell(cursor.reference(next_index)?, gas_consumer);
+            cursor = gas_consumer.load_cell(cursor.reference(next_index)?);
             bit_len -= label.remaining_bits() + 1;
-            label = cursor.get_label(bit_len);
+            label = cursor.get_label(bit_len)?;
         }
         if key.is_empty() {
-            Y::skip::<Y>(&mut cursor).map_err(|_| ExceptionCode::CellUnderflow)?; // TODO how not to lose original error here?
+            Y::skip::<Y>(&mut cursor)
+                .map_err(|_| failure::err_msg(ExceptionCode::CellUnderflow))?; // TODO how not to lose original error here?
             Ok(Some(cursor))
         } else {
             Ok(None)
@@ -287,21 +297,19 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         }
     }
     /// Serialization HashmapAug root of HashmapAugE to BuilderData - just append
-    pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> Result<()> {
         if let Some(root) = self.data() {
             cell.checked_append_references_and_data(&SliceData::from(root))?;
             self.root_extra().write_to(cell)?;
             Ok(())
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "no reference".into()
-            })
+            failure::bail!(BlockError::InvalidData("no reference".to_string()))
         }
     }
     /// deserialize not empty root
-    pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
         let mut root = slice.clone(); // copy to get as data
-        let label = slice.get_label(self.bit_len);
+        let label = slice.get_label(self.bit_len)?;
         if label.remaining_bits() != self.bit_len { // fork
             slice.shrink_references(2..); // left, right
             self.extra = Y::construct_from(slice)?;
@@ -320,16 +328,16 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         &self.extra
     }
     /// removes object and returns old value as object
-    pub fn remove(&mut self, mut _key: SliceData) -> BlockResult<Option<SliceData>> {
+    pub fn remove(&mut self, mut _key: SliceData) -> Result<Option<SliceData>> {
         unimplemented!()
         // result?.map(|ref mut slice| {
         // }).ok_or(exception!(ExceptionCode::CellUnderflow))
     }
     /// return object if it is single in hashmap    
-    pub fn single(&self) -> BlockResult<Option<SliceData>> {
+    pub fn single(&self) -> Result<Option<SliceData>> {
         if let Some(root) = self.data() {
             let mut slice = SliceData::from(root);
-            let label = slice.get_label(self.bit_len);
+            let label = slice.get_label(self.bit_len)?;
             if label.remaining_bits() == self.bit_len {
                 Y::skip::<Y>(&mut slice)?;
                 return Ok(Some(slice))
@@ -338,7 +346,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         Ok(None)
     }
     /// returns count of objects in tree - don't use it - try is_empty()
-    pub fn len(&self) -> BlockResult<usize> {
+    pub fn len(&self) -> Result<usize> {
         let mut len = 0;
         self.iterate(&mut |_,_| {
             len += 1;
@@ -347,8 +355,8 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         Ok(len)
     }
     /// iterates all objects in tree with callback function
-    pub fn iterate<F> (&self, p: &mut F) -> BlockResult<bool>
-    where F: FnMut(SliceData, SliceData) -> BlockResult<bool> {
+    pub fn iterate<F> (&self, p: &mut F) -> Result<bool>
+    where F: FnMut(SliceData, SliceData) -> Result<bool> {
         if let Some(root) = self.data() {
             Self::iterate_internal(
                 &mut SliceData::from(root),
@@ -359,8 +367,8 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
             Ok(true)
         }
     }
-    pub fn iterate_with_aug<F> (&self, p: &mut F) -> BlockResult<bool>
-    where F: FnMut(SliceData, SliceData, Y) -> BlockResult<bool> {
+    pub fn iterate_with_aug<F> (&self, p: &mut F) -> Result<bool>
+    where F: FnMut(SliceData, SliceData, Y) -> Result<bool> {
         if let Some(root) = self.data() {
             Self::iterate_internal(
                 &mut SliceData::from(root),
@@ -372,10 +380,16 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         }
     }
     // internal recursive iterates all elements with callback function
-    fn iterate_internal<F>(cursor: &mut SliceData, mut key: BuilderData, mut bit_len: usize, found: &mut F)
-    -> BlockResult<bool>
-    where F: FnMut(SliceData, SliceData, Y) -> BlockResult<bool> {
-        let label = cursor.get_label(bit_len);
+    fn iterate_internal<F>(
+        cursor: &mut SliceData, 
+        mut key: BuilderData, 
+        mut bit_len: usize, 
+        found: &mut F
+    ) -> Result<bool>
+    where 
+        F: FnMut(SliceData, SliceData, Y) -> Result<bool> 
+    {
+        let label = cursor.get_label(bit_len)?;
         let label_length = label.remaining_bits();
         if label_length < bit_len {
             bit_len -= label_length + 1;
@@ -396,9 +410,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
             let aug: Y = Y::construct_from(cursor)?;
             return found(key.into(), cursor.clone(), aug)
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "label_length > bit_len".into()
-            })
+            failure::bail!(BlockError::InvalidData("label_length > bit_len".to_string()))
         }
         Ok(true)
     }
@@ -406,7 +418,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         self.hashmap_get(key, &mut 0)
     }
     /// Puts element to the tree
-    pub fn set(&mut self, key: SliceData, leaf: &SliceData, extra: &Y) -> BlockResult<Option<SliceData>> {
+    pub fn set(&mut self, key: SliceData, leaf: &SliceData, extra: &Y) -> Result<Option<SliceData>> {
         let bit_len = self.bit_len;
         if key.is_empty() || !Self::check_key(bit_len, &key) {
             return Ok(None)
@@ -439,7 +451,9 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         // ahmn_fork#_ {n:#} {X:Type} {Y:Type} left:^(HashmapAug n X Y) right:^(HashmapAug n X Y) extra:Y
         // = HashmapAugNode (n + 1) X Y;
         if slice.remaining_references() < 2 {
-            bail!(BlockErrorKind::InvalidArg { msg: "slice must contain 2 or more references".into() });
+            failure::bail!(
+                BlockError::InvalidArg("slice must contain 2 or more references".to_string())
+            )
         }
         let mut references = slice.shrink_references(2..); // left and right, drop extra
         assert_eq!(references.len(), 2);
@@ -464,7 +478,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
     ) -> AugResult<Y> {
         let result;
         let mut slice = SliceData::from(cell.clone());
-        let label = slice.get_label(bit_len);
+        let label = slice.get_label(bit_len)?;
         let builder = if label == key {
             // replace existing leaf
             Y::skip::<Y>(&mut slice)?; // skip extra
@@ -498,7 +512,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
                 }
                 error @ (_, _, _) => {
                     error!(target: "tvm", "If we hit this, there's certainly a bug. {:?}. Passed: label: {}, key: {} ", error, label, key);
-                    return Err(ExceptionCode::FatalError)?
+                    failure::bail!(ExceptionCode::FatalError)
                 }
             }
         };
@@ -514,7 +528,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         mut key: SliceData,
         leaf: &SliceData,
         extra: &Y
-    ) -> BlockResult<Y> {
+    ) -> Result<Y> {
         key.shrink_data(1..);
         let label_bit = label.get_next_bit()?;
         let length = bit_len - 1 - prefix.remaining_bits();
@@ -549,17 +563,17 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         Ok(fork_extra)
     }
     // Combines extra with leaf
-    fn combine(extra: &Y, leaf: &SliceData) -> BlockResult<SliceData> {
+    fn combine(extra: &Y, leaf: &SliceData) -> Result<SliceData> {
         let mut builder = extra.write_to_new_cell()?;
         builder.checked_append_references_and_data(&leaf)?;
         Ok(builder.into())
     }
     // Gets label then get_extra
-    fn find_extra(slice: &mut SliceData, bit_len: usize) -> BlockResult<Y> {
-        let label = slice.get_label(bit_len);
+    fn find_extra(slice: &mut SliceData, bit_len: usize) -> Result<Y> {
+        let label = slice.get_label(bit_len)?;
         if label.remaining_bits() != bit_len { // fork - drain left and right
             if slice.remaining_references() < 2 {
-                return Err(ExceptionCode::CellUnderflow)?
+                failure::bail!(ExceptionCode::CellUnderflow)
             }
             slice.shrink_references(2..);
         }

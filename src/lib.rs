@@ -13,7 +13,7 @@
 */
 
 #![cfg_attr(feature = "ci_run", deny(warnings))]
-#![recursion_limit="128"] // needs for error_chain
+//#![recursion_limit="128"] // needs for error_chain
 
 // External
 extern crate core;
@@ -113,7 +113,7 @@ where
     K: Clone + Eq + Hash + Default + Deserializable + Serializable,
     V: Serializable
 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let bit_len = K::default().write_to_new_cell()?.length_in_bits();
         let mut dictionary = HashmapE::with_bit_len(bit_len);
         for (key, value) in self.iter() {
@@ -129,7 +129,7 @@ where
     K: Eq + Hash + Default + Deserializable + Serializable,
     V: Deserializable + Default
 {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let bit_len = K::default().write_to_new_cell()?.length_in_bits();
         let mut dictionary = HashmapE::with_bit_len(bit_len);
         dictionary.read_hashmap_data(slice)?;
@@ -143,23 +143,23 @@ where
 }
 
 impl Serializable for HashmapE {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.write_hashmap_data(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for HashmapE {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.read_hashmap_data(slice)?;
         Ok(())
     }
 }
 
 pub trait Serializable {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()>;
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()>;
 
-    fn write_to_new_cell(&self) -> BlockResult<BuilderData> {
+    fn write_to_new_cell(&self) -> Result<BuilderData> {
         let mut cell = BuilderData::new();
         self.write_to(&mut cell)?;
         Ok(cell)
@@ -167,49 +167,49 @@ pub trait Serializable {
 }
 
 pub trait Deserializable {
-    fn construct_from<X: Default + Deserializable>(slice: &mut SliceData) -> BlockResult<X> {
+    fn construct_from<X: Default + Deserializable>(slice: &mut SliceData) -> Result<X> {
         let mut x = X::default();
         x.read_from(slice)?;
         Ok(x)
     }
     // Override it to implement skipping
-    fn skip<X: Default + Deserializable>(slice: &mut SliceData) -> BlockResult<()> {
+    fn skip<X: Default + Deserializable>(slice: &mut SliceData) -> Result<()> {
         X::construct_from::<X>(slice)?;
         Ok(())
     }
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()>; 
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()>; 
 }
 
 pub trait MaybeSerialize {
-    fn write_maybe_to(&self, cell: &mut BuilderData) -> BlockResult<()>;
+    fn write_maybe_to(&self, cell: &mut BuilderData) -> Result<()>;
 }
 
 impl Deserializable for Cell {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = cell.checked_drain_reference()?.clone();
         Ok(())
     }
 }
 
 impl Serializable for Cell {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(BuilderData::from(self));
         Ok(())
     }
 }
 /* for future use
 impl Serializable for SliceData {
-    fn write_to_new_cell(&self) -> BlockResult<BuilderData> {
+    fn write_to_new_cell(&self) -> Result<BuilderData> {
         Ok(BuilderData::from_slice(self))
     }
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.checked_append_references_and_data(self)?;
         Ok(())
     }
 }
 */
 impl<T: Serializable> MaybeSerialize for Option<T> {
-    fn write_maybe_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_maybe_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             Some(x) => {
                 cell.append_bit_one()?;
@@ -224,7 +224,7 @@ impl<T: Serializable> MaybeSerialize for Option<T> {
 }
 
 pub trait MaybeDeserialize {
-    fn read_maybe_from<T: Deserializable + Default> (slice: &mut SliceData) -> BlockResult<Option<T>> {
+    fn read_maybe_from<T: Deserializable + Default> (slice: &mut SliceData) -> Result<Option<T>> {
         match slice.get_next_bit_int() {
             Ok(1) => {
                 let mut res = T::default();
@@ -232,7 +232,7 @@ pub trait MaybeDeserialize {
                 Ok(Some(res))
             }
             Ok(0) => Ok(None),
-            _ => Err(ExceptionCode::CellUnderflow)?
+            _ => failure::bail!(ExceptionCode::CellUnderflow)
         }
     }
 }
@@ -240,7 +240,7 @@ pub trait MaybeDeserialize {
 impl<T: Deserializable> MaybeDeserialize for T {}
 
 pub trait GetRepresentationHash: Serializable {
-    fn hash(&self) -> BlockResult<UInt256> {
+    fn hash(&self) -> Result<UInt256> {
         let cell: Cell = self.write_to_new_cell()?.into();
         Ok(cell.repr_hash())
     }
@@ -249,30 +249,30 @@ pub trait GetRepresentationHash: Serializable {
 impl<T: Serializable> GetRepresentationHash for T {}
 
 impl Deserializable for UInt256 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = UInt256::from(cell.get_next_bytes(32)?);
         Ok(())
     }
 }
 
 impl Serializable for UInt256 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_raw(self.as_slice(), 256)?;
         Ok(())
     }
 }
 
 impl Deserializable for AccountId {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = cell.get_next_slice(256)?;
         Ok(())
     }
 }
 
 impl Serializable for AccountId {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.remaining_bits() != 256 {
-            bail!(BlockError::from(ExceptionCode::CellUnderflow))
+            failure::bail!(BlockError::TvmException(ExceptionCode::CellUnderflow))
         }
         cell.append_bytestring(&self)?;
         Ok(())
@@ -289,13 +289,13 @@ impl Default for TrueTlbType{
 }
 
 impl Serializable for TrueTlbType{
-    fn write_to(&self, _cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, _cell: &mut BuilderData) -> Result<()> {
         Ok(())
     }    
 }
 
 impl Deserializable for TrueTlbType {
-    fn read_from(&mut self, _cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, _cell: &mut SliceData) -> Result<()> {
         Ok(())        
     }
 }

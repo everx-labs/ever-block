@@ -22,12 +22,12 @@ use self::hashmapaug::Augmentable;
 pub trait BinTreeType<X: Default + Serializable + Deserializable> {
     fn get_data(&self) -> SliceData;
     /// Returns item by key
-    fn get(&self, mut key: SliceData) -> BlockResult<Option<X>> {
+    fn get(&self, mut key: SliceData) -> Result<Option<X>> {
         let mut cursor = self.get_data();
         while cursor.get_next_bit()? {
             if cursor.remaining_references() < 2 {
                 // fork doesn't have two refs - bad data
-                bail!(BlockErrorKind::InvalidData { msg: "Fork doesn't have two refs".into() })
+                failure::bail!(BlockError::InvalidData("Fork doesn't have two refs".to_string()))
             }
             match key.get_next_bit_int() {
                 Ok(x) => cursor = cursor.reference(x).expect("There must be at least two links").into(),
@@ -41,7 +41,7 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
         }
     }
     /// Iterates over all items
-    fn iterate<F: FnMut(SliceData, X) -> BlockResult<bool>>(&self, p: &mut F) -> BlockResult<bool> {
+    fn iterate<F: FnMut(SliceData, X) -> Result<bool>>(&self, p: &mut F) -> Result<bool> {
         iterate_internal(&mut self.get_data(), BuilderData::new(), p)
     }
 }
@@ -67,7 +67,7 @@ fn internal_merge(
 
 fn internal_split<X: Default + Serializable + Deserializable>(
     data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, value): (SliceData, &X)
-) -> BlockResult<bool> {
+) -> Result<bool> {
     if *bits == 1 && data.as_slice() == [0x80] { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
         if children.len() < 2 {
             return Ok(false)
@@ -90,10 +90,10 @@ fn internal_split<X: Default + Serializable + Deserializable>(
     Ok(false)
 }
 
-fn iterate_internal<X, F>(cursor: &mut SliceData, mut key: BuilderData, p: &mut F) -> BlockResult<bool>
+fn iterate_internal<X, F>(cursor: &mut SliceData, mut key: BuilderData, p: &mut F) -> Result<bool>
 where 
     X: Default + Serializable + Deserializable, 
-    F: FnMut(SliceData, X) -> BlockResult<bool> {
+    F: FnMut(SliceData, X) -> Result<bool> {
     
     let result = if cursor.get_next_bit()? {
         let mut left_key = key.clone();
@@ -137,7 +137,7 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
         }
     }
     /// Splits item by key old item will be left
-    pub fn split(&mut self, key: SliceData, value: &X) -> BlockResult<bool> {
+    pub fn split(&mut self, key: SliceData, value: &X) -> Result<bool> {
         let mut builder = BuilderData::from_slice(&self.data);
         if builder.update_cell(internal_split, (key, value))? {
             self.data = builder.into();
@@ -159,14 +159,14 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
 }
 
 impl<X: Default + Serializable + Deserializable> Serializable for BinTree<X> {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.checked_append_references_and_data(&self.data)?;
         Ok(())
     }
 }
 
 impl<X: Default + Serializable + Deserializable> Deserializable for BinTree<X> {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.data = slice.clone();
         if slice.get_next_bit()? {
             slice.shrink_references(2..);
@@ -215,7 +215,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
         unimplemented!()
     }
     /// Returns item augment
-    pub fn extra(&self, mut key: SliceData) -> BlockResult<Option<Y>> {
+    pub fn extra(&self, mut key: SliceData) -> Result<Option<Y>> {
         let mut cursor = self.data.clone();
         while cursor.get_next_bit()? {
             if cursor.remaining_references() < 2 {
@@ -239,7 +239,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
         &self.extra
     }
     /// Splits item by key old item will be left
-    pub fn split(&mut self, key: SliceData, value: &X, aug: &Y) -> BlockResult<bool> {
+    pub fn split(&mut self, key: SliceData, value: &X, aug: &Y) -> Result<bool> {
         let mut cursor = self.data.clone();
         if Self::internal_split(&mut cursor, key, value, aug)? {
             self.data = cursor;
@@ -264,7 +264,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
     // helper functions
     fn internal_split_next(
         data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, value, aug): (SliceData, &X, &Y)
-    ) -> BlockResult<bool> {
+    ) -> Result<bool> {
         if let Ok(x) = key.get_next_bit_int() {
             let mut cursor = children[x].clone().into();
             if Self::internal_split(&mut cursor, key, value, aug)? {
@@ -276,7 +276,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
         }
         Ok(false)
     }
-    fn internal_split(slice: &mut SliceData, key: SliceData, value: &X, aug: &Y) -> BlockResult<bool> {
+    fn internal_split(slice: &mut SliceData, key: SliceData, value: &X, aug: &Y) -> Result<bool> {
         let mut cell = BuilderData::from_slice(&slice);
         if slice.get_next_bit()? {
             if slice.remaining_references() < 2 {
@@ -309,14 +309,14 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
 }
 
 impl<X: Default + Serializable + Deserializable, Y: Augmentable> Serializable for BinTreeAug<X, Y> {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.checked_append_references_and_data(&self.data)?;
         Ok(())
     }
 }
 
 impl<X: Default + Serializable + Deserializable, Y: Augmentable> Deserializable for BinTreeAug<X, Y> {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.data = slice.clone();
         if slice.get_next_bit()? {
             slice.shrink_references(2..);

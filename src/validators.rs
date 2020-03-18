@@ -55,7 +55,7 @@ impl ValidatorInfo {
 
 
 impl Serializable for ValidatorInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.validator_list_hash_short.write_to(cell)?;
         self.catchain_seqno.write_to(cell)?;
         self.nx_cc_updated.write_to(cell)?;
@@ -64,7 +64,7 @@ impl Serializable for ValidatorInfo {
 }
 
 impl Deserializable for ValidatorInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.validator_list_hash_short.read_from(cell)?;
         self.catchain_seqno.read_from(cell)?;
         self.nx_cc_updated.read_from(cell)?;
@@ -110,7 +110,7 @@ impl ValidatorBaseInfo {
 
 
 impl Serializable for ValidatorBaseInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.validator_list_hash_short.write_to(cell)?;
         self.catchain_seqno.write_to(cell)?;
         Ok(())
@@ -118,7 +118,7 @@ impl Serializable for ValidatorBaseInfo {
 }
 
 impl Deserializable for ValidatorBaseInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.validator_list_hash_short.read_from(cell)?;
         self.catchain_seqno.read_from(cell)?;
         Ok(())
@@ -178,7 +178,7 @@ const VALIDATOR_DESC_ADDR_TAG: u8 = 0x73;
 
 
 impl Serializable for ValidatorDescr {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let tag = if self.adnl_addr.is_some() {VALIDATOR_DESC_ADDR_TAG} else {VALIDATOR_DESC_TAG};
         cell.append_u8(tag)?;
         self.public_key.write_to(cell)?;
@@ -191,13 +191,15 @@ impl Serializable for ValidatorDescr {
 }
 
 impl Deserializable for ValidatorDescr {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != VALIDATOR_DESC_TAG && tag != VALIDATOR_DESC_ADDR_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "ValidatorDescr".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "ValidatorDescr".to_string()
+                }
+            )
         }
         self.public_key.read_from(cell)?;
         self.weight.read_from(cell)?;
@@ -289,7 +291,7 @@ const VALIDATOR_SET_TAG: u8 = 0x11;
 const VALIDATOR_SET_EX_TAG: u8 = 0x12;
 
 impl Serializable for ValidatorSet {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(if self.total_weight.is_none() { VALIDATOR_SET_TAG } else { VALIDATOR_SET_EX_TAG })?;
         self.utime_since.write_to(cell)?;
         self.utime_until.write_to(cell)?;
@@ -306,13 +308,15 @@ impl Serializable for ValidatorSet {
 }
 
 impl Deserializable for ValidatorSet {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != VALIDATOR_SET_TAG && tag != VALIDATOR_SET_EX_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "ValidatorSet".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "ValidatorSet".to_string()
+                }
+            )
         }
         self.utime_since.read_from(cell)?;
         self.utime_until.read_from(cell)?;
@@ -326,19 +330,16 @@ impl Deserializable for ValidatorSet {
             self.list.read_from(cell)?; // HashmapE
         }
         self.list_key = self.list.len()? as u16;
-
         if self.main > self.total {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "main > total while read ValidatorSet".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData("main > total while read ValidatorSet".to_string())
+            )
         }
-
         if self.main < Number16(1) {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "main < 1 while read ValidatorSet".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData("main < 1 while read ValidatorSet".to_string())
+            )
         }
-
         Ok(())
     }
 }

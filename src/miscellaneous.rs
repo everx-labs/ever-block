@@ -45,7 +45,7 @@ impl ProcessedInfoKey {
 }
 
 impl Serializable for ProcessedInfoKey {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.shard.write_to(cell)?;
         self.mc_seeqno.write_to(cell)?;
         Ok(())
@@ -53,7 +53,7 @@ impl Serializable for ProcessedInfoKey {
 }
 
 impl Deserializable for ProcessedInfoKey {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.shard.read_from(cell)?;
         self.mc_seeqno.read_from(cell)?;
         Ok(())
@@ -82,7 +82,7 @@ impl ProcessedUpto {
 }
 
 impl Serializable for ProcessedUpto {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.last_msg_lt.write_to(cell)?;
         self.last_msg_hash.write_to(cell)?;
         Ok(())
@@ -90,7 +90,7 @@ impl Serializable for ProcessedUpto {
 }
 
 impl Deserializable for ProcessedUpto {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.last_msg_lt.read_from(cell)?;
         self.last_msg_hash.read_from(cell)?;
         Ok(())
@@ -126,14 +126,14 @@ impl IhrPendingSince {
 }
 
 impl Serializable for IhrPendingSince {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.import_lt.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for IhrPendingSince {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.import_lt.read_from(cell)?;
         Ok(())
     }

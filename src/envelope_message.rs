@@ -51,7 +51,7 @@ impl Default for IntermediateAddress{
 }
 
 impl Serializable for IntermediateAddress{
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             IntermediateAddress::Regular(addr) => {
                 cell.append_raw(&[0b00000000], 1)?;       // tag = $0
@@ -71,7 +71,7 @@ impl Serializable for IntermediateAddress{
 }
 
 impl Deserializable for IntermediateAddress{
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         *self = 
             if cell.get_next_bit()? {
                 if cell.get_next_bit()? { // tag = 11
@@ -118,8 +118,10 @@ impl IntermediateAddressRegular {
         }
     }
 
-    pub fn with_use_src_bits(use_bits: u8) -> BlockResult<Self> {
-        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg { msg: "use_bits must be <= 96".into() }); }
+    pub fn with_use_src_bits(use_bits: u8) -> Result<Self> {
+        if use_bits > 96 { 
+            failure::bail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+        }
         Ok(IntermediateAddressRegular {
             use_src_bits: use_bits
         })
@@ -129,15 +131,17 @@ impl IntermediateAddressRegular {
         self.use_src_bits
     }
 
-    pub fn set_use_src_bits(&mut self, use_bits: u8) -> BlockResult<()>{
-        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg { msg: "use_bits must be <= 96".into() }); }
+    pub fn set_use_src_bits(&mut self, use_bits: u8) -> Result<()>{
+        if use_bits > 96 { 
+            failure::bail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+        }
         self.use_src_bits = use_bits;
         Ok(())
     }
 }
 
 impl Serializable for IntermediateAddressRegular{
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         // write 7-bit from use_src_bits
         cell.append_raw(&[self.use_src_bits << 1], 7)?;
         Ok(())
@@ -145,11 +149,12 @@ impl Serializable for IntermediateAddressRegular{
 }
 
 impl Deserializable for IntermediateAddressRegular{
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         let use_bits = cell.get_next_bits(7)?[0] >> 1;    // read 7 bit into use_src_bits
-        if use_bits > 96 { bail!(BlockErrorKind::InvalidArg { msg: "use_bits must be <= 96".into() }); }
+        if use_bits > 96 { 
+            failure::bail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+        }
         self.use_src_bits = use_bits;
-
         Ok(())
     } 
 }
@@ -183,9 +188,11 @@ impl IntermediateAddressSimple {
         }
     }
 
-    pub fn with_addr(workchain_id: i8, addr_pfx: SliceData) -> BlockResult<Self> {
+    pub fn with_addr(workchain_id: i8, addr_pfx: SliceData) -> Result<Self> {
         if addr_pfx.remaining_bits() != 64 { 
-            bail!(BlockErrorKind::InvalidArg { msg: "addr_pfx's length in bits must be 64".into() });
+            failure::bail!(
+                BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
+            )
         }
         Ok(IntermediateAddressSimple {
             workchain_id: workchain_id,
@@ -205,9 +212,11 @@ impl IntermediateAddressSimple {
         &mut self.workchain_id
     }
 
-    pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> BlockResult<()>{
+    pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> Result<()>{
         if addr_pfx.remaining_bits() != 64 { 
-            bail!(BlockErrorKind::InvalidArg { msg: "addr_pfx's length in bits must be 64".into() });
+            failure::bail!(
+                BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
+            )
         }
         self.addr_pfx = addr_pfx;
         Ok(())
@@ -215,7 +224,7 @@ impl IntermediateAddressSimple {
 }
 
 impl Serializable for IntermediateAddressSimple{
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.workchain_id.write_to(cell)?;
         cell.checked_append_references_and_data(&self.addr_pfx).unwrap();
         Ok(())
@@ -223,7 +232,7 @@ impl Serializable for IntermediateAddressSimple{
 }
 
 impl Deserializable for IntermediateAddressSimple{
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         self.workchain_id.read_from(cell)?;
         self.addr_pfx = cell.get_next_slice(64)?;
         Ok(())
@@ -259,9 +268,11 @@ impl IntermediateAddressExt {
         }
     }
 
-    pub fn with_addr(workchain_id: i32, addr_pfx: SliceData) -> BlockResult<Self> {
-        if addr_pfx.remaining_bits() != 64 {
-            bail!(BlockErrorKind::InvalidArg { msg: "addr_pfx's length in bits must be 64".into() });
+    pub fn with_addr(workchain_id: i32, addr_pfx: SliceData) -> Result<Self> {
+        if addr_pfx.remaining_bits() != 64 { 
+            failure::bail!(
+                BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
+            )
         }
         Ok(IntermediateAddressExt {
             workchain_id: workchain_id,
@@ -281,9 +292,11 @@ impl IntermediateAddressExt {
         &mut self.workchain_id
     }
 
-    pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> BlockResult<()>{
-        if addr_pfx.remaining_bits() != 64 {
-            bail!(BlockErrorKind::InvalidArg { msg: "addr_pfx's length in bits must be 64".into() });
+    pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> Result<()>{
+        if addr_pfx.remaining_bits() != 64 { 
+            failure::bail!(
+                BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
+            )
         }
         self.addr_pfx = addr_pfx;
         Ok(())
@@ -291,7 +304,7 @@ impl IntermediateAddressExt {
 }
 
 impl Serializable for IntermediateAddressExt{
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.workchain_id.write_to(cell)?;
         cell.checked_append_references_and_data(&self.addr_pfx).unwrap();
         Ok(())
@@ -299,7 +312,7 @@ impl Serializable for IntermediateAddressExt{
 }
 
 impl Deserializable for IntermediateAddressExt{
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         self.workchain_id.read_from(cell)?;
         self.addr_pfx = cell.get_next_slice(64)?;
         Ok(())
@@ -324,7 +337,7 @@ impl MsgEnvelope {
     ///
     /// Create Envelope with message and remainig_fee
     ///
-    pub fn with_message_and_fee(msg: &Message, fee_remainig: Grams) -> BlockResult<Self> {
+    pub fn with_message_and_fee(msg: &Message, fee_remainig: Grams) -> Result<Self> {
         Ok(
             MsgEnvelope {
                 cur_addr: IntermediateAddress::default(),
@@ -338,14 +351,14 @@ impl MsgEnvelope {
     ///
     /// Read message struct from envelope
     ///
-    pub fn read_message(&self) -> BlockResult<Message> {
+    pub fn read_message(&self) -> Result<Message> {
         self.msg.read_struct()
     }
 
     ///
     /// Write message struct to envelope
     ///
-    pub fn write_message(&mut self, value: &Message) -> BlockResult<()> {
+    pub fn write_message(&mut self, value: &Message) -> Result<()> {
         self.msg.write_struct(value)
     }
 
@@ -404,7 +417,7 @@ impl MsgEnvelope {
 const MSG_ENVELOPE_TAG : usize = 0x4;
 
 impl Serializable for MsgEnvelope{
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(MSG_ENVELOPE_TAG, 4)?;
         self.cur_addr.write_to(cell)?;
         self.next_addr.write_to(cell)?;
@@ -415,13 +428,15 @@ impl Serializable for MsgEnvelope{
 }
 
 impl Deserializable for MsgEnvelope{
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         let tag = cell.get_next_int(4)? as usize;
         if tag != MSG_ENVELOPE_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "MsgEnvelope".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "MsgEnvelope".to_string()
+                }
+            )
         }
         self.cur_addr.read_from(cell)?;
         self.next_addr.read_from(cell)?;

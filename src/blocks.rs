@@ -62,7 +62,7 @@ impl BlockIdExt {
 }
 
 impl Serializable for BlockIdExt {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.shard_id.write_to(cell)?;
         self.seq_no.write_to(cell)?;
         self.root_hash.write_to(cell)?;
@@ -72,7 +72,7 @@ impl Serializable for BlockIdExt {
 }
 
 impl Deserializable for BlockIdExt {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.shard_id.read_from(cell)?;
         self.seq_no.read_from(cell)?;
         self.root_hash.read_from(cell)?;
@@ -287,7 +287,7 @@ impl BlkPrevInfo {
         }
     }
 
-    pub fn prev1(&self) -> BlockResult<ExtBlkRef> {
+    pub fn prev1(&self) -> Result<ExtBlkRef> {
         Ok(
             match self {
                 BlkPrevInfo::Block{prev} => prev.clone(),
@@ -298,7 +298,7 @@ impl BlkPrevInfo {
         )
     }
 
-    pub fn prev2(&self) -> BlockResult<Option<ExtBlkRef>> {
+    pub fn prev2(&self) -> Result<Option<ExtBlkRef>> {
         Ok(
             match self {
                 BlkPrevInfo::Block{prev: _} => None,
@@ -311,7 +311,7 @@ impl BlkPrevInfo {
 }
 
 impl Deserializable for BlkPrevInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         match self {
             BlkPrevInfo::Block{prev} => {
                 prev.read_from(cell)?;
@@ -326,7 +326,7 @@ impl Deserializable for BlkPrevInfo {
 }
 
 impl Serializable for BlkPrevInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             BlkPrevInfo::Block{prev} => {
                 prev.write_to(cell)?;
@@ -363,7 +363,7 @@ impl Block {
         value_flow: ValueFlow,
         state_update: MerkleUpdate,
         extra: BlockExtra,
-    ) -> BlockResult<Self> {
+    ) -> Result<Self> {
         Ok(Block {
             global_id,
             info: ChildCell::with_struct(&info)?,
@@ -381,11 +381,11 @@ impl Block {
         self.global_id = global_id
     }
 
-    pub fn read_info(&self) -> BlockResult<BlockInfo> {
+    pub fn read_info(&self) -> Result<BlockInfo> {
         self.info.read_struct()
     }
 
-    pub fn write_info(&mut self, value: &BlockInfo) -> BlockResult<()> {
+    pub fn write_info(&mut self, value: &BlockInfo) -> Result<()> {
         self.info.write_struct(value)
     }
 
@@ -393,11 +393,11 @@ impl Block {
         self.info.cell()
     }
 
-    pub fn read_value_flow(&self) -> BlockResult<ValueFlow> {
+    pub fn read_value_flow(&self) -> Result<ValueFlow> {
         self.value_flow.read_struct()
     }
 
-    pub fn write_value_flow(&mut self, value: &ValueFlow) -> BlockResult<()> {
+    pub fn write_value_flow(&mut self, value: &ValueFlow) -> Result<()> {
         self.value_flow.write_struct(value)
     }
 
@@ -405,11 +405,11 @@ impl Block {
         self.value_flow.cell()
     }
 
-    pub fn read_state_update(&self) -> BlockResult<MerkleUpdate> {
+    pub fn read_state_update(&self) -> Result<MerkleUpdate> {
         self.state_update.read_struct()
     }
 
-    pub fn write_state_update(&mut self, value: &MerkleUpdate) -> BlockResult<()> {
+    pub fn write_state_update(&mut self, value: &MerkleUpdate) -> Result<()> {
         self.state_update.write_struct(value)
     }
 
@@ -417,11 +417,11 @@ impl Block {
         self.state_update.cell()
     }
 
-    pub fn read_extra(&self) -> BlockResult<BlockExtra> {
+    pub fn read_extra(&self) -> Result<BlockExtra> {
         self.extra.read_struct()
     }
 
-    pub fn write_extra(&mut self, value: &BlockExtra) -> BlockResult<()> {
+    pub fn write_extra(&mut self, value: &BlockExtra) -> Result<()> {
         self.extra.write_struct(value)
     }
 
@@ -488,11 +488,11 @@ impl BlockExtra {
         }
     }
 
-    pub fn read_in_msg_descr(&self) -> BlockResult<InMsgDescr> {
+    pub fn read_in_msg_descr(&self) -> Result<InMsgDescr> {
         self.in_msg_descr.read_struct()
     }
 
-    pub fn write_in_msg_descr(&mut self, value: &InMsgDescr) -> BlockResult<()> {
+    pub fn write_in_msg_descr(&mut self, value: &InMsgDescr) -> Result<()> {
         self.in_msg_descr.write_struct(value)
     }
 
@@ -500,11 +500,11 @@ impl BlockExtra {
         self.in_msg_descr.cell()
     }
 
-    pub fn read_out_msg_descr(&self) -> BlockResult<OutMsgDescr> {
+    pub fn read_out_msg_descr(&self) -> Result<OutMsgDescr> {
         self.out_msg_descr.read_struct()
     }
 
-    pub fn write_out_msg_descr(&mut self, value: &OutMsgDescr) -> BlockResult<()> {
+    pub fn write_out_msg_descr(&mut self, value: &OutMsgDescr) -> Result<()> {
         self.out_msg_descr.write_struct(value)
     }
 
@@ -512,11 +512,11 @@ impl BlockExtra {
         self.out_msg_descr.cell()
     }
 
-    pub fn read_account_blocks(&self) -> BlockResult<ShardAccountBlocks> {
+    pub fn read_account_blocks(&self) -> Result<ShardAccountBlocks> {
         self.account_blocks.read_struct()
     }
 
-    pub fn write_account_blocks(&mut self, value: &ShardAccountBlocks) -> BlockResult<()> {
+    pub fn write_account_blocks(&mut self, value: &ShardAccountBlocks) -> Result<()> {
         self.account_blocks.write_struct(value)
     }
 
@@ -540,7 +540,7 @@ impl BlockExtra {
         &mut self.created_by
     }
 
-    pub fn read_custom(&self) -> BlockResult<Option<McBlockExtra>> {
+    pub fn read_custom(&self) -> Result<Option<McBlockExtra>> {
         Ok(
             match self.custom {
                 Some(ref custom) => Some(custom.read_struct()?),
@@ -549,7 +549,7 @@ impl BlockExtra {
         )
     }
 
-    pub fn write_custom(&mut self, value: Option<McBlockExtra>) -> BlockResult<()> {
+    pub fn write_custom(&mut self, value: Option<McBlockExtra>) -> Result<()> {
         self.custom = match value {
                 Some(v) => Some(ChildCell::with_struct(&v)?),
                 None => None
@@ -565,13 +565,15 @@ impl BlockExtra {
 const BLOCK_EXTRA_TAG: u32 = 0x4a33f6fd;
 
 impl Deserializable for BlockExtra {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != BLOCK_EXTRA_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag,
-                s: "BlockExtra".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag,
+                    s: "BlockExtra".to_string()
+                }
+            )
         }
         self.in_msg_descr
             .read_from(&mut cell.checked_drain_reference()?.into())?;
@@ -591,7 +593,7 @@ impl Deserializable for BlockExtra {
 }
 
 impl Serializable for BlockExtra {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u32(BLOCK_EXTRA_TAG)?;
         cell.append_reference(self.in_msg_descr.write_to_new_cell()?);
         cell.append_reference(self.out_msg_descr.write_to_new_cell()?);
@@ -654,7 +656,7 @@ pub struct ExtBlkRef {
 }
 
 impl Deserializable for ExtBlkRef {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.end_lt = cell.get_next_u64()?;
         self.seq_no = cell.get_next_u32()?;
         self.root_hash.read_from(cell)?;
@@ -664,7 +666,7 @@ impl Deserializable for ExtBlkRef {
 }
 
 impl Serializable for ExtBlkRef {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.end_lt.write_to(cell)?;
         self.seq_no.write_to(cell)?;
         self.root_hash.write_to(cell)?;
@@ -743,7 +745,7 @@ impl ShardIdent {
         self.workchain_id as u32
     }
 
-    pub fn contains_account(&self, mut acc_addr: AccountId) -> BlockResult<bool> {
+    pub fn contains_account(&self, mut acc_addr: AccountId) -> Result<bool> {
         Ok(self.shard_pfx_bits == 0
             || acc_addr.get_next_int(self.shard_pfx_bits as usize)?
                 == self.shard_prefix >> 64 - self.shard_pfx_bits)
@@ -762,13 +764,15 @@ impl ShardIdent {
 }
 
 impl Deserializable for ShardIdent {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let constructor_and_pfx = cell.get_next_byte()?;
         // check for 2 high bits to be zero
         if constructor_and_pfx & 0xC0 != 0 {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "2 high bits in ShardIdent's first byte have to be zero".into()
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    "2 high bits in ShardIdent's first byte have to be zero".to_string()
+                )
+            )
         }
         self.shard_pfx_bits = constructor_and_pfx & 0x3F;
         self.workchain_id = cell.get_next_u32()? as i32;
@@ -779,7 +783,7 @@ impl Deserializable for ShardIdent {
 }
 
 impl Serializable for ShardIdent {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         (self.shard_pfx_bits & 0x3F).write_to(cell)?;
         self.workchain_id.write_to(cell)?;
         self.shard_prefix.write_to(cell)?;
@@ -811,7 +815,7 @@ impl Default for ShardState {
 }
 
 impl Deserializable for ShardState {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.clone().get_next_u32()?;
         *self = match tag {
             SHARD_STATE_UNSPLIT_PFX => {
@@ -825,10 +829,12 @@ impl Deserializable for ShardState {
                 ShardState::SplitState(ss)
             }
             _ => {
-                bail!(BlockErrorKind::InvalidConstructorTag {
-                    t: tag,
-                    s: "ShardState".into()
-                })
+                failure::bail!(
+                    BlockError::InvalidConstructorTag {
+                        t: tag,
+                        s: "ShardState".to_string()
+                    }
+                )
             }
         };
 
@@ -840,7 +846,7 @@ const SHARD_STATE_SPLIT_PFX: u32 = 0x5f327da5;
 const SHARD_STATE_UNSPLIT_PFX: u32 = 0x9023afe2;
 
 impl Serializable for ShardState {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             ShardState::UnsplitState(ss) => {
                 cell.append_u32(SHARD_STATE_UNSPLIT_PFX)?;
@@ -875,13 +881,15 @@ impl ShardStateSplit {
 }
 
 impl Deserializable for ShardStateSplit {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != SHARD_STATE_SPLIT_PFX {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag,
-                s: "ShardStateSplit".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag,
+                    s: "ShardStateSplit".to_string()
+                }
+            )
         }
         self.left
             .read_from(&mut cell.checked_drain_reference()?.into())?;
@@ -892,7 +900,7 @@ impl Deserializable for ShardStateSplit {
 }
 
 impl Serializable for ShardStateSplit {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u32(SHARD_STATE_SPLIT_PFX)?;
         cell.append_reference(self.left.write_to_new_cell()?);
         cell.append_reference(self.right.write_to_new_cell()?);
@@ -1012,11 +1020,11 @@ impl ShardStateUnsplit {
         self.min_ref_mc_seqno = value
     }
 
-    pub fn read_out_msg_queue_info(&self) -> BlockResult<OutMsgQueueInfo> {
+    pub fn read_out_msg_queue_info(&self) -> Result<OutMsgQueueInfo> {
         self.out_msg_queue_info.read_struct()
     }
 
-    pub fn write_out_msg_queue_info(&mut self, value: &OutMsgQueueInfo) -> BlockResult<()> {
+    pub fn write_out_msg_queue_info(&mut self, value: &OutMsgQueueInfo) -> Result<()> {
         self.out_msg_queue_info.write_struct(value)
     }
 
@@ -1028,15 +1036,15 @@ impl ShardStateUnsplit {
         self.before_split = value
     }
 
-    pub fn read_accounts(&self) -> BlockResult<ShardAccounts> {
+    pub fn read_accounts(&self) -> Result<ShardAccounts> {
         self.accounts.read_struct()
     }
 
-    pub fn write_accounts(&mut self, value: &ShardAccounts) -> BlockResult<()> {
+    pub fn write_accounts(&mut self, value: &ShardAccounts) -> Result<()> {
         self.accounts.write_struct(value)
     }
     
-    pub fn insert_account(&mut self, acc: &ShardAccount) -> BlockResult<()> {
+    pub fn insert_account(&mut self, acc: &ShardAccount) -> Result<()> {
         // TODO: split depth
         let depth_balance_info = DepthBalanceInfo::new(0, acc.read_account()?.get_balance().unwrap())?;
         let mut accounts = self.read_accounts()?;
@@ -1092,14 +1100,14 @@ impl ShardStateUnsplit {
         self.master_ref.as_mut()
     }
 
-    pub fn read_custom(&self) -> BlockResult<Option<McStateExtra>> {
+    pub fn read_custom(&self) -> Result<Option<McStateExtra>> {
         match self.custom {
             None => Ok(None),
             Some(ref custom) => Ok(Some(custom.read_struct()?))
         }
     }
 
-    pub fn write_custom(&mut self, value: Option<McStateExtra>) -> BlockResult<()> {
+    pub fn write_custom(&mut self, value: Option<McStateExtra>) -> Result<()> {
         self.custom = match value {
             Some(custom) => Some(ChildCell::with_struct(&custom)?),
             None => None
@@ -1110,13 +1118,15 @@ impl ShardStateUnsplit {
 
 impl Deserializable for ShardStateUnsplit {
 
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != SHARD_STATE_UNSPLIT_PFX {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "ShardStateUnsplit".into()
-            });
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "ShardStateUnsplit".to_string()
+                }
+            )
         }
         self.global_id.read_from(cell)?;
         self.shard_id.read_from(cell)?;
@@ -1150,7 +1160,7 @@ impl Deserializable for ShardStateUnsplit {
 }
 
 impl Serializable for ShardStateUnsplit {
-    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_u32(SHARD_STATE_UNSPLIT_PFX)?;
         self.global_id.write_to(builder)?;
         self.shard_id.write_to(builder)?;
@@ -1213,7 +1223,7 @@ const BLOCK_TAG: u32 = 0x11ef55aa;
 const BLOCK_INFO_TAG: u32 = 0x9bc7a987;
 
 impl Serializable for BlockInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         assert!(self.seq_no != 0);
         assert!((self.vert_seq_no == 0) ^ self.prev_vert_ref.is_some());
 
@@ -1283,7 +1293,7 @@ impl Serializable for BlockInfo {
 const VALUE_FLOW_TAG: u32 = 0xb8e48dfb;
 
 impl Serializable for ValueFlow {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u32(VALUE_FLOW_TAG)?;
 
         let mut cell1 = BuilderData::new();
@@ -1306,13 +1316,15 @@ impl Serializable for ValueFlow {
 }
 
 impl Deserializable for ValueFlow {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != VALUE_FLOW_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag,
-                s: "ValueFlow".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag,
+                    s: "ValueFlow".to_string()
+                }
+            )
         }
         let ref mut cell1 = cell.checked_drain_reference()?.into();
         self.from_prev_blk.read_from(cell1)?;
@@ -1331,13 +1343,15 @@ impl Deserializable for ValueFlow {
 }
 
 impl Deserializable for BlockInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != BLOCK_INFO_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag,
-                s: "BlockInfo".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag,
+                    s: "BlockInfo".to_string()
+                }
+            )
         }
         self.version = cell.get_next_u32()?;
         
@@ -1355,14 +1369,16 @@ impl Deserializable for BlockInfo {
         self.seq_no = cell.get_next_u32()?;
         self.vert_seq_no = cell.get_next_u32()?;
         if self.vert_seqno_incr > self.vert_seq_no {
-            bail!(BlockErrorKind::InvalidData {
-                msg: format!("BlockInfo {} < {}", self.vert_seqno_incr, self.vert_seq_no)
-            })
+            failure::bail!(
+                BlockError::InvalidData(
+                    format!("BlockInfo {} < {}", self.vert_seqno_incr, self.vert_seq_no)
+                )
+            )
         }
         if self.seq_no < 1 {
-            bail!(BlockErrorKind::InvalidData {
-                msg: format!("BlockInfo {}", self.seq_no)
-            })
+            failure::bail!(
+                BlockError::InvalidData(format!("BlockInfo {}", self.seq_no))
+            )
         }
         self.shard.read_from(cell)?;
         self.gen_utime.0 = cell.get_next_u32()?;
@@ -1405,13 +1421,15 @@ impl Deserializable for BlockInfo {
 }
 
 impl Deserializable for Block {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != BLOCK_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag,
-                s: "Block".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag,
+                    s: "Block".to_string()
+                }
+            )
         }
         self.global_id.read_from(cell)?;
         self.info
@@ -1422,20 +1440,18 @@ impl Deserializable for Block {
             .read_from(&mut cell.checked_drain_reference()?.into())?;
         self.extra
             .read_from(&mut cell.checked_drain_reference()?.into())?;
-
         Ok(())
     }
 }
 
 impl Serializable for Block {
-    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_u32(BLOCK_TAG)?;
         builder.append_u32(self.global_id)?;
         builder.append_reference(self.info.write_to_new_cell()?); // info:^BlockInfo
         builder.append_reference(self.value_flow.write_to_new_cell()?); // value_flow:^ValueFlow
         builder.append_reference(self.state_update.write_to_new_cell()?); // state_update:^(MERKLE_UPDATE ShardState)
         builder.append_reference(self.extra.write_to_new_cell()?); // extra:^BlockExtra
-
         Ok(())
     }
 }
@@ -1494,7 +1510,7 @@ impl TopBlockDescr {
 const TOP_BLOCK_DESCR_TAG: u8 = 0xD5;
 
 impl Serializable for TopBlockDescr {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         TOP_BLOCK_DESCR_TAG.write_to(cell)?;
         self.proof_for.write_to(cell)?;
         self.signatures.write_maybe_to(cell)?;
@@ -1514,13 +1530,15 @@ impl Serializable for TopBlockDescr {
 }
 
 impl Deserializable for TopBlockDescr {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
         if tag != TOP_BLOCK_DESCR_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag.into(),
-                s: "TopBlockDescr".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag.into(),
+                    s: "TopBlockDescr".to_string()
+                }
+            )
         }
         self.proof_for.read_from(slice)?;
         self.signatures = BlockSignatures::read_maybe_from(slice)?;
@@ -1530,13 +1548,13 @@ impl Deserializable for TopBlockDescr {
             for i in (0..len).rev() {
                 ensure!(
                     slice.remaining_references() != 0,
-                    BlockError::from(ExceptionCode::CellUnderflow)
+                    BlockError::TvmException(ExceptionCode::CellUnderflow)
                 );
                 self.chain.push(slice.checked_drain_reference()?.clone());
                 if i != 0 {
                     ensure!(
                         slice.remaining_references() != 0,
-                        BlockError::from(ExceptionCode::CellUnderflow)
+                        BlockError::TvmException(ExceptionCode::CellUnderflow)
                     );
                     slice = slice.checked_drain_reference()?.into();
                 }

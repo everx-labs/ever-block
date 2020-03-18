@@ -39,7 +39,7 @@ impl Default for AccStatusChange {
 }
 
 impl Serializable for AccStatusChange {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let (tag, bits_count) = match self {
             AccStatusChange::Unchanged => (0b0, 1),
             AccStatusChange::Frozen => (0b10, 2),
@@ -51,7 +51,7 @@ impl Serializable for AccStatusChange {
 }
 
 impl Deserializable for AccStatusChange {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = match cell.get_next_bit()? {
             false => AccStatusChange::Unchanged,
             true => match cell.get_next_bit()? {
@@ -82,7 +82,7 @@ impl Default for ComputeSkipReason {
 }
 
 impl Serializable for ComputeSkipReason {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let tag = match self {
             ComputeSkipReason::NoState => 0b0,
             ComputeSkipReason::BadState => 0b01,
@@ -94,15 +94,17 @@ impl Serializable for ComputeSkipReason {
 }
 
 impl Deserializable for ComputeSkipReason {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = match cell.get_next_bits(2)?[0] {
             0b00000000 => ComputeSkipReason::NoState,
             0b01000000 => ComputeSkipReason::BadState,
             0b10000000 => ComputeSkipReason::NoGas,
-            tag => bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "ComputeSkipReason".into()
-            })
+            tag => failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "ComputeSkipReason".to_string()
+                }
+            )
         };
         Ok(())
     }
@@ -192,7 +194,7 @@ impl Default for TrComputePhase {
 }
 
 impl Serializable for TrComputePhase {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if let TrComputePhase::Skipped(s) = self {
             cell.append_bit_zero()?; // tr_phase_compute_skipped$0
             s.reason.write_to(cell)?; // reason:ComputeSkipReason
@@ -225,7 +227,7 @@ impl Serializable for TrComputePhase {
 }
 
 impl Deserializable for TrComputePhase {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
 
         if !cell.get_next_bit()? {
             // tr_phase_compute_skipped$0clear
@@ -285,7 +287,7 @@ impl TrStoragePhase {
 }
 
 impl Serializable for TrStoragePhase {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.storage_fees_collected.write_to(cell)?;
         self.storage_fees_due.write_maybe_to(cell)?;
         self.status_change.write_to(cell)?;
@@ -295,7 +297,7 @@ impl Serializable for TrStoragePhase {
 }
 
 impl Deserializable for TrStoragePhase {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.storage_fees_collected.read_from(cell)?;
         self.storage_fees_due = Grams::read_maybe_from(cell)?;
         self.status_change.read_from(cell)?;
@@ -345,7 +347,7 @@ impl Default for TrBouncePhase {
 }
 
 impl Serializable for TrBouncePhase {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             TrBouncePhase::Negfunds => {
                 //tr_phase_bounce_negfunds$00
@@ -370,7 +372,7 @@ impl Serializable for TrBouncePhase {
 }
 
 impl Deserializable for TrBouncePhase {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         if cell.get_next_bit()? {
             // tr_phase_bounce_ok$1
             let mut bp = TrBouncePhaseOk::default();
@@ -444,7 +446,7 @@ impl Default for TrCreditPhase {
 }
 
 impl Serializable for TrCreditPhase {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.due_fees_collected.write_maybe_to(cell)?;
         self.credit.write_to(cell)?;
         Ok(())
@@ -452,7 +454,7 @@ impl Serializable for TrCreditPhase {
 }
 
 impl Deserializable for TrCreditPhase {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.due_fees_collected = Grams::read_maybe_from(cell)?;
         self.credit.read_from(cell)?;
         Ok(())
@@ -477,7 +479,7 @@ impl Default for TransactionTickTock {
 }
 
 impl Serializable for TransactionTickTock {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             TransactionTickTock::Tick => cell.append_bit_zero()?,
             TransactionTickTock::Tock => cell.append_bit_one()?,
@@ -487,7 +489,7 @@ impl Serializable for TransactionTickTock {
 }
 
 impl Deserializable for TransactionTickTock {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         if cell.get_next_bit()? {
             *self =  TransactionTickTock::Tock
         } else {
@@ -516,7 +518,7 @@ pub struct TrActionPhase {
 }
 
 impl Serializable for TrActionPhase {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bit_bool(self.success)? // success:Bool
             .append_bit_bool(self.valid)? // valid:Bool
             .append_bit_bool(self.no_funds)?; // no_funds:Bool
@@ -536,7 +538,7 @@ impl Serializable for TrActionPhase {
 }
 
 impl Deserializable for TrActionPhase {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.success = cell.get_next_bit()?; // success:Bool
         self.valid = cell.get_next_bit()?; // valid:Bool
         self.no_funds = cell.get_next_bit()?; // no_funds:Bool
@@ -573,14 +575,18 @@ pub struct SplitMergeInfo {
 }
 
 impl Serializable for SplitMergeInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if 0 != self.cur_shard_pfx_len & 0b11000000 {
-            bail!(BlockErrorKind::InvalidData { msg: "self.cur_shard_pfx_len is too long".into() });
+            failure::bail!(
+                BlockError::InvalidData("self.cur_shard_pfx_len is too long".to_string())
+            )
         } else {
             cell.append_bits(self.cur_shard_pfx_len as usize, 6)?;
         }
         if 0 != self.acc_split_depth & 0b11000000 {
-            bail!(BlockErrorKind::InvalidData { msg: "self.acc_split_depth is too long".into() });
+            failure::bail!(
+                BlockError::InvalidData("self.acc_split_depth is too long".to_string()) 
+            )
         } else {
             cell.append_bits(self.acc_split_depth as usize, 6)?;
         }
@@ -591,7 +597,7 @@ impl Serializable for SplitMergeInfo {
 }
 
 impl Deserializable for SplitMergeInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.cur_shard_pfx_len = cell.get_next_bits(6)?[0] >> 2;
         self.acc_split_depth = cell.get_next_bits(6)?[0] >> 2;
         self.this_addr.read_from(cell)?;
@@ -624,7 +630,7 @@ pub struct TransactionDescrOrdinary {
 }
 
 impl Serializable for TransactionDescrOrdinary {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         // constructor tag is written in TransactionDescr::write_to
         cell.append_bit_bool(self.credit_first)?;
         self.storage_ph.write_maybe_to(cell)?;
@@ -644,7 +650,7 @@ impl Serializable for TransactionDescrOrdinary {
 }
 
 impl Deserializable for TransactionDescrOrdinary {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         // constructor tag is read in TransactionDescr::write_to
         self.credit_first = cell.get_next_bit()?;
         self.storage_ph = TrStoragePhase::read_maybe_from(cell)?;
@@ -704,7 +710,7 @@ impl TransactionDescrTickTock {
 }
 
 impl Serializable for TransactionDescrTickTock {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.tt.write_to(cell)?;
         self.storage.write_to(cell)?;
         self.compute_ph.write_to(cell)?;
@@ -721,7 +727,7 @@ impl Serializable for TransactionDescrTickTock {
 }
 
 impl Deserializable for TransactionDescrTickTock {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         // self.tt.read_from(cell)?;
         self.storage.read_from(cell)?;
         self.compute_ph.read_from(cell)?;
@@ -756,7 +762,7 @@ pub struct TransactionDescrSplitPrepare {
 }
 
 impl Serializable for TransactionDescrSplitPrepare {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         self.compute_ph.write_to(cell)?;
         cell.append_bit_bool(self.action.is_some())?;
@@ -772,7 +778,7 @@ impl Serializable for TransactionDescrSplitPrepare {
 }
 
 impl Deserializable for TransactionDescrSplitPrepare {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.split_info.read_from(cell)?;
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
@@ -802,7 +808,7 @@ pub struct TransactionDescrSplitInstall {
 }
 
 impl Serializable for TransactionDescrSplitInstall {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         cell.append_bit_bool(self.installed)?;
         cell.append_reference(self.prepare_transaction.write_to_new_cell()?);
@@ -811,7 +817,7 @@ impl Serializable for TransactionDescrSplitInstall {
 }
 
 impl Deserializable for TransactionDescrSplitInstall {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.split_info.read_from(cell)?;
         self.installed = cell.get_next_bit()?;
 
@@ -836,7 +842,7 @@ pub struct TransactionDescrMergePrepare {
 }
 
 impl Serializable for TransactionDescrMergePrepare {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         self.storage_ph.write_to(cell)?;
         cell.append_bit_bool(self.aborted)?;
@@ -845,7 +851,7 @@ impl Serializable for TransactionDescrMergePrepare {
 }
 
 impl Deserializable for TransactionDescrMergePrepare {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.split_info.read_from(cell)?;
         self.storage_ph.read_from(cell)?;
         self.aborted = cell.get_next_bit()?;
@@ -875,7 +881,7 @@ pub struct TransactionDescrMergeInstall {
 }
 
 impl Serializable for TransactionDescrMergeInstall {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         cell.append_reference(self.prepare_transaction.write_to_new_cell()?);
         self.credit_ph.write_maybe_to(cell)?;
@@ -893,7 +899,7 @@ impl Serializable for TransactionDescrMergeInstall {
 }
 
 impl Deserializable for TransactionDescrMergeInstall {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.split_info.read_from(cell)?;
 
         let tr = Transaction::construct_from(&mut cell.checked_drain_reference()?.into())?;
@@ -1009,7 +1015,7 @@ impl TransactionDescr {
 }
 
 impl Serializable for TransactionDescr {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             TransactionDescr::Ordinary(o) => {
                 cell.append_bits(0b0000, 4)?;
@@ -1045,7 +1051,7 @@ impl Serializable for TransactionDescr {
 }
 
 impl Deserializable for TransactionDescr {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         match cell.get_next_bits(4)?[0] {
             0b0000_0000 => {
                 let mut o = TransactionDescrOrdinary::default();
@@ -1087,10 +1093,12 @@ impl Deserializable for TransactionDescr {
                 mi.read_from(cell)?;
                 *self = TransactionDescr::MergeInstall(mi);
             }
-            tag => bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "TransactionDescr".into()
-            })
+            tag => failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "TransactionDescr".to_string()
+                }
+            )
         }
         Ok(())
     }
@@ -1116,7 +1124,7 @@ impl HashUpdate {
 }
 
 impl Serializable for HashUpdate {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(HASH_UPDATE_TAG)?;
         self.old_hash.write_to(cell)?;
         self.new_hash.write_to(cell)?;
@@ -1125,13 +1133,15 @@ impl Serializable for HashUpdate {
 }
 
 impl Deserializable for HashUpdate {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != HASH_UPDATE_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "HashUpdate".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "HashUpdate".to_string()
+                }
+            )
         }
         self.old_hash.read_from(cell)?;
         self.new_hash.read_from(cell)?;
@@ -1142,14 +1152,14 @@ impl Deserializable for HashUpdate {
 struct U15(i16);
 
 impl Serializable for U15 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(self.0 as usize, 15)?;
         Ok(())
     }
 }
 
 impl Deserializable for U15 {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.0 = slice.get_next_int(15)? as i16;
         Ok(())
     }
@@ -1214,7 +1224,7 @@ impl Transaction {
         }
     }
 
-    pub fn with_account_and_message(account: &Account, msg: &Message, lt: u64) -> BlockResult<Self> {
+    pub fn with_account_and_message(account: &Account, msg: &Message, lt: u64) -> Result<Self> {
         Ok(
             Transaction {
                 account_addr: account.get_id().unwrap_or(msg.int_dst_account_id().unwrap()),
@@ -1295,7 +1305,7 @@ impl Transaction {
         &self.total_fees
     }
 
-    pub fn read_in_msg(&self) -> BlockResult<Option<Message>> {
+    pub fn read_in_msg(&self) -> Result<Option<Message>> {
         Ok(
             match self.in_msg {
                 Some(ref in_msg) => Some(in_msg.read_struct()?),
@@ -1304,7 +1314,7 @@ impl Transaction {
         )
     }
 
-    pub fn write_in_msg(&mut self, value: Option<&Message>) -> BlockResult<()> {
+    pub fn write_in_msg(&mut self, value: Option<&Message>) -> Result<()> {
         self.in_msg = value.map(|v| ChildCell::with_struct(v)).transpose()?;
         Ok(())
     }
@@ -1314,18 +1324,18 @@ impl Transaction {
     }
 
     /// get output message by index
-    pub fn get_out_msg(&self, index: i16) -> BlockResult<Option<Message>> {
+    pub fn get_out_msg(&self, index: i16) -> Result<Option<Message>> {
         Ok(self.out_msgs.get(&U15(index))?.map(|msg| msg.0))
     }
 
     /// iterate output messages
-    pub fn iterate_out_msgs<F>(&self, f: &mut F) -> BlockResult<()>
-    where F: FnMut(Message) -> BlockResult<bool> {
+    pub fn iterate_out_msgs<F>(&self, f: &mut F) -> Result<()>
+    where F: FnMut(Message) -> Result<bool> {
         self.out_msgs.iterate(&mut |msg| f(msg.0)).map(|_|())
     }
 
     /// add output message to Hashmap
-    pub fn add_out_message(&mut self, mgs: &Message) -> BlockResult<()> {
+    pub fn add_out_message(&mut self, mgs: &Message) -> Result<()> {
         let msg_cell = mgs.write_to_new_cell()?.into();
 
         let mut descr = self.read_description()?;
@@ -1341,11 +1351,11 @@ impl Transaction {
     }
 
 
-    pub fn read_state_update(&self) -> BlockResult<HashUpdate> {
+    pub fn read_state_update(&self) -> Result<HashUpdate> {
         self.state_update.read_struct()
     }
 
-    pub fn write_state_update(&mut self, value: &HashUpdate) -> BlockResult<()> {
+    pub fn write_state_update(&mut self, value: &HashUpdate) -> Result<()> {
         self.state_update.write_struct(value)
     }
 
@@ -1353,11 +1363,11 @@ impl Transaction {
         self.state_update.cell()
     }
 
-    pub fn read_description(&self) -> BlockResult<TransactionDescr> {
+    pub fn read_description(&self) -> Result<TransactionDescr> {
         self.description.read_struct()
     }
 
-    pub fn write_description(&mut self, value: &TransactionDescr) -> BlockResult<()> {
+    pub fn write_description(&mut self, value: &TransactionDescr) -> Result<()> {
         self.description.write_struct(value)
     }
 
@@ -1379,7 +1389,7 @@ impl Transaction {
         self.now = now;
     }
 
-    pub fn prepare_proof(&self, block_root: &Cell) -> BlockResult<Cell> {
+    pub fn prepare_proof(&self, block_root: &Cell) -> Result<Cell> {
         // proof for transaction and block info in block
 
         let usage_tree = UsageTree::with_root(block_root.clone());
@@ -1391,14 +1401,19 @@ impl Transaction {
             .read_extra()?
             .read_account_blocks()?
             .get(self.account_id())?
-                .ok_or(BlockErrorKind::InvalidArg { 
-                    msg: "Tranaction isn't belonged given block (can't find account block)".into() 
-                })?
+            .ok_or(
+                BlockError::InvalidArg(
+                    "Transaction doesn't belong to given block \
+                     (can't find account block)".to_string() 
+                )
+            )?
             .transactions()
             .get(&self.logical_time())?
-                .ok_or(BlockErrorKind::InvalidArg { 
-                    msg:"Tranaction isn't belonged given block".into()
-                })?;
+            .ok_or(
+                BlockError::InvalidArg(
+                    "Transaction doesn't belong to given block".to_string()
+                )
+            )?;
 
         MerkleProof::create_by_usage_tree(block_root, &usage_tree)
             .and_then(|proof| proof.write_to_new_cell())
@@ -1448,7 +1463,7 @@ impl Default for Transaction {
 const TRANSACTION_TAG : usize = 0x7;
 
 impl Serializable for Transaction {
-    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
 
         builder.append_bits(TRANSACTION_TAG, 4)?;
         self.account_addr.write_to(builder)?; // account_addr: AccountId,
@@ -1481,13 +1496,15 @@ impl Serializable for Transaction {
 }
 
 impl Deserializable for Transaction {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_int(4)? as usize;
         if tag != TRANSACTION_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "Transaction".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "Transaction".to_string()
+                }
+            )
         }
         self.account_addr.read_from(cell)?; // account_addr
         self.lt = cell.get_next_u64()?; // lt
@@ -1547,12 +1564,12 @@ impl AccountBlock {
     }
 
     /// add transaction to block
-    pub fn add_transaction(&mut self, transaction: &Transaction) -> BlockResult<()> {
+    pub fn add_transaction(&mut self, transaction: &Transaction) -> Result<()> {
         self.add_serialized_transaction(transaction, &transaction.write_to_new_cell()?.into())
     }
 
     /// append serialized transaction to block (use to increase speed)
-    pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> BlockResult<()> {
+    pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> Result<()> {
         if self.tr_count < 0 {
             self.tr_count = self.transactions.len()? as isize;
         }
@@ -1566,12 +1583,12 @@ impl AccountBlock {
     }
 
     /// get hash update for Account
-    pub fn read_state_update(&self) -> BlockResult<HashUpdate> {
+    pub fn read_state_update(&self) -> Result<HashUpdate> {
         self.state_update.read_struct()
     }
 
     /// set hash update for Account
-    pub fn write_state_update(&mut self, state_update: &HashUpdate) -> BlockResult<()> {
+    pub fn write_state_update(&mut self, state_update: &HashUpdate) -> Result<()> {
         self.state_update.write_struct(state_update)
     }
 
@@ -1590,28 +1607,29 @@ impl AccountBlock {
         self.transactions.root_extra()
     }
     /// count of transactions
-    pub fn transaction_count(&self) -> BlockResult<usize> {
+    pub fn transaction_count(&self) -> Result<usize> {
         if self.tr_count < 0 {
-            bail!(BlockErrorKind::InvalidData { msg: "self.tr_count is negative".into() });
+            failure::bail!(BlockError::InvalidData("self.tr_count is negative".to_string()))
         }
         self.transactions.len()
     }
     /// update
-    pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> BlockResult<()> {
+    pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> Result<()> {
         if self.transactions.is_empty() {
-            bail!(BlockErrorKind::InvalidData { msg: "No transactions in account block".into() })
+            failure::bail!(BlockError::InvalidData("No transactions in account block".to_string()))
         } else if let Some(transaction) = self.transactions.single()? {
             // if block has only one transaction for account just copy state update from transaction
             self.write_state_update(&transaction.0.read_state_update()?)?;
         } else {
             // otherwice it is need to calculate Hash update
-            let old_hash = old_state.read_accounts()?.get_as_slice(&self.account_addr)?
+            let old_hash = old_state.read_accounts()?
+                .get_as_slice(&self.account_addr)?
                 .unwrap_or_default()
                 .into_cell()
                 .repr_hash();
-            let new_hash = 
-                new_state.read_accounts()?.get_as_slice(&self.account_addr)?
-                .ok_or(BlockErrorKind::Other { msg: "Account should be in new shard state".into() })?
+            let new_hash = new_state.read_accounts()?
+                .get_as_slice(&self.account_addr)?
+                .ok_or(BlockError::Other("Account should be in new shard state".to_string()))?
                 .into_cell()
                 .repr_hash();
             self.write_state_update(&HashUpdate::with_hashes(old_hash, new_hash))?;
@@ -1619,13 +1637,13 @@ impl AccountBlock {
         Ok(())
     }
 
-    pub fn transaction_iterate<F> (&self, p: &mut F) -> BlockResult<bool>
-    where F: FnMut(Transaction) -> BlockResult<bool> {
+    pub fn transaction_iterate<F> (&self, p: &mut F) -> Result<bool>
+    where F: FnMut(Transaction) -> Result<bool> {
         self.transactions.iterate(&mut |transaction| p(transaction.0))
     }
 
-    pub fn transaction_iterate_full<F> (&self, p: &mut F) -> BlockResult<bool>
-    where F: FnMut(u64, Cell, CurrencyCollection) -> BlockResult<bool> {
+    pub fn transaction_iterate_full<F> (&self, p: &mut F) -> Result<bool>
+    where F: FnMut(u64, Cell, CurrencyCollection) -> Result<bool> {
         self.transactions.iterate_slices_with_keys_and_aug(&mut |ref mut key, transaction, aug|
             p(key.get_next_u64()?, transaction.reference(0)?, aug))
     }
@@ -1638,7 +1656,7 @@ impl AccountBlock {
 const ACCOUNT_BLOCK_TAG : usize = 0x5;
 
 impl Serializable for AccountBlock {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(ACCOUNT_BLOCK_TAG, 4)?;
         self.account_addr.write_to(cell)?;                                  // account_addr: AccountId,
         self.transactions.write_hashmap_root(cell)?;
@@ -1648,13 +1666,15 @@ impl Serializable for AccountBlock {
 }
 
 impl Deserializable for AccountBlock {
-    fn read_from(&mut self, slice: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(4)? as usize;
         if tag != ACCOUNT_BLOCK_TAG {
-            bail!(BlockErrorKind::InvalidConstructorTag {
-                t: tag as u32,
-                s: "AccountBlock".into()
-            })
+            failure::bail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "AccountBlock".to_string()
+                }
+            )
         }
         self.account_addr.read_from(slice)?;                                 // account_addr
 
@@ -1679,7 +1699,7 @@ impl ShardAccountBlocks {
 
     /// insert new AccountBlock or replace existing
     // TODO: will be removed when acc_id as slice and set as type
-    pub fn insert(&mut self, account_block: &AccountBlock) -> BlockResult<()> {
+    pub fn insert(&mut self, account_block: &AccountBlock) -> Result<()> {
         self.set(
             &account_block.account_addr,
             &account_block,
@@ -1694,11 +1714,11 @@ impl ShardAccountBlocks {
     // }
 
     /// adds transaction to account by id from transaction
-    pub fn add_transaction(&mut self, transaction: &Transaction) -> BlockResult<()> {
+    pub fn add_transaction(&mut self, transaction: &Transaction) -> Result<()> {
         self.add_serialized_transaction(transaction, &transaction.write_to_new_cell()?.into())
     }
 
-    pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> BlockResult<()> {
+    pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> Result<()> {
         let account_id = transaction.account_id();
         // get AccountBlock for accountId, if not exist, create it
         let mut account_block = self.get(account_id)?.unwrap_or(

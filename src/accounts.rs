@@ -83,7 +83,7 @@ impl StorageUsed {
         }
     }
 
-    pub fn calculate_for_struct<T: Serializable>(value: &T) -> BlockResult<StorageUsed> {
+    pub fn calculate_for_struct<T: Serializable>(value: &T) -> Result<StorageUsed> {
         let root_cell = value.write_to_new_cell()?.into();
         Ok(Self::calculate_for_cell(&root_cell))
     }
@@ -105,7 +105,7 @@ impl StorageUsed {
 }
 
 impl Serializable for StorageUsed {
-    fn write_to(&self, output: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, output: &mut BuilderData) -> Result<()> {
         self.cells.write_to(output)?; //cells:(VarUInteger 7)
         self.bits.write_to(output)?; //bits:(VarUInteger 7)
         self.public_cells.write_to(output)?; //public_cells:(VarUInteger 7)
@@ -114,7 +114,7 @@ impl Serializable for StorageUsed {
 }
 
 impl Deserializable for StorageUsed {
-    fn read_from(&mut self, data: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, data: &mut SliceData) -> Result<()> {
         self.cells.read_from(data)?; //cells:(VarUInteger 7)
         self.bits.read_from(data)?; //bits:(VarUInteger 7)
         self.public_cells.read_from(data)?; //public_cells:(VarUInteger 7)
@@ -159,7 +159,7 @@ impl StorageUsedShort {
         }
     }
 
-    pub fn calculate_for_struct<T: Serializable>(value: &T) -> BlockResult<StorageUsedShort> {
+    pub fn calculate_for_struct<T: Serializable>(value: &T) -> Result<StorageUsedShort> {
         let root_cell = value.write_to_new_cell()?.into();
         Ok(Self::calculate_for_cell(&root_cell))
     }
@@ -187,7 +187,7 @@ impl StorageUsedShort {
 }
 
 impl Serializable for StorageUsedShort {
-    fn write_to(&self, output: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, output: &mut BuilderData) -> Result<()> {
         self.cells.write_to(output)?; //cells:(VarUInteger 7)
         self.bits.write_to(output)?; //cells:(VarUInteger 7)
         Ok(())
@@ -195,7 +195,7 @@ impl Serializable for StorageUsedShort {
 }
 
 impl Deserializable for StorageUsedShort {
-    fn read_from(&mut self, data: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, data: &mut SliceData) -> Result<()> {
         self.cells.read_from(data)?; //cells:(VarUInteger 7)
         self.bits.read_from(data)?; //cells:(VarUInteger 7)
         Ok(())
@@ -236,7 +236,7 @@ impl StorageInfo {
 }
 
 impl Serializable for StorageInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.used.write_to(cell)?;
         cell.append_u32(self.last_paid)?;
         self.due_payment.write_maybe_to(cell)?;
@@ -245,7 +245,7 @@ impl Serializable for StorageInfo {
 }
 
 impl Deserializable for StorageInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.used.read_from(cell)?;
         self.last_paid = cell.get_next_u32()?;
         self.due_payment = Grams::read_maybe_from(cell)?;
@@ -289,7 +289,7 @@ impl Default for AccountStatus {
 
 /// serialize AccountStatus
 impl Serializable for AccountStatus {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         // write to cell only prefix
         match self {
             AccountStatus::AccStateUninit => cell.append_bits(0b00, 2)?,
@@ -303,7 +303,7 @@ impl Serializable for AccountStatus {
 
 // deserialize AccountStatus
 impl Deserializable for AccountStatus {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         // read value of AccountStatus from cell
         let flags = cell.get_next_bits(2)?;
         *self = match flags[0] & 0xC0 {
@@ -311,7 +311,7 @@ impl Deserializable for AccountStatus {
             0x80 => AccountStatus::AccStateActive,
             0x40 => AccountStatus::AccStateFrozen,
             0xC0 => AccountStatus::AccStateNonexist,
-            _ => bail!(BlockErrorKind::Other { msg: "unreachable".into() }),
+            _ => failure::bail!(BlockError::Other("unreachable".to_string()))
         };
         Ok(())
     }
@@ -334,7 +334,7 @@ pub struct AccountStorage {
 }
 
 impl Serializable for AccountStorage {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.last_trans_lt.write_to(cell)?; //last_trans_lt:uint64
         self.balance.write_to(cell)?; //balance:CurrencyCollection
         self.state.write_to(cell)?; //state:AccountState
@@ -344,7 +344,7 @@ impl Serializable for AccountStorage {
 }
 
 impl Deserializable for AccountStorage {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.last_trans_lt.read_from(cell)?; //last_trans_lt:uint64
         self.balance.read_from(cell)?; //balance:CurrencyCollection
         self.state.read_from(cell)?; //state:AccountState
@@ -408,7 +408,7 @@ impl AccountState {
 }
 
 impl Serializable for AccountState {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             AccountState::AccountUninit => {
                 cell.append_bits(0b00, 2)?; // prefix AccountUninit
@@ -427,7 +427,7 @@ impl Serializable for AccountState {
 }
 
 impl Deserializable for AccountState {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         if cell.get_next_bit()? {
             // if state Active
             let mut state = StateInit::default();
@@ -461,7 +461,7 @@ pub struct AccountStuff {
 }
 
 impl Serializable for AccountStuff {
-    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         let mut storage_stat = self.storage_stat.clone();
         storage_stat.used = StorageUsed::calculate_for_struct(&self.storage)?;
 
@@ -474,7 +474,7 @@ impl Serializable for AccountStuff {
 }
 
 impl Deserializable for AccountStuff {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.addr.read_from(cell)?;
         self.storage_stat.read_from(cell)?;
         self.storage.read_from(cell)?;
@@ -542,7 +542,7 @@ impl Account {
     ///
     /// Create initialized account from "constructor message"
     ///
-    pub fn with_message(msg: &Message) -> BlockResult<Self> {
+    pub fn with_message(msg: &Message) -> Result<Self> {
         let mut storage = AccountStorage::default();
         let mut address = MsgAddressInt::default();
 
@@ -550,24 +550,30 @@ impl Account {
             CommonMsgInfo::IntMsgInfo(ref header) => {
                 storage.balance = header.value.clone();
                 address = header.dst.clone();
-            }
+            },
             CommonMsgInfo::ExtInMsgInfo(ref header) => {
                 address = header.dst.clone();
-            }
+            },
             _ => (),
         }
         if let Some(ref init) = msg.state_init() {
             //code must present in constructor message
             match init.code {
                 Some(_) => storage.state = AccountState::AccountActive(init.clone()),
-                None => bail!(BlockErrorKind::InvalidData {
-                        msg: "code field must present in StateInit in constructor message while creating account".into()
-                    }),
+                None => failure::bail!(
+                    BlockError::InvalidData(
+                        "code field must present in StateInit in constructor message  \
+                         while creating account".to_string()
+                    )
+                ),
             };
         } else {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "stateInit must present in constructor message while creating account".into()
-            });
+            failure::bail!(
+                BlockError::InvalidData(
+                    "stateInit must present in constructor message \
+                     while creating account".to_string()
+                )
+            )
         }
 
         let account = Account::Account(AccountStuff {
@@ -577,6 +583,7 @@ impl Account {
         });
         Ok(account)
     }
+
     #[warn(unused_variables)]
     // freeze account from active
     pub fn freeze_account(&mut self) {
@@ -625,7 +632,7 @@ impl Account {
         }
     }
 
-    pub fn update_storage_stat(&mut self) -> BlockResult<()> {
+    pub fn update_storage_stat(&mut self) -> Result<()> {
         if let Some(stuff) = self.stuff_mut() {
             stuff.storage_stat.used = StorageUsed::calculate_for_struct(&stuff.storage)?;
         }
@@ -633,7 +640,7 @@ impl Account {
     }
 
     /// getting statistic using storage for calculate storage/transfer fee
-    pub fn get_storage_stat(&self) -> BlockResult<StorageUsed> {
+    pub fn get_storage_stat(&self) -> Result<StorageUsed> {
         if let Some(stuff) = self.stuff() {
             Ok(StorageUsed::calculate_for_struct(&stuff.storage)?)
         } else {
@@ -642,7 +649,7 @@ impl Account {
     }
 
     /// getting statistic using storage short for calculate storage/transfer fee
-    pub fn get_storage_stat_short(&self) -> BlockResult<StorageUsedShort> {
+    pub fn get_storage_stat_short(&self) -> Result<StorageUsedShort> {
         if let Some(stuff) = self.stuff() {
             Ok(StorageUsedShort::calculate_for_struct(&stuff.storage)?)
         } else {
@@ -780,7 +787,7 @@ impl Account {
     }
 
     /// adding funds to account (for example, for credit phase transaction)
-    pub fn add_funds(&mut self, funds_to_add: &CurrencyCollection) -> BlockResult<()> {
+    pub fn add_funds(&mut self, funds_to_add: &CurrencyCollection) -> Result<()> {
         if let Some(stuff) = self.stuff_mut() {
             stuff.storage.balance.add(funds_to_add)?;
         }
@@ -788,7 +795,7 @@ impl Account {
     }
 
     /// subtraction funds from account (for example, rollback transaction)
-    pub fn sub_funds(&mut self, funds_to_sub: &CurrencyCollection) -> BlockResult<bool> {
+    pub fn sub_funds(&mut self, funds_to_sub: &CurrencyCollection) -> Result<bool> {
         if let Some(stuff) = self.stuff_mut() {
             stuff.storage.balance.sub(funds_to_sub)
         } else {
@@ -802,11 +809,9 @@ impl Account {
         }
     }
 
-    pub fn prepare_proof(&self, state_root: &Cell) -> BlockResult<Cell> {
+    pub fn prepare_proof(&self, state_root: &Cell) -> Result<Cell> {
         if self.is_none() {
-            bail!(BlockErrorKind::InvalidData {
-                msg: "Account cannot be None".into()
-            })
+            failure::bail!(BlockError::InvalidData("Account cannot be None".to_string()))
         } else {
             // proof for account in shard state
 
@@ -817,9 +822,13 @@ impl Account {
             ss
                 .read_accounts()?
                 .get(&self.get_addr().unwrap().get_address())?
-                    .ok_or(BlockErrorKind::InvalidArg {
-                        msg: "Account isn't belonged given shard state".into()
-                    })?
+                .ok_or(
+                    failure::err_msg(
+                        BlockError::InvalidArg(
+                            "Account doesn't belong to given shard state".to_string()
+                        )
+                    )
+                )?
                 .read_account()?;
 
             MerkleProof::create_by_usage_tree(state_root, &usage_tree)
@@ -836,7 +845,7 @@ impl Default for Account {
 }
 
 impl Serializable for Account {
-    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         if let Some(stuff) = self.stuff() {
             builder.append_bit_one()?;
             stuff.write_to(builder)?;
@@ -848,7 +857,7 @@ impl Serializable for Account {
 }
 
 impl Deserializable for Account {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = if cell.get_next_bit()? {
             Account::Account(AccountStuff::construct_from(cell)?)
         } else {
@@ -878,7 +887,7 @@ pub struct ShardAccount {
 }
 
 impl ShardAccount {
-    pub fn with_params(account: Account, last_trans_hash: UInt256, last_trans_lt: u64) -> BlockResult<Self> {
+    pub fn with_params(account: Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Self> {
         Ok(ShardAccount {
             account: ChildCell::with_struct(&account)?,
             last_trans_hash,
@@ -886,11 +895,11 @@ impl ShardAccount {
         })
     }
 
-    pub fn read_account(&self) -> BlockResult<Account> {
+    pub fn read_account(&self) -> Result<Account> {
         self.account.read_struct()
     }
 
-    pub fn write_account(&mut self, value: &Account) -> BlockResult<()> {
+    pub fn write_account(&mut self, value: &Account) -> Result<()> {
         self.account.write_struct(value)
     }
 
@@ -916,7 +925,7 @@ impl ShardAccount {
 }
 
 impl Serializable for ShardAccount {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_reference(self.account.write_to_new_cell()?);
         self.last_trans_hash.write_to(cell)?;
         self.last_trans_lt.write_to(cell)?;
@@ -925,7 +934,7 @@ impl Serializable for ShardAccount {
 }
 
 impl Deserializable for ShardAccount {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.account
             .read_from(&mut cell.checked_drain_reference()?.into())?;
         self.last_trans_hash.read_from(cell)?;

@@ -25,7 +25,7 @@ use AccountId;
 define_HashmapAugE!(ShardAccounts, 256, ShardAccount, DepthBalanceInfo);
 
 impl ShardAccounts {
-    pub fn insert(&mut self, split_depth: u8, account: Account, last_trans_hash: UInt256, last_trans_lt: u64) -> BlockResult<Option<AccountId>> {
+    pub fn insert(&mut self, split_depth: u8, account: Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Option<AccountId>> {
         match account.get_id() {
             Some(acc_id) => {
                 let depth_balance_info = DepthBalanceInfo::new(split_depth, account.get_balance().unwrap())?;
@@ -37,7 +37,7 @@ impl ShardAccounts {
         }
     }
 
-    pub fn account(&self, account_id: &AccountId) -> BlockResult<Option<ShardAccount>> {
+    pub fn account(&self, account_id: &AccountId) -> Result<Option<ShardAccount>> {
         Ok(self.get(account_id)?.map(|account| account))
     }
 }
@@ -50,7 +50,7 @@ pub struct DepthBalanceInfo {
 }
 
 impl DepthBalanceInfo {
-    pub fn new(split_depth: u8, balance: &CurrencyCollection) -> BlockResult<Self> {
+    pub fn new(split_depth: u8, balance: &CurrencyCollection) -> Result<Self> {
         Ok(Self {
             split_depth: Number5::from_u32(split_depth as u32, 30)?,
             balance: balance.clone(),
@@ -59,14 +59,14 @@ impl DepthBalanceInfo {
 }
 
 impl Augmentable for DepthBalanceInfo {
-    fn calc(&mut self, other: &Self) -> BlockResult<()> {
+    fn calc(&mut self, other: &Self) -> Result<()> {
         self.balance.calc(&other.balance)
         // TODO: do something with split_depth
     }
 }
 
 impl Deserializable for DepthBalanceInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.split_depth.read_from(cell)?;
         self.balance.read_from(cell)?;
         Ok(())
@@ -74,7 +74,7 @@ impl Deserializable for DepthBalanceInfo {
 }
 
 impl Serializable for DepthBalanceInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_depth.write_to(cell)?;
         self.balance.write_to(cell)?;
         Ok(())

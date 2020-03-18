@@ -13,7 +13,7 @@
 */
 
 use super::{
-    Block, BlockErrorKind, BlockResult, Deserializable, Serializable
+    Block, BlockError, Deserializable, Serializable
 };
 use ed25519_dalek::{PublicKey, Keypair, Signature, SIGNATURE_LENGTH};
 use sha2::{Digest, Sha256, Sha512};
@@ -21,6 +21,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::{Write, Read, Cursor};
 use cells_serialization::{BagOfCells, deserialize_tree_of_cells};
+use ton_types::Result;
 use {BuilderData, Cell, SliceData};
 use {ExceptionCode, UInt256};
 
@@ -36,18 +37,15 @@ pub struct BlockSignature(Signature);
 // 	s:uint256
 // = CryptoSignature;
 impl Serializable for BlockSignature {
-	fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+	fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
 		cell.append_raw(&self.0.to_bytes(), SIGNATURE_LENGTH * 8)?;
 		Ok(())
 	}
 }
 
 impl Deserializable for BlockSignature {
-	fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
-		self.0 = Signature::from_bytes(&cell.get_next_bytes(SIGNATURE_LENGTH)?)
-			.map_err(|e| BlockErrorKind::Signature {
-				inner: e
-			})?;
+	fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+		self.0 = Signature::from_bytes(&cell.get_next_bytes(SIGNATURE_LENGTH)?)?;
 		Ok(())
 	}
 }
@@ -88,7 +86,7 @@ impl PartialEq for SignedBlock {
 
 #[allow(dead_code)]
 impl SignedBlock {
-	pub fn with_block_and_key(block: Block, key: &Keypair) -> BlockResult<Self> {
+	pub fn with_block_and_key(block: Block, key: &Keypair) -> Result<Self> {
 		
 		// block serialization 
 		let block_root: Cell = block.write_to_new_cell()?.into();
@@ -142,16 +140,16 @@ impl SignedBlock {
 		self.signatures.insert(key, BlockSignature {0: signature});
 	}
 
-	pub fn verify_signature(self: &Self, key: &PublicKey) -> BlockResult<bool> {
+	pub fn verify_signature(self: &Self, key: &PublicKey) -> Result<bool> {
 		let key_id = super::id_from_key(key);
 		let signature = match self.signatures.get(&key_id) {
 			Some(s) => &s.0,
-			_ => bail!(BlockErrorKind::NotFound { item_name: "signature".into() })
+			_ => failure::bail!(BlockError::NotFound("signature".to_string()))
 		};
 		Ok(key.verify::<Sha512>(self.combined_hash.as_slice(), signature).is_ok())	
 	}
 
-	pub fn write_to<T: Write>(self: &Self, dest: &mut T) -> BlockResult<()> {
+	pub fn write_to<T: Write>(self: &Self, dest: &mut T) -> Result<()> {
 		// Transform signed block into tree of cells
 		//
 		// signed_block
@@ -176,13 +174,13 @@ impl SignedBlock {
 		Ok(())
 	}
 
-	pub fn read_from<T>(src: &mut T) -> BlockResult<Self> where T: Read {
+	pub fn read_from<T>(src: &mut T) -> Result<Self> where T: Read {
 		// first - signed block's bytes (with block hash instead block bytes)
 		let cell = deserialize_tree_of_cells(src)?;
 
 		let repr_hash_cell = cell.reference(0)?;
 		if (repr_hash_cell.bit_length() < SHA256_SIZE * 8) || (cell.bit_length() < SHA256_SIZE * 8) {
-			return Err(ExceptionCode::CellUnderflow)?
+		    failure::bail!(ExceptionCode::CellUnderflow)
 		}
 		let block_repr_hash = repr_hash_cell.data()[..SHA256_SIZE].to_vec();
 		let serlz_hash = cell.data()[..SHA256_SIZE].to_vec();
@@ -200,7 +198,7 @@ impl SignedBlock {
 
 		// check block repr hash
 		if &block_repr_hash != cell.repr_hash().as_slice() {
-			bail!(BlockErrorKind::WrongHash);
+			failure::bail!(BlockError::WrongHash);
 		}
 
 		let mut hasher = Sha256::new();
@@ -217,7 +215,7 @@ impl SignedBlock {
 			signatures: signatures })
 	}
 
-	fn calc_merkle_hash(data: &[u8]) -> BlockResult<Vec<u8>> {
+	fn calc_merkle_hash(data: &[u8]) -> Result<Vec<u8>> {
 		let l = data.len();
 		if l <= 256 {
 			let mut hasher = Sha256::new();

@@ -13,9 +13,8 @@
 */
 
 use super::{
-    BlockErrorKind, BlockResult, Deserializable,
-    Grams, MaybeDeserialize, MaybeSerialize, Number5, Number9, Serializable, 
-    UnixTime32, VarUInteger32, MerkleProof
+    BlockError, Deserializable, Grams, MaybeDeserialize, MaybeSerialize, 
+    Number5, Number9, Serializable, UnixTime32, VarUInteger32, MerkleProof
 };
 use super::hashmapaug::Augmentable;
 use {BuilderData, Cell, SliceData, UsageTree, Block, GetRepresentationHash,
@@ -24,6 +23,7 @@ use cell::IBitstring;
 use dictionary::{HashmapE, HashmapType};
 use std::fmt;
 use std::str::FromStr;
+use ton_types::Result;
 use {AccountId, UInt256};
 
 
@@ -48,18 +48,22 @@ _ MsgAddressExt = MsgAddress;
  */
 
 impl AnycastInfo {
-    pub fn with_rewrite_pfx(pfx: SliceData) -> BlockResult<Self> {
+    pub fn with_rewrite_pfx(pfx: SliceData) -> Result<Self> {
         if pfx.remaining_bits() > Number5::get_max_len() {
-            bail!(BlockErrorKind::InvalidArg { msg: "pfx can't be longer than 2^5-1 bits".into() })
+            failure::bail!(
+                BlockError::InvalidArg("pfx can't be longer than 2^5-1 bits".to_string())
+            )
         }
         Ok(Self {
             depth: Number5(pfx.remaining_bits() as u32),
             rewrite_pfx: pfx
         })
     }
-    pub fn set_rewrite_pfx(&mut self, pfx: SliceData) -> BlockResult<()>{
+    pub fn set_rewrite_pfx(&mut self, pfx: SliceData) -> Result<()>{
         if pfx.remaining_bits() > Number5::get_max_len() {
-            bail!(BlockErrorKind::InvalidArg { msg: "pfx can't be longer than 2^5-1 bits".into() })
+            failure::bail!(
+                BlockError::InvalidArg("pfx can't be longer than 2^5-1 bits".to_string())
+            )
         }
         self.depth = Number5(pfx.remaining_bits() as u32);
         self.rewrite_pfx = pfx;
@@ -68,7 +72,7 @@ impl AnycastInfo {
 }
 
 impl Serializable for AnycastInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.depth.write_to(cell)?;                                  // write depth
         cell.checked_append_references_and_data(&self.rewrite_pfx)?; // write rewrite_pfx
         Ok(())
@@ -94,9 +98,11 @@ _ MsgAddressExt = MsgAddress;
  */
 
 impl MsgAddrVar {
-    pub fn with_address(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> BlockResult<MsgAddrVar> {
+    pub fn with_address(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> Result<MsgAddrVar> {
         if address.remaining_bits() > Number9::get_max_len(){
-            bail!(BlockErrorKind::InvalidArg { msg: "address can't be longer than 2^9-1 bits".into() });
+            failure::bail!(
+                BlockError::InvalidArg("address can't be longer than 2^9-1 bits".to_string())
+            )
         }
         let addr_len = Number9(address.remaining_bits() as u32);
         Ok(MsgAddrVar { anycast, addr_len, workchain_id, address })
@@ -105,7 +111,7 @@ impl MsgAddrVar {
 
 impl Serializable for MsgAddrVar {
 
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.anycast.write_maybe_to(cell)?;                            // anycast
         let addr_len = Number9(self.address.remaining_bits() as u32);
         addr_len.write_to(cell)?;                                      // addr_len
@@ -120,7 +126,6 @@ impl fmt::Display for MsgAddrVar {
         if let Some(anycast) = &self.anycast {
             write!(f, "{:x}:", anycast.rewrite_pfx)?;
         }
-
         if (self.workchain_id / 128 == 0) && (self.address.remaining_bits() == 256) {
             write!(f, "{}:{:x}8_", self.workchain_id, self.address)
         } else {
@@ -143,7 +148,7 @@ impl Default for MsgAddrStd {
 
 impl Serializable for MsgAddrStd {
 
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.anycast.write_maybe_to(cell)?;  // anycast
         self.workchain_id.write_to(cell)?;   // workchain_id
         self.address.write_to(cell)?;        // address
@@ -161,9 +166,11 @@ impl fmt::Display for MsgAddrStd {
 }
 
 impl MsgAddrExt {
-    pub fn with_address(address: SliceData) -> BlockResult<Self>{
+    pub fn with_address(address: SliceData) -> Result<Self>{
         if address.remaining_bits() > Number9::get_max_len(){
-            bail!(BlockErrorKind::InvalidArg { msg: "address can't be longer than 2^9-1 bits".into() });
+            failure::bail!(
+                BlockError::InvalidArg("address can't be longer than 2^9-1 bits".to_string())
+            )
         }
         Ok(MsgAddrExt {
             len: Number9(address.remaining_bits() as u32),
@@ -174,7 +181,7 @@ impl MsgAddrExt {
 
 impl Serializable for MsgAddrExt {
 
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let len = Number9(self.external_address.remaining_bits() as u32);
         len.write_to(cell)?;                               // write len
         cell.checked_append_references_and_data(&self.external_address)?; // write address
@@ -189,7 +196,7 @@ impl fmt::Display for MsgAddrExt {
 }
 
 impl MsgAddressExt {
-    pub fn with_extern(address: SliceData) -> BlockResult<Self> {
+    pub fn with_extern(address: SliceData) -> Result<Self> {
         Ok(MsgAddressExt::AddrExtern(MsgAddrExt::with_address(address)?))
     }
 }
@@ -202,20 +209,18 @@ impl Default for MsgAddressExt {
 
 impl FromStr for MsgAddressExt {
     type Err = failure::Error;
-    fn from_str(string: &str) -> BlockResult<Self> {
+    fn from_str(string: &str) -> Result<Self> {
         match MsgAddress::from_str(string)? {
             MsgAddress::AddrNone => Ok(MsgAddressExt::AddrNone),
             MsgAddress::AddrExt(addr) => Ok(MsgAddressExt::AddrExtern(addr)),
-            _ => bail!(BlockErrorKind::Other {
-                msg: format!("Wrong type of address")
-            })
+            _ => failure::bail!(BlockError::Other("Wrong type of address".to_string()))
         }
     }
 }
 
 impl Serializable for MsgAddressExt {
 
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         
         match self {
             MsgAddressExt::AddrNone => {
@@ -241,15 +246,15 @@ impl fmt::Display for MsgAddressExt {
 }
 
 impl MsgAddress {
-    pub fn with_extern(address: SliceData) -> BlockResult<Self> {
+    pub fn with_extern(address: SliceData) -> Result<Self> {
         Ok(MsgAddress::AddrExt(MsgAddrExt::with_address(address)?))
     }
 
-    pub fn with_variant(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> BlockResult<Self> {
+    pub fn with_variant(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> Result<Self> {
         Ok(MsgAddress::AddrVar(MsgAddrVar::with_address(anycast, workchain_id, address)?))
     }
 
-    pub fn with_standart(anycast: Option<AnycastInfo>, workchain_id: i8, address: AccountId) -> BlockResult<Self> {
+    pub fn with_standart(anycast: Option<AnycastInfo>, workchain_id: i8, address: AccountId) -> Result<Self> {
         Ok(MsgAddress::AddrStd(MsgAddrStd::with_address(anycast, workchain_id, address)))
     }
 
@@ -275,26 +280,20 @@ impl MsgAddress {
 
 impl FromStr for MsgAddress {
     type Err = failure::Error;
-    fn from_str(string: &str) -> BlockResult<Self> {
+    fn from_str(string: &str) -> Result<Self> {
         let parts: Vec<&str> = string.split(':').take(4).collect();
         let len = parts.len();
         if len > 3 {
-            bail!(BlockErrorKind::InvalidArg {
-                msg: "too many components in address".into()
-            })
+            failure::bail!(BlockError::InvalidArg("too many components in address".to_string()))
         }
         if len == 0 {
-            bail!(BlockErrorKind::InvalidArg {
-                msg: "bad split".into()
-            })
+            failure::bail!(BlockError::InvalidArg("bad split".to_string()))
         }
         if parts[len - 1].is_empty() {
             if len == 1 {
                 return Ok(MsgAddress::AddrNone)
             } else {
-                bail!(BlockErrorKind::InvalidArg {
-                    msg: "wrong format".into()
-                })
+                failure::bail!(BlockError::InvalidArg("wrong format".to_string()))
             }
         }
         let address = SliceData::from_string(parts[len - 1])?;
@@ -303,30 +302,43 @@ impl FromStr for MsgAddress {
         }
         let workchain_id = len.checked_sub(2)
             .map(|index| parts[index].parse::<i32>()).transpose()
-            .map_err(|err| BlockErrorKind::InvalidArg {
-                msg: format!("workchain_id is not correct number: {}", err)
-            })?
+            .map_err(
+                |err| BlockError::InvalidArg(
+                    format!("workchain_id is not correct number: {}", err)
+                )
+            )?
             .unwrap_or_default();
         let anycast = len.checked_sub(3)
-            .map(|index| if parts[index].is_empty() {
-                Err(BlockErrorKind::InvalidArg { msg: "wrong format".into() })
-            } else {
-                SliceData::from_string(parts[index])
-                    .map_err(|err| BlockErrorKind::InvalidArg {
-                        msg: format!("anycast is not correct: {}", err)
-                    })
-            }).transpose()?
+            .map(
+                |index| if parts[index].is_empty() {
+                    Err(BlockError::InvalidArg("wrong format".to_string()))
+                } else {
+                    SliceData::from_string(parts[index])
+                        .map_err(
+                            |err| BlockError::InvalidArg(
+                                format!("anycast is not correct: {}", err)
+                            )
+                        )
+                }
+            ).transpose()?
             .map(|value| AnycastInfo::with_rewrite_pfx(value)).transpose()
-            .map_err(|err| BlockErrorKind::InvalidArg {
-                msg: format!("anycast is not correct: {}", err)
-            })?;
+            .map_err(
+                |err| BlockError::InvalidArg(
+                    format!("anycast is not correct: {}", err)
+                )
+            )?;
 
         if workchain_id < 128 && workchain_id >= -128 {
             if address.remaining_bits() != 256 {
-                bail!(BlockErrorKind::InvalidArg {
-                        msg: format!("account address should be 256 bits long in workchain {}", workchain_id)
-                });
-            };
+                failure::bail!(
+                    BlockError::InvalidArg(
+                        format!(
+                            "account address should be 256 bits long in workchain {}", 
+                            workchain_id
+                        )
+                    )
+                )
+            }
             if parts[len - 1].len() == 64 {
                 Ok(MsgAddress::with_standart(anycast, workchain_id as i8, address)?)
             } else {
@@ -356,7 +368,7 @@ impl fmt::Display for MsgAddress {
 }
 
 impl Serializable for MsgAddress {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_raw(&[self.get_type() << 6], 2)?;
         match self {
             MsgAddress::AddrNone => (),
@@ -376,22 +388,20 @@ impl Default for MsgAddressInt {
 
 impl FromStr for MsgAddressInt {
     type Err = failure::Error;
-    fn from_str(string: &str) -> BlockResult<Self> {
+    fn from_str(string: &str) -> Result<Self> {
         match MsgAddress::from_str(string)? {
             MsgAddress::AddrStd(addr) => Ok(MsgAddressInt::AddrStd(addr)),
             MsgAddress::AddrVar(addr) => Ok(MsgAddressInt::AddrVar(addr)),
-            _ => bail!(BlockErrorKind::Other {
-                    msg: "Wrong type of address".into()
-                })
+            _ => failure::bail!(BlockError::Other("Wrong type of address".to_string()))
         }
     }
 }
 
 impl MsgAddressInt {
-    pub fn with_variant(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> BlockResult<Self> {
+    pub fn with_variant(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> Result<Self> {
         Ok(MsgAddressInt::AddrVar(MsgAddrVar::with_address(anycast, workchain_id, address)?))
     }
-    pub fn with_standart(anycast: Option<AnycastInfo>, workchain_id: i8, address: AccountId) -> BlockResult<Self> {
+    pub fn with_standart(anycast: Option<AnycastInfo>, workchain_id: i8, address: AccountId) -> Result<Self> {
         Ok(MsgAddressInt::AddrStd(MsgAddrStd::with_address(anycast, workchain_id, address)))
     }
     pub fn get_address(&self) -> SliceData {
@@ -416,7 +426,7 @@ impl MsgAddressInt {
 
 impl Serializable for MsgAddressInt {
 
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             MsgAddressInt::AddrStd(std) => {
                 cell.append_raw(&[0x80], 2)?;    // $10 prefix AddrStd
@@ -516,7 +526,7 @@ impl fmt::Display for MsgAddressIntOrNone {
 }
 
 impl Serializable for MsgAddressIntOrNone {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             MsgAddressIntOrNone::None       => {
                 cell.append_raw(&[0x00], 2)?;
@@ -529,32 +539,27 @@ impl Serializable for MsgAddressIntOrNone {
 }
 
 impl Deserializable for MsgAddressIntOrNone {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
-    
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         let addr_type = cell.get_next_int(2)? as u8;
         match addr_type & 0b11 {
             0b00 => {
                 *self = MsgAddressIntOrNone::None;
-            }
+            },
             0b10 => {
                 let mut std = MsgAddrStd::default();
                 std.read_from(cell)?;
                 *self = MsgAddressIntOrNone::Some(MsgAddressInt::AddrStd(std));
-            }
+            },
             0b11 => {
                 let mut var = MsgAddrVar::default();
                 var.read_from(cell)?;
                 *self = MsgAddressIntOrNone::Some(MsgAddressInt::AddrVar(var));
-            }
-            _ => {
-                bail!(BlockErrorKind::Other { msg: "Wrong type of address".into() });
-            }
+            },
+            _ => failure::bail!(BlockError::Other("Wrong type of address".to_string()))
         }
         Ok(())
     } 
 }
-
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InternalMessageHeader {
@@ -645,7 +650,7 @@ impl InternalMessageHeader {
 }
 
 impl Serializable for InternalMessageHeader{
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         
         cell
             .append_bit_zero()?              //tag
@@ -669,7 +674,7 @@ impl Serializable for InternalMessageHeader{
 }
 
 impl Deserializable for InternalMessageHeader {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
 
         // constructor tag will be readed in Message
         self.ihr_disabled = cell.get_next_bit()?;    // ihr_disabled
@@ -706,7 +711,7 @@ pub struct ExternalInboundMessageHeader {
 }
 
 impl Serializable for ExternalInboundMessageHeader{
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell
             .append_bit_one()?
             .append_bit_zero()?;
@@ -720,7 +725,7 @@ impl Serializable for ExternalInboundMessageHeader{
 }
 
 impl Deserializable for ExternalInboundMessageHeader {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
 
         // constructor tag will be readed in Message
         self.src.read_from(cell)?;               // addr src
@@ -758,7 +763,7 @@ impl ExtOutMessageHeader {
 }
 
 impl Serializable for ExtOutMessageHeader{
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell
             .append_bit_one()?
             .append_bit_one()?;
@@ -773,7 +778,7 @@ impl Serializable for ExtOutMessageHeader{
 }
 
 impl Deserializable for ExtOutMessageHeader {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
 
         // constructor tag will be readed in Message
         self.src.read_from(cell)?;                  // addr src
@@ -860,7 +865,7 @@ impl CommonMsgInfo {
     /// Fee collected only for transfer internal and external outbound messages.
     /// for other types of messages, function returned None
     ///
-    pub fn fee(&self) -> BlockResult<Option<Grams>> {
+    pub fn fee(&self) -> Result<Option<Grams>> {
         match self  {
             CommonMsgInfo::IntMsgInfo(header) => {
                 let mut result = header.ihr_fee.clone();
@@ -899,7 +904,7 @@ impl Default for CommonMsgInfo {
 
 impl Serializable for CommonMsgInfo
 {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             CommonMsgInfo::IntMsgInfo(header) => header.write_to(cell)?,
             CommonMsgInfo::ExtInMsgInfo(header) => header.write_to(cell)?,
@@ -911,7 +916,7 @@ impl Serializable for CommonMsgInfo
 
 impl Deserializable for CommonMsgInfo
 {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
 
         *self = if !cell.get_next_bit()? {  // CommonMsgInfo::int_msg_info
             let mut int_msg = InternalMessageHeader::default();
@@ -1152,7 +1157,7 @@ impl Message {
     /// Only Internal and External outbound messages has a fee
     /// If the transmittal of a message it is necessary to collect a fee. Otherwise None
     ///
-    pub fn get_fee(&self) -> BlockResult<Option<Grams>> {
+    pub fn get_fee(&self) -> Result<Option<Grams>> {
         self.header.fee()
     }
 
@@ -1236,7 +1241,7 @@ impl Message {
         }
     }
 
-    pub fn prepare_proof(&self, is_inbound: bool, block_root: &Cell) -> BlockResult<Cell> {
+    pub fn prepare_proof(&self, is_inbound: bool, block_root: &Cell) -> Result<Cell> {
 
         // proof for message and block info in block
 
@@ -1251,18 +1256,22 @@ impl Message {
                 .read_extra()?
                 .read_in_msg_descr()?
                 .get(&msg_hash)?
-                    .ok_or(BlockErrorKind::InvalidArg {
-                        msg: "Message isn't belonged given block's in_msg_descr".into()
-                    })?
+                .ok_or(
+                    BlockError::InvalidArg(
+                        "Message isn't belonged given block's in_msg_descr".to_string()
+                    )
+                )?
                 .read_message()?;
         } else {
             block
                 .read_extra()?
                 .read_out_msg_descr()?
                 .get(&msg_hash)?
-                    .ok_or(BlockErrorKind::InvalidArg { 
-                        msg: "Message isn't belonged given block's out_msg_descr".into()
-                    })?
+                .ok_or(
+                    BlockError::InvalidArg(
+                        "Message isn't belonged given block's out_msg_descr".to_string()
+                    )
+                )?
                 .read_message()?;
         }
 
@@ -1274,7 +1283,7 @@ impl Message {
 
 impl Serializable for Message
 {
-    fn write_to(&self, builder: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
 
         // write header
         self.header.write_to(builder)?;
@@ -1361,7 +1370,7 @@ impl Serializable for Message
 }
 
 impl Deserializable for Message {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
 
         // read header
         self.header.read_from(cell)?;
@@ -1443,7 +1452,7 @@ impl Default for CurrencyCollection {
 }
 
 impl Augmentable for CurrencyCollection {
-    fn calc(&mut self, other: &Self) -> BlockResult<()> {
+    fn calc(&mut self, other: &Self) -> Result<()> {
         self.add(other)
     }
 }
@@ -1475,7 +1484,7 @@ impl CurrencyCollection {
 }
 
 impl Serializable for CurrencyCollection {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.grams.write_to(cell)?;
         self.other.write_to(cell)?;
         Ok(())
@@ -1483,7 +1492,7 @@ impl Serializable for CurrencyCollection {
 }
 
 impl Deserializable for CurrencyCollection {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         self.grams.read_from(cell)?;
         self.other.read_from(cell)?;
         Ok(())
@@ -1491,17 +1500,17 @@ impl Deserializable for CurrencyCollection {
 }
 
 pub trait AddSub {
-    fn sub(&mut self, other: &Self) -> BlockResult<bool>;
-    fn add(&mut self, other: &Self) -> BlockResult<()>;
+    fn sub(&mut self, other: &Self) -> Result<bool>;
+    fn add(&mut self, other: &Self) -> Result<()>;
 }
 
 impl AddSub for CurrencyCollection {
-    fn sub(&mut self, other: &Self) -> BlockResult<bool> {
+    fn sub(&mut self, other: &Self) -> Result<bool> {
         if self.grams < other.grams {
             return Ok(false)
         }
         let mut result = self.other.clone();
-        if other.other.iterate(&mut |key, ref mut slice| -> BlockResult<bool> {
+        if other.other.iterate(&mut |key, ref mut slice| -> Result<bool> {
             let b = VarUInteger32::construct_from(slice)?;
             if let Some(ref mut slice) = self.other.get(key.clone())? {
                 let mut a: VarUInteger32 = VarUInteger32::construct_from(slice)?;
@@ -1519,10 +1528,10 @@ impl AddSub for CurrencyCollection {
             Ok(false)
         }
     }
-    fn add(&mut self, other: &Self) -> BlockResult<()> {
+    fn add(&mut self, other: &Self) -> Result<()> {
         self.grams.add(&other.grams)?;
         let mut result = self.other.clone();
-        other.other.iterate(&mut |key, ref mut slice_b| -> BlockResult<bool> {
+        other.other.iterate(&mut |key, ref mut slice_b| -> Result<bool> {
             match self.other.get(key.clone())? {
                 Some(ref mut slice_a) => {
                     let b = VarUInteger32::construct_from(slice_b)?;
@@ -1545,7 +1554,7 @@ impl fmt::Display for CurrencyCollection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "CurrencyCollection: Grams {}, other curencies:\n", self.grams)?;
         let mut len = 0;
-        self.other.iterate(&mut |key, ref mut slice| -> BlockResult<bool> {
+        self.other.iterate(&mut |key, ref mut slice| -> Result<bool> {
             let value: VarUInteger32 = VarUInteger32::construct_from(slice)?;
             write!(f, "key: {}, value: {}\n", key, value).unwrap();
             len += 1;
@@ -1593,7 +1602,7 @@ impl TickTock{
 }
 
 impl Serializable for TickTock {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bit_bool(self.tick)?;
         cell.append_bit_bool(self.tock)?;
         Ok(())
@@ -1601,7 +1610,7 @@ impl Serializable for TickTock {
 }
 
 impl Deserializable for TickTock {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         self.tick = cell.get_next_bit()?;
         self.tock = cell.get_next_bit()?;
         Ok(())
@@ -1662,7 +1671,7 @@ impl StateInit {
 }
 
 impl Serializable for StateInit {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         
         self.split_depth.write_maybe_to(cell)?;
         self.special.write_maybe_to(cell)?;
@@ -1674,7 +1683,7 @@ impl Serializable for StateInit {
 }
 
 impl Deserializable for StateInit {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()>{
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         
         self.split_depth = Number5::read_maybe_from(cell)?;
         self.special = TickTock::read_maybe_from(cell)?;
@@ -1816,7 +1825,7 @@ pub struct AnycastInfo {
 }
 
 impl Deserializable for AnycastInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.depth.read_from(cell)?;
         self.rewrite_pfx = cell.get_next_slice(self.depth.0 as usize)?;
         Ok(())
@@ -1830,7 +1839,7 @@ pub struct MsgAddrExt {
 }
 
 impl Deserializable for MsgAddrExt {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.len.read_from(cell)?;
         self.external_address = cell.get_next_slice(self.len.0 as usize)?;
         Ok(())
@@ -1844,7 +1853,7 @@ pub enum MsgAddressExt {
 }
 
 impl Deserializable for MsgAddressExt {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let bits = cell.get_next_bits(2)?[0] >> 6;
         if bits == 0 {
             *self = MsgAddressExt::AddrNone;
@@ -1868,7 +1877,7 @@ pub struct MsgAddrStd {
 }
 
 impl Deserializable for MsgAddrStd {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.anycast = AnycastInfo::read_maybe_from(cell)?;
         self.workchain_id.read_from(cell)?;
         self.address = cell.get_next_slice(256)?;
@@ -1885,14 +1894,14 @@ pub struct MsgAddrVar {
 }
 
 impl Deserializable for MsgAddrVar {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.anycast = AnycastInfo::read_maybe_from(cell)?;
         self.addr_len.read_from(cell)?;
         self.workchain_id.read_from(cell)?;
         self.address = cell.get_next_slice(self.addr_len.0 as usize)?;
         Ok(())
     }
-}
+}                                                                                       	
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MsgAddressInt {
@@ -1901,11 +1910,11 @@ pub enum MsgAddressInt {
 }
 
 impl Deserializable for MsgAddressInt {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = match cell.get_next_int(2)? {
             0b10 => MsgAddressInt::AddrStd(MsgAddrStd::construct_from::<MsgAddrStd>(cell)?),
             0b11 => MsgAddressInt::AddrVar(MsgAddrVar::construct_from::<MsgAddrVar>(cell)?),
-            _ => return Err(BlockErrorKind::Other { msg: "Wrong type of address".into() })?
+            _ => failure::bail!(BlockError::Other("Wrong type of address".to_string()))
         };
         // TODO: fix autogen for error checking!
         /*
@@ -1934,7 +1943,7 @@ pub enum MsgAddress {
 }
 
 impl Deserializable for MsgAddress {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let bits = cell.get_next_bits(2)?[0] >> 6;
         if bits == 0 {
             *self = MsgAddress::AddrNone;

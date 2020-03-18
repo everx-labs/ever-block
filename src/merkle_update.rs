@@ -49,9 +49,11 @@ impl Default for MerkleUpdate {
 }
 
 impl Deserializable for MerkleUpdate {
-    fn read_from(&mut self, cell: &mut SliceData) -> BlockResult<()> {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         if CellType::from(cell.get_next_byte()?) != CellType::MerkleUpdate {
-            bail!(BlockErrorKind::InvalidData { msg: "invalid Merkle update root's cell type".into() })
+            failure::bail!(
+                BlockError::InvalidData("invalid Merkle update root's cell type".to_string())
+            )
         }
         self.old_hash.read_from(cell)?;
         self.new_hash.read_from(cell)?;
@@ -61,16 +63,32 @@ impl Deserializable for MerkleUpdate {
         self.new = cell.checked_drain_reference()?.clone();
 
         if self.old_hash != Cell::hash(&self.old, 0) {
-            bail!(BlockErrorKind::WrongMerkleUpdate { msg: "Stored old hash is not equal calculated one".into() });
+            failure::bail!(
+                BlockError::WrongMerkleUpdate(
+                    "Stored old hash is not equal calculated one".to_string()
+                )
+            )
         }
         if self.new_hash != Cell::hash(&self.new, 0) {
-            bail!(BlockErrorKind::WrongMerkleUpdate { msg: "Stored new hash is not equal calculated one".into() });
+            failure::bail!(
+                BlockError::WrongMerkleUpdate(
+                    "Stored new hash is not equal calculated one".to_string() 
+                )
+            )
         }
         if self.old_depth != Cell::depth(&self.old, 0) {
-            bail!(BlockErrorKind::WrongMerkleUpdate { msg: "Stored old depth is not equal calculated one".into() });
+            failure::bail!(
+                BlockError::WrongMerkleUpdate(
+                    "Stored old depth is not equal calculated one".to_string()
+                )
+            )
         }
         if self.new_depth != Cell::depth(&self.new, 0) {
-            bail!(BlockErrorKind::WrongMerkleUpdate { msg: "Stored new depth is not equal calculated one".into() });
+            failure::bail!(
+                BlockError::WrongMerkleUpdate(
+                    "Stored new depth is not equal calculated one".to_string() 
+                )
+             )
         }
 
         Ok(())
@@ -78,7 +96,7 @@ impl Deserializable for MerkleUpdate {
 }
 
 impl Serializable for MerkleUpdate {
-    fn write_to(&self, cell: &mut BuilderData) -> BlockResult<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.set_type(CellType::MerkleUpdate);
         cell.append_u8(u8::from(CellType::MerkleUpdate))?;
         self.old_hash.write_to(cell)?;
@@ -95,7 +113,7 @@ impl Serializable for MerkleUpdate {
 impl MerkleUpdate {
 
     /// Creating of a Merkle update
-    pub fn create(old: &Cell, new: &Cell) -> BlockResult<MerkleUpdate> {
+    pub fn create(old: &Cell, new: &Cell) -> Result<MerkleUpdate> {
 
         if old.repr_hash() == new.repr_hash() {
             // if trees are the same
@@ -135,7 +153,7 @@ impl MerkleUpdate {
     }
 
     /// Applies update to given tree of cells by returning new updated one
-    pub fn apply_for(&self, old_root: &Cell) -> BlockResult<Cell> {
+    pub fn apply_for(&self, old_root: &Cell) -> Result<Cell> {
 
         let old_cells = self.check(old_root)?;
 
@@ -155,11 +173,11 @@ impl MerkleUpdate {
 
     /// Check the update corresponds given bag.
     /// The function is called from `apply_for`
-    pub fn check(&self, old_root: &Cell) -> BlockResult<HashMap<UInt256, Cell>> {
+    pub fn check(&self, old_root: &Cell) -> Result<HashMap<UInt256, Cell>> {
 
         // check that hash of `old_tree` is equal old hash from `self`
         if self.old_hash != old_root.repr_hash() {
-            bail!(BlockErrorKind::WrongMerkleUpdate { msg: "old bag's hash mismatch".into() });
+            failure::bail!(BlockError::WrongMerkleUpdate("old bag's hash mismatch".to_string()))
         }
 
         // traversal along `self.new` and check all pruned branches,
@@ -167,7 +185,9 @@ impl MerkleUpdate {
         let mut known_cells = HashSet::new();
         Self::traverse_old_on_check(&self.old, &mut known_cells, &mut HashSet::new(), 0);
         if !Self::traverse_new_on_check(&self.new, &known_cells, &mut HashSet::new(), 0) {
-            bail!(BlockErrorKind::WrongMerkleUpdate { msg: "old and new trees mismatch".into() });
+            failure::bail!(
+                BlockError::WrongMerkleUpdate("old and new trees mismatch".to_string())
+            )
         }
 
         let mut known_cells_vals = HashMap::new();
@@ -245,7 +265,7 @@ impl MerkleUpdate {
         old_cell: &Cell,
         new_cells: &HashMap<UInt256, Cell>,
         pruned_branches: &mut HashMap<UInt256, Cell>)
-        -> BlockResult<Option<BuilderData>> {
+        -> Result<Option<BuilderData>> {
 
         let mut childs = vec!(None; old_cell.references_count());
         let mut has_pruned = false;
@@ -293,20 +313,22 @@ impl MerkleUpdate {
         }
     }
 
-    fn add_one_hash(cell: &Cell, depth: u8) -> BlockResult<LevelMask> {
+    fn add_one_hash(cell: &Cell, depth: u8) -> Result<LevelMask> {
         let mask = cell.level_mask().mask();
         if depth > 2 { 
-            bail!(BlockErrorKind::InvalidArg { msg: "depth".into() })
+            failure::bail!(BlockError::InvalidArg("depth".to_string()))
         } else if mask & (1 << depth) != 0 {
-            bail!(BlockErrorKind::InvalidOperation {
-                msg: format!("attempt to add hash with depth {} into mask {:03b}", depth, mask)
-            })
+            failure::bail!(
+                BlockError::InvalidOperation(
+                    format!("attempt to add hash with depth {} into mask {:03b}", depth, mask)
+                )
+            )
         }
         Ok(LevelMask::with_mask(mask | (1 << depth)))
     }
 
     pub(crate) fn make_pruned_branch_cell(cell: &Cell, merkle_depth: u8) 
-        -> BlockResult<BuilderData> {
+        -> Result<BuilderData> {
 
         let mut result = BuilderData::new();
         let level_mask = Self::add_one_hash(cell, merkle_depth)?;
