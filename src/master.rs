@@ -37,6 +37,18 @@ define_HashmapE!{ShardHashes, 32, InRefValue<BinTree<ShardDescr>>}
 define_HashmapE!{CryptoSignatures, 16, CryptoSignaturePair}
 define_HashmapAugE!{ShardFees, 96, ShardFeeCreated, ShardFeeCreated}
 
+impl ShardHashes {
+    pub fn iterate_shardes<F>(&self, func: &mut F) -> Result<bool>
+    where F: FnMut(ShardIdent, ShardDescr) -> Result<bool> {
+        self.iterate_with_keys(&mut |wc_id: i32, shardes_tree| {
+            shardes_tree.0.iterate(&mut |prefix, shard_descr| {
+                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix);
+                func(shard_ident, shard_descr)
+            })
+        })
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct McBlockExtra {
     pub hashes: ShardHashes, // workchain_id of ShardIdent from all blocks
@@ -141,7 +153,7 @@ impl Deserializable for McBlockExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u16()?;
         if tag != MC_BLOCK_EXTRA_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag.into(),
                     s: "McBlockExtra".to_string()
@@ -341,7 +353,7 @@ impl Deserializable for CreatorStats {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(Self::tag_len_bits())? as u32;
         if tag != Self::tag() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag.into(),
                     s: "CreatorStats".to_string()
@@ -393,7 +405,7 @@ impl Deserializable for BlockCreateStats {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(Self::tag_len_bits())? as u32;
         if tag != Self::tag() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag.into(),
                     s: "BlockCreateStats".to_string()
@@ -500,7 +512,7 @@ impl Deserializable for McStateExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u16()?;
         if tag != Self::tag() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag.into(),
                     s: "McStateExtra".to_string()
@@ -514,7 +526,7 @@ impl Deserializable for McStateExtra {
         let mut flags = 0u16;
         flags.read_from(cell1)?;
         if flags > 1 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     format!("Invalid flags value ({}). Must be <= 1.", flags)
                 )
@@ -716,7 +728,7 @@ impl Deserializable for ShardDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(Self::tag_len_bits())? as u32;
         if tag != Self::tag() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "ShardDescr".to_string()
@@ -867,7 +879,7 @@ impl Deserializable for LibDescr {
 impl Serializable for LibDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.publishers.is_empty() {
-            failure::bail!(BlockError::InvalidData("self.publishers is empty".to_string()))
+            fail!(BlockError::InvalidData("self.publishers is empty".to_string()))
         }
         self.lib.write_to(cell)?;
         self.publishers.write_hashmap_root(cell)?;

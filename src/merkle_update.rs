@@ -51,7 +51,7 @@ impl Default for MerkleUpdate {
 impl Deserializable for MerkleUpdate {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         if CellType::from(cell.get_next_byte()?) != CellType::MerkleUpdate {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData("invalid Merkle update root's cell type".to_string())
             )
         }
@@ -63,28 +63,28 @@ impl Deserializable for MerkleUpdate {
         self.new = cell.checked_drain_reference()?.clone();
 
         if self.old_hash != Cell::hash(&self.old, 0) {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleUpdate(
                     "Stored old hash is not equal calculated one".to_string()
                 )
             )
         }
         if self.new_hash != Cell::hash(&self.new, 0) {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleUpdate(
                     "Stored new hash is not equal calculated one".to_string() 
                 )
             )
         }
         if self.old_depth != Cell::depth(&self.old, 0) {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleUpdate(
                     "Stored old depth is not equal calculated one".to_string()
                 )
             )
         }
         if self.new_depth != Cell::depth(&self.new, 0) {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleUpdate(
                     "Stored new depth is not equal calculated one".to_string() 
                 )
@@ -177,7 +177,7 @@ impl MerkleUpdate {
 
         // check that hash of `old_tree` is equal old hash from `self`
         if self.old_hash != old_root.repr_hash() {
-            failure::bail!(BlockError::WrongMerkleUpdate("old bag's hash mismatch".to_string()))
+            fail!(BlockError::WrongMerkleUpdate("old bag's hash mismatch".to_string()))
         }
 
         // traversal along `self.new` and check all pruned branches,
@@ -185,7 +185,7 @@ impl MerkleUpdate {
         let mut known_cells = HashSet::new();
         Self::traverse_old_on_check(&self.old, &mut known_cells, &mut HashSet::new(), 0);
         if !Self::traverse_new_on_check(&self.new, &known_cells, &mut HashSet::new(), 0) {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleUpdate("old and new trees mismatch".to_string())
             )
         }
@@ -316,9 +316,9 @@ impl MerkleUpdate {
     fn add_one_hash(cell: &Cell, depth: u8) -> Result<LevelMask> {
         let mask = cell.level_mask().mask();
         if depth > 2 { 
-            failure::bail!(BlockError::InvalidArg("depth".to_string()))
+            fail!(BlockError::InvalidArg("depth".to_string()))
         } else if mask & (1 << depth) != 0 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidOperation(
                     format!("attempt to add hash with depth {} into mask {:03b}", depth, mask)
                 )

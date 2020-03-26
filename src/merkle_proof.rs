@@ -12,15 +12,15 @@
 * limitations under the License.
 */
 
-use std::cmp::max;
-use ton_types::{
-    Cell, CellType, BuilderData, IBitstring, LevelMask, SliceData, Result, UsageTree
-};
-use UInt256;
 use super::{
     MerkleUpdate, Serializable, Deserializable,
     Block, BlockInfo, Transaction, GetRepresentationHash, BlockError, 
     Message, Account, ShardStateUnsplit, BlockSeqNoAndShard
+};
+use std::cmp::max;
+use ton_types::{
+    Cell, CellType, BuilderData, error, fail, IBitstring, LevelMask, SliceData, Result, 
+    UsageTree, types::UInt256
 };
 
 
@@ -44,7 +44,7 @@ impl Default for MerkleProof {
 impl Deserializable for MerkleProof {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         if CellType::from(cell.get_next_byte()?) != CellType::MerkleProof {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData("invalid Merkle proof root's cell type".to_string())
             )
         }
@@ -52,14 +52,14 @@ impl Deserializable for MerkleProof {
         self.depth = cell.get_next_u16()?;
         self.proof = cell.checked_drain_reference()?.clone();
         if self.hash != Cell::hash(&self.proof, 0) {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleProof(
                     "Stored proof hash is not equal calculated one".to_string()
                 )
             )
         }
         if self.depth != Cell::depth(&self.proof, 0) {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleProof(
                     "Stored proof depth is not equal calculated one".to_string() 
                 )
@@ -88,7 +88,7 @@ impl MerkleProof {
         where F: Fn(UInt256) -> bool {
 
         if !is_include(root.repr_hash()) {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg(
                     "`bag` doesn't contain any cell to include into proof".to_string()
                 )
@@ -154,7 +154,7 @@ impl MerkleProof {
 // checks if proof contains correct block info
 pub fn check_block_info_proof(block: &Block, proof_hash: &UInt256, block_hash: &UInt256) -> Result<BlockInfo> {
     if proof_hash != block_hash {
-        failure::bail!(
+        fail!(
             BlockError::WrongMerkleProof("Proof hash is not equal given block hash".to_string())
         )
     }
@@ -179,7 +179,7 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
 
     // check if acc is belonged the block's shard
     if !block_info.shard.contains_account(tr.account_id().clone())? {
-        failure::bail!(
+        fail!(
             BlockError::WrongMerkleProof(
                 "Account address in transaction belongs other shardchain".to_string()
             )
@@ -188,7 +188,7 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
 
     // check if transaction is potencially belonged the block by logical time
     if tr.logical_time() < block_info.start_lt || tr.logical_time() > block_info.end_lt {
-        failure::bail!(
+        fail!(
             BlockError::WrongMerkleProof(
                 "Transaction's logical time doesn't belong to \
                  block's logical time interval".to_string()
@@ -226,13 +226,13 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
         if let Ok(tr_slice) = tr_parent_slice.checked_drain_reference() {
             // check hash
             if tr_slice.repr_hash() != tr.hash()? {
-                failure::bail!(
+                fail!(
                     BlockError::WrongMerkleProof("Wrong transaction's hash in proof".to_string())
                 )
             }
         }
     } else {
-        failure::bail!(BlockError::WrongMerkleProof("No transaction in proof".to_string()))
+        fail!(BlockError::WrongMerkleProof("No transaction in proof".to_string()))
     }
     Ok(())
 }
@@ -241,7 +241,7 @@ fn check_transaction_id(given_id: Option<UInt256>, tr_cell: Option<&Cell>) -> Re
     let existing_id = tr_cell.map(|c| c.repr_hash());
     match (given_id, existing_id) {
         (None, Some(_)) => {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleProof(
                     "Invalid transaction id: None is passed, \
                      but the transaction exists in a block".to_string()
@@ -249,7 +249,7 @@ fn check_transaction_id(given_id: Option<UInt256>, tr_cell: Option<&Cell>) -> Re
             )
         },
         (Some(_), None) => {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleProof(
                     "Invalid transaction id: it is passed, \
                      but the transaction doesn't exists in a block".to_string()
@@ -259,7 +259,7 @@ fn check_transaction_id(given_id: Option<UInt256>, tr_cell: Option<&Cell>) -> Re
         (None, None) => Ok(()),
         (Some(id1), Some(id2)) => {
             if id1 != id2 {
-                failure::bail!(BlockError::WrongMerkleProof("Invalid transaction id".to_string()))
+                fail!(BlockError::WrongMerkleProof("Invalid transaction id".to_string()))
             }
             Ok(())
         }
@@ -298,14 +298,14 @@ pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt25
             check_transaction_id(tr_id, in_msg.transaction_cell())?;
             if let Ok(msg_cell) = in_msg.message_cell() {
                 if msg_cell.repr_hash() != msg_hash {
-                    failure::bail!(
+                    fail!(
                         BlockError::WrongMerkleProof("Wrong message's hash in proof".to_string())
                     )
                 } else {
                     return Ok(())
                 }
             } else {
-                failure::bail!(
+                fail!(
                     BlockError::WrongMerkleProof(
                         "Error extracting message from in message".to_string()
                     )
@@ -324,21 +324,21 @@ pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt25
         if let Ok(msg_cell) = out_msg.message_cell() {
             check_transaction_id(tr_id, out_msg.transaction_cell())?;
             if msg_cell.repr_hash() != msg_hash {
-                failure::bail!(
+                fail!(
                     BlockError::WrongMerkleProof("Wrong message's hash in proof".to_string())
                 )
             } else {
                 return Ok(())
             }
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::WrongMerkleProof(
                     "Error extracting message from out message".to_string()
                 ) 
             )
         }
     } else {
-        failure::bail!(BlockError::WrongMerkleProof("No message in proof".to_string()))
+        fail!(BlockError::WrongMerkleProof("No message in proof".to_string()))
     }
 }
 
@@ -347,7 +347,7 @@ pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt25
 /// Returns info about the block corresponds to shard state the account belongs to.
 pub fn check_account_proof(proof: &MerkleProof, acc: &Account) -> Result<BlockSeqNoAndShard> {
     if acc.is_none() {
-        failure::bail!(BlockError::InvalidData("Account can't be none".to_string()))
+        fail!(BlockError::InvalidData("Account can't be none".to_string()))
     }
 
     let ss_virt_root = proof.proof.clone().virtualize(1);
@@ -365,9 +365,7 @@ pub fn check_account_proof(proof: &MerkleProof, acc: &Account) -> Result<BlockSe
         let acc_root = shard_acc.account_cell();
         let acc_hash = Cell::hash(&acc_root, (max(acc_root.level(), 1) - 1) as usize);
         if acc.hash()? != acc_hash {
-            failure::bail!(
-                BlockError::WrongMerkleProof("Wrong account's hash in proof".to_string())
-            )
+            fail!(BlockError::WrongMerkleProof("Wrong account's hash in proof".to_string()))
         } else {
             return Ok(
                 BlockSeqNoAndShard {
@@ -378,6 +376,6 @@ pub fn check_account_proof(proof: &MerkleProof, acc: &Account) -> Result<BlockSe
             );
         }
     } else {
-        failure::bail!(BlockError::WrongMerkleProof("No account in proof".to_string()))
+        fail!(BlockError::WrongMerkleProof("No account in proof".to_string()))
     }
 }

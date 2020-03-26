@@ -259,7 +259,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapType for
         }
         if key.is_empty() {
             Y::skip::<Y>(&mut cursor)
-                .map_err(|_| failure::err_msg(ExceptionCode::CellUnderflow))?; // TODO how not to lose original error here?
+                .map_err(|_| ExceptionCode::CellUnderflow)?; // TODO how not to lose original error here?
             Ok(Some(cursor))
         } else {
             Ok(None)
@@ -303,7 +303,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
             self.root_extra().write_to(cell)?;
             Ok(())
         } else {
-            failure::bail!(BlockError::InvalidData("no reference".to_string()))
+            fail!(BlockError::InvalidData("no reference".to_string()))
         }
     }
     /// deserialize not empty root
@@ -394,7 +394,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         if label_length < bit_len {
             bit_len -= label_length + 1;
             if cursor.remaining_references() < 2 {
-                bail!(ExceptionCode::CellUnderflow);
+                fail!(ExceptionCode::CellUnderflow);
             }
             for i in 0..2 {
                 let mut key = key.clone();
@@ -410,7 +410,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
             let aug: Y = Y::construct_from(cursor)?;
             return found(key.into(), cursor.clone(), aug)
         } else {
-            failure::bail!(BlockError::InvalidData("label_length > bit_len".to_string()))
+            fail!(BlockError::InvalidData("label_length > bit_len".to_string()))
         }
         Ok(true)
     }
@@ -451,7 +451,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         // ahmn_fork#_ {n:#} {X:Type} {Y:Type} left:^(HashmapAug n X Y) right:^(HashmapAug n X Y) extra:Y
         // = HashmapAugNode (n + 1) X Y;
         if slice.remaining_references() < 2 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("slice must contain 2 or more references".to_string())
             )
         }
@@ -511,8 +511,13 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
                     Self::make_cell_with_label_and_data(label, bit_len, false, &slice)?
                 }
                 error @ (_, _, _) => {
-                    error!(target: "tvm", "If we hit this, there's certainly a bug. {:?}. Passed: label: {}, key: {} ", error, label, key);
-                    failure::bail!(ExceptionCode::FatalError)
+                    log::error!(
+                        target: "tvm", 
+                        "If we hit this, there's certainly a bug. {:?}. \
+                         Passed: label: {}, key: {} ", 
+                        error, label, key
+                    );
+                    fail!(ExceptionCode::FatalError)
                 }
             }
         };
@@ -573,7 +578,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         let label = slice.get_label(bit_len)?;
         if label.remaining_bits() != bit_len { // fork - drain left and right
             if slice.remaining_references() < 2 {
-                failure::bail!(ExceptionCode::CellUnderflow)
+                fail!(ExceptionCode::CellUnderflow)
             }
             slice.shrink_references(2..);
         }

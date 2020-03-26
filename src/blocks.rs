@@ -18,6 +18,7 @@ use super::*;
 use dictionary::HashmapE;
 use std::cmp::Ordering;
 use std::io::{Cursor, Write};
+use std::fmt::{self, Display, Formatter};
 
 
 /*
@@ -33,10 +34,10 @@ block_id_ext$_
 ///
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct BlockIdExt {
-    shard_id: ShardIdent,
-    seq_no: u32,
-    root_hash: UInt256,
-    file_hash: UInt256,
+    pub shard_id: ShardIdent,
+    pub seq_no: u32,
+    pub root_hash: UInt256,
+    pub file_hash: UInt256,
 }
 
 impl BlockIdExt {
@@ -568,7 +569,7 @@ impl Deserializable for BlockExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != BLOCK_EXTRA_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "BlockExtra".to_string()
@@ -690,7 +691,7 @@ impl Default for ExtBlkRef {
 shard_ident$00 shard_pfx_bits:(#<= 60)
     workchain_id:int32 shard_prefix:uint64 = ShardIdent;
 */
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct ShardIdent {
     pub shard_pfx_bits: u8, // 6 bits
     pub workchain_id: i32,
@@ -698,8 +699,40 @@ pub struct ShardIdent {
 }
 
 impl ShardIdent {
-    pub fn new() -> Self {
-        ShardIdent::default()
+    pub fn new(shard_pfx_bits: u8, workchain_id: i32, shard_prefix: u64) -> Self {
+        ShardIdent {
+            shard_pfx_bits,
+            workchain_id,
+            shard_prefix,
+        }
+    }
+
+    pub fn with_tagged_prefix(workchain_id: i32, shard_prefix_tagged: u64) -> Self {
+        let mut shard_pfx_bits = 0;
+        let mut prefix = shard_prefix_tagged;
+        while prefix != 0x8000000000000000 {
+            shard_pfx_bits += 1;
+            prefix = prefix << 1;
+        }
+        ShardIdent {
+            shard_pfx_bits,
+            workchain_id,
+            shard_prefix: shard_prefix_tagged & !(1 << 63 - shard_pfx_bits),
+        }
+    }
+
+    pub fn with_prefix_slice(workchain_id: i32, mut shard_prefix_slice: SliceData) -> Self {
+        let mut shard_pfx_bits = 0;
+        let mut shard_prefix = 0;
+        while let Ok(bit) = shard_prefix_slice.get_next_bit_int() {
+            shard_pfx_bits += 1;
+            shard_prefix = shard_prefix | ((bit as u64) << 64 - shard_pfx_bits)
+        }
+        ShardIdent {
+            shard_pfx_bits,
+            workchain_id,
+            shard_prefix,
+        }
     }
 
     /// Creates new
@@ -741,8 +774,8 @@ impl ShardIdent {
     ///
     /// Get workchain_id
     ///
-    pub fn workchain_id(&self) -> u32 {
-        self.workchain_id as u32
+    pub fn workchain_id(&self) -> i32 {
+        self.workchain_id
     }
 
     pub fn contains_account(&self, mut acc_addr: AccountId) -> Result<bool> {
@@ -763,12 +796,18 @@ impl ShardIdent {
     }
 }
 
+impl Display for ShardIdent {
+	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+		write!(f, "{}, {}", self.workchain_id, self.shard_prefix_as_str_with_tag())
+	}
+}
+
 impl Deserializable for ShardIdent {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let constructor_and_pfx = cell.get_next_byte()?;
         // check for 2 high bits to be zero
         if constructor_and_pfx & 0xC0 != 0 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "2 high bits in ShardIdent's first byte have to be zero".to_string()
                 )
@@ -829,7 +868,7 @@ impl Deserializable for ShardState {
                 ShardState::SplitState(ss)
             }
             _ => {
-                failure::bail!(
+                fail!(
                     BlockError::InvalidConstructorTag {
                         t: tag,
                         s: "ShardState".to_string()
@@ -884,7 +923,7 @@ impl Deserializable for ShardStateSplit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != SHARD_STATE_SPLIT_PFX {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "ShardStateSplit".to_string()
@@ -1044,11 +1083,11 @@ impl ShardStateUnsplit {
         self.accounts.write_struct(value)
     }
     
-    pub fn insert_account(&mut self, acc: &ShardAccount) -> Result<()> {
+    pub fn insert_account(&mut self, account_id: &AccountId, acc: &ShardAccount) -> Result<()> {
         // TODO: split depth
         let depth_balance_info = DepthBalanceInfo::new(0, acc.read_account()?.get_balance().unwrap())?;
         let mut accounts = self.read_accounts()?;
-        accounts.set(&acc.account_cell().repr_hash(), acc, &depth_balance_info)?;
+        accounts.set(account_id, acc, &depth_balance_info)?;
         self.write_accounts(&accounts)
     }
 
@@ -1121,7 +1160,7 @@ impl Deserializable for ShardStateUnsplit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != SHARD_STATE_UNSPLIT_PFX {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "ShardStateUnsplit".to_string()
@@ -1319,7 +1358,7 @@ impl Deserializable for ValueFlow {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != VALUE_FLOW_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "ValueFlow".to_string()
@@ -1346,7 +1385,7 @@ impl Deserializable for BlockInfo {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != BLOCK_INFO_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "BlockInfo".to_string()
@@ -1369,14 +1408,14 @@ impl Deserializable for BlockInfo {
         self.seq_no = cell.get_next_u32()?;
         self.vert_seq_no = cell.get_next_u32()?;
         if self.vert_seqno_incr > self.vert_seq_no {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     format!("BlockInfo {} < {}", self.vert_seqno_incr, self.vert_seq_no)
                 )
             )
         }
         if self.seq_no < 1 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(format!("BlockInfo {}", self.seq_no))
             )
         }
@@ -1424,7 +1463,7 @@ impl Deserializable for Block {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != BLOCK_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "Block".to_string()
@@ -1533,7 +1572,7 @@ impl Deserializable for TopBlockDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
         if tag != TOP_BLOCK_DESCR_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag.into(),
                     s: "TopBlockDescr".to_string()
@@ -1546,16 +1585,14 @@ impl Deserializable for TopBlockDescr {
         {
             let mut slice = slice.clone();
             for i in (0..len).rev() {
-                ensure!(
-                    slice.remaining_references() != 0,
-                    BlockError::TvmException(ExceptionCode::CellUnderflow)
-                );
+                if slice.remaining_references() == 0 {
+                    fail!(BlockError::TvmException(ExceptionCode::CellUnderflow))
+                }
                 self.chain.push(slice.checked_drain_reference()?.clone());
                 if i != 0 {
-                    ensure!(
-                        slice.remaining_references() != 0,
-                        BlockError::TvmException(ExceptionCode::CellUnderflow)
-                    );
+                    if slice.remaining_references() == 0 {
+                        fail!(BlockError::TvmException(ExceptionCode::CellUnderflow))
+                    }
                     slice = slice.checked_drain_reference()?.into();
                 }
             }

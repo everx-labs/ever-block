@@ -72,7 +72,7 @@ impl Deserializable for OutActions {
             cell = prev_cell.into();
         }
         if !cell.is_empty() {
-            failure::bail!(BlockError::Other("cell is not empty".to_string()))
+            fail!(BlockError::Other("cell is not empty".to_string()))
         }
         Ok(())
     }
@@ -231,7 +231,7 @@ impl Serializable for OutAction {
                     cell.append_reference_cell(value.clone());
                 }
             },
-            &OutAction::None => failure::bail!(
+            &OutAction::None => fail!(
                 BlockError::InvalidOperation("self is None".to_string())
             )
         }
@@ -242,7 +242,7 @@ impl Serializable for OutAction {
 impl Deserializable for OutAction {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         if cell.remaining_bits() < std::mem::size_of::<u32>() * 8 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("cell can't be shorter than 32 bits".to_string())
             )
         }
@@ -279,7 +279,7 @@ impl Deserializable for OutAction {
                     }
                 }
             }
-            tag => failure::bail!(
+            tag => fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "OutAction".to_string()

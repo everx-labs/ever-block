@@ -80,7 +80,7 @@ macro_rules! define_VarIntegerN {
 
             fn check_owerflow(value: &BigInt) -> Result<()> {
                 if Self::get_len(&value) > $N {
-                    failure::bail!(
+                    fail!(
                         BlockError::InvalidArg(
                             format!("value is bigger than {} bytes", $N)
                         )
@@ -100,7 +100,7 @@ macro_rules! define_VarIntegerN {
             pub fn write_to_cell(value: &BigInt) -> Result<BuilderData> {
                 let len = Self::get_len(value);
                 if len >= $N {
-                    failure::bail!(ExceptionCode::RangeCheckError)
+                    fail!(ExceptionCode::RangeCheckError)
                 }
 
                 let mut cell = BuilderData::default();
@@ -113,7 +113,7 @@ macro_rules! define_VarIntegerN {
             pub fn read_from_cell(cell: &mut SliceData) -> Result<BigInt> {
                 let len = cell.get_next_int(Self::get_len_len())? as usize;
                 if len >= $N {
-                    failure::bail!(ExceptionCode::RangeCheckError)
+                    fail!(ExceptionCode::RangeCheckError)
                 }
                 Ok(BigInt::from_bytes_be(Sign::Plus, &cell.get_next_bytes(len)?))
             }
@@ -201,7 +201,7 @@ macro_rules! define_VarIntegerN {
                 let bits = 8 - ($N as u8).leading_zeros();
                 let bytes = (0 as $tt).leading_zeros() / 8 - self.0.leading_zeros() / 8;
                 if bytes > $N {
-                    failure::bail!(ExceptionCode::IntegerOverflow)
+                    fail!(ExceptionCode::IntegerOverflow)
                 }
                 cell.append_bits(bytes as usize, bits as usize)?;
                 cell.append_bits(self.0 as usize, bytes as usize * 8)?;
@@ -261,7 +261,7 @@ macro_rules! define_NumberN_up32bit {
         impl $varname {
             pub fn from_u32(value: u32, max_value: u32) -> Result<Self> {
                 if value > max_value {
-                    failure::bail!(
+                    fail!(
                         BlockError::InvalidArg(
                             format!("value: {} must be <= {}", value, max_value) 
                         )
@@ -667,7 +667,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
 
     pub fn read_struct(&self) -> Result<T> {
         if self.cell.cell_type() == CellType::PrunedBranch {
-            failure::bail!(
+            fail!(
                 BlockError::PrunedCellAccess(std::any::type_name::<T>().into())
             )
         }
@@ -692,7 +692,7 @@ impl<T: Default + Serializable + Deserializable + Clone> Default for ChildCell<T
 impl<T: Default + Serializable + Deserializable> Serializable for ChildCell<T> {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         if !builder.is_empty() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("The `builder` must be empty".to_string())
             )
         }
@@ -704,7 +704,7 @@ impl<T: Default + Serializable + Deserializable> Serializable for ChildCell<T> {
 impl<T: Default + Serializable + Deserializable> Deserializable for ChildCell<T> {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         if !slice.is_full_cell_slice() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("The `slice` must have zero position".to_string())
             )
         }

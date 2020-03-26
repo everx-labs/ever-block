@@ -311,7 +311,7 @@ impl Deserializable for AccountStatus {
             0x80 => AccountStatus::AccStateActive,
             0x40 => AccountStatus::AccStateFrozen,
             0xC0 => AccountStatus::AccStateNonexist,
-            _ => failure::bail!(BlockError::Other("unreachable".to_string()))
+            _ => fail!(BlockError::Other("unreachable".to_string()))
         };
         Ok(())
     }
@@ -560,7 +560,7 @@ impl Account {
             //code must present in constructor message
             match init.code {
                 Some(_) => storage.state = AccountState::AccountActive(init.clone()),
-                None => failure::bail!(
+                None => fail!(
                     BlockError::InvalidData(
                         "code field must present in StateInit in constructor message  \
                          while creating account".to_string()
@@ -568,7 +568,7 @@ impl Account {
                 ),
             };
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "stateInit must present in constructor message \
                      while creating account".to_string()
@@ -811,7 +811,7 @@ impl Account {
 
     pub fn prepare_proof(&self, state_root: &Cell) -> Result<Cell> {
         if self.is_none() {
-            failure::bail!(BlockError::InvalidData("Account cannot be None".to_string()))
+            fail!(BlockError::InvalidData("Account cannot be None".to_string()))
         } else {
             // proof for account in shard state
 
@@ -823,7 +823,7 @@ impl Account {
                 .read_accounts()?
                 .get(&self.get_addr().unwrap().get_address())?
                 .ok_or(
-                    failure::err_msg(
+                    error!(
                         BlockError::InvalidArg(
                             "Account doesn't belong to given shard state".to_string()
                         )

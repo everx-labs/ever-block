@@ -118,7 +118,7 @@ impl OutMsgDescr {
         if self.0.set(key.clone(), msg_slice, exported).is_ok() {
             Ok(())
         } else {
-            failure::bail!(BlockError::Other("Error insert serialized message".to_string()))
+            fail!(BlockError::Other("Error insert serialized message".to_string()))
         }
     }
 }
@@ -415,7 +415,7 @@ impl Serializable for OutMsg {
             OutMsg::Dequeue(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_DEQ)),
             OutMsg::DequeueImmediately(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_DEQ_IMM)),
             OutMsg::TransitRequired(ref x) => x.write_to(write_out_ctor_tag!(cell, OUT_MSG_TRDEQ)),
-            OutMsg::None => failure::bail!(
+            OutMsg::None => fail!(
                 BlockError::InvalidOperation("OutMsg::None can't be serialized".to_string())
             )
         }
@@ -433,7 +433,7 @@ impl Deserializable for OutMsg {
             OUT_MSG_DEQ_IMM => read_out_msg_descr!(cell, OutMsgDequeueImmediately, DequeueImmediately),
             OUT_MSG_DEQ =>  read_out_msg_descr!(cell, OutMsgDequeue, Dequeue),
             OUT_MSG_TRDEQ => read_out_msg_descr!(cell, OutMsgTransitRequired, TransitRequired),
-            tag => failure::bail!(
+            tag => fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "OutMsg".to_string()

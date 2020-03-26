@@ -99,7 +99,7 @@ impl Deserializable for ComputeSkipReason {
             0b00000000 => ComputeSkipReason::NoState,
             0b01000000 => ComputeSkipReason::BadState,
             0b10000000 => ComputeSkipReason::NoGas,
-            tag => failure::bail!(
+            tag => fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "ComputeSkipReason".to_string()
@@ -577,14 +577,14 @@ pub struct SplitMergeInfo {
 impl Serializable for SplitMergeInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if 0 != self.cur_shard_pfx_len & 0b11000000 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData("self.cur_shard_pfx_len is too long".to_string())
             )
         } else {
             cell.append_bits(self.cur_shard_pfx_len as usize, 6)?;
         }
         if 0 != self.acc_split_depth & 0b11000000 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData("self.acc_split_depth is too long".to_string()) 
             )
         } else {
@@ -1093,7 +1093,7 @@ impl Deserializable for TransactionDescr {
                 mi.read_from(cell)?;
                 *self = TransactionDescr::MergeInstall(mi);
             }
-            tag => failure::bail!(
+            tag => fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "TransactionDescr".to_string()
@@ -1136,7 +1136,7 @@ impl Deserializable for HashUpdate {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != HASH_UPDATE_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "HashUpdate".to_string()
@@ -1499,7 +1499,7 @@ impl Deserializable for Transaction {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_int(4)? as usize;
         if tag != TRANSACTION_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "Transaction".to_string()
@@ -1609,14 +1609,14 @@ impl AccountBlock {
     /// count of transactions
     pub fn transaction_count(&self) -> Result<usize> {
         if self.tr_count < 0 {
-            failure::bail!(BlockError::InvalidData("self.tr_count is negative".to_string()))
+            fail!(BlockError::InvalidData("self.tr_count is negative".to_string()))
         }
         self.transactions.len()
     }
     /// update
     pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> Result<()> {
         if self.transactions.is_empty() {
-            failure::bail!(BlockError::InvalidData("No transactions in account block".to_string()))
+            fail!(BlockError::InvalidData("No transactions in account block".to_string()))
         } else if let Some(transaction) = self.transactions.single()? {
             // if block has only one transaction for account just copy state update from transaction
             self.write_state_update(&transaction.0.read_state_update()?)?;
@@ -1669,7 +1669,7 @@ impl Deserializable for AccountBlock {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(4)? as usize;
         if tag != ACCOUNT_BLOCK_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "AccountBlock".to_string()

@@ -38,7 +38,7 @@ impl ShardAccounts {
     }
 
     pub fn account(&self, account_id: &AccountId) -> Result<Option<ShardAccount>> {
-        Ok(self.get(account_id)?.map(|account| account))
+        self.get(account_id)
     }
 }
 

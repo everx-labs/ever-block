@@ -27,7 +27,7 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
         while cursor.get_next_bit()? {
             if cursor.remaining_references() < 2 {
                 // fork doesn't have two refs - bad data
-                failure::bail!(BlockError::InvalidData("Fork doesn't have two refs".to_string()))
+                fail!(BlockError::InvalidData("Fork doesn't have two refs".to_string()))
             }
             match key.get_next_bit_int() {
                 Ok(x) => cursor = cursor.reference(x).expect("There must be at least two links").into(),

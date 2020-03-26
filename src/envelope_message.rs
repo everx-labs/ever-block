@@ -120,7 +120,7 @@ impl IntermediateAddressRegular {
 
     pub fn with_use_src_bits(use_bits: u8) -> Result<Self> {
         if use_bits > 96 { 
-            failure::bail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+            fail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
         }
         Ok(IntermediateAddressRegular {
             use_src_bits: use_bits
@@ -133,7 +133,7 @@ impl IntermediateAddressRegular {
 
     pub fn set_use_src_bits(&mut self, use_bits: u8) -> Result<()>{
         if use_bits > 96 { 
-            failure::bail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+            fail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
         }
         self.use_src_bits = use_bits;
         Ok(())
@@ -152,7 +152,7 @@ impl Deserializable for IntermediateAddressRegular{
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         let use_bits = cell.get_next_bits(7)?[0] >> 1;    // read 7 bit into use_src_bits
         if use_bits > 96 { 
-            failure::bail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+            fail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
         }
         self.use_src_bits = use_bits;
         Ok(())
@@ -190,7 +190,7 @@ impl IntermediateAddressSimple {
 
     pub fn with_addr(workchain_id: i8, addr_pfx: SliceData) -> Result<Self> {
         if addr_pfx.remaining_bits() != 64 { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
             )
         }
@@ -214,7 +214,7 @@ impl IntermediateAddressSimple {
 
     pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> Result<()>{
         if addr_pfx.remaining_bits() != 64 { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
             )
         }
@@ -270,7 +270,7 @@ impl IntermediateAddressExt {
 
     pub fn with_addr(workchain_id: i32, addr_pfx: SliceData) -> Result<Self> {
         if addr_pfx.remaining_bits() != 64 { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
             )
         }
@@ -294,7 +294,7 @@ impl IntermediateAddressExt {
 
     pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> Result<()>{
         if addr_pfx.remaining_bits() != 64 { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
             )
         }
@@ -431,7 +431,7 @@ impl Deserializable for MsgEnvelope{
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         let tag = cell.get_next_int(4)? as usize;
         if tag != MSG_ENVELOPE_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "MsgEnvelope".to_string()

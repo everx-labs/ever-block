@@ -15,18 +15,6 @@
 #![cfg_attr(feature = "ci_run", deny(warnings))]
 //#![recursion_limit="128"] // needs for error_chain
 
-// External
-extern crate core;
-#[macro_use]
-extern crate log;
-extern crate num;
-extern crate sha2;
-
-#[macro_use]
-extern crate failure;
-
-extern crate ton_types;
-
 #[macro_use]
 pub mod error;
 pub use self::error::*;
@@ -90,8 +78,6 @@ pub use self::miscellaneous::*;
 pub mod signature;
 pub use self::signature::*;
 
-extern crate rand;
-extern crate ed25519_dalek;
 pub mod signed_block;
 pub use self::signed_block::*;
 
@@ -232,7 +218,7 @@ pub trait MaybeDeserialize {
                 Ok(Some(res))
             }
             Ok(0) => Ok(None),
-            _ => failure::bail!(ExceptionCode::CellUnderflow)
+            _ => fail!(ExceptionCode::CellUnderflow)
         }
     }
 }
@@ -272,7 +258,7 @@ impl Deserializable for AccountId {
 impl Serializable for AccountId {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.remaining_bits() != 256 {
-            failure::bail!(BlockError::TvmException(ExceptionCode::CellUnderflow))
+            fail!(BlockError::TvmException(ExceptionCode::CellUnderflow))
         }
         cell.append_bytestring(&self)?;
         Ok(())

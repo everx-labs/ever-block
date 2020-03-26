@@ -45,10 +45,10 @@ impl CryptoSignature {
     pub fn from_r_s(r: &[u8], s: &[u8]) -> Result<Self>
     {
         if r.len() != ed25519_dalek::SIGNATURE_LENGTH / 2 {
-            failure::bail!(BlockError::InvalidArg("`r` has invalid size".to_string()))
+            fail!(BlockError::InvalidArg("`r` has invalid size".to_string()))
         }
         if s.len() != ed25519_dalek::SIGNATURE_LENGTH / 2 {
-            failure::bail!(BlockError::InvalidArg("`s` has invalid size".to_string()))
+            fail!(BlockError::InvalidArg("`s` has invalid size".to_string()))
         }
         let mut sign = [0_u8; ed25519_dalek::SIGNATURE_LENGTH];
         {
@@ -109,7 +109,7 @@ impl Deserializable for CryptoSignature {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_bits(4)?;
         if tag[0] != 5 << 4 {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag[0] as u32,
                     s: "CryptoSignature".to_string()
@@ -207,7 +207,7 @@ impl SigPubKey {
     }
 
     pub fn verify_signature(&self, data: &[u8], signature: &CryptoSignature) -> bool {
-        self.0.verify::<sha2::Sha512>(data, signature.signature()).is_ok()
+        self.0.verify(data, signature.signature()).is_ok()
     }
 }
 
@@ -223,7 +223,7 @@ impl Deserializable for SigPubKey {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
         if tag != SIG_PUB_KEY_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "SigPubKey".to_string()
@@ -370,7 +370,7 @@ impl Deserializable for BlockSignatures {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != BLOCK_SIGNATURES_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "BlockSignatures".to_string()
@@ -446,7 +446,7 @@ impl Deserializable for BlockProof {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != BLOCK_PROOF_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32, 
                     s: "BlockProof".to_string()

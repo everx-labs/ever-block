@@ -194,7 +194,7 @@ impl Deserializable for ValidatorDescr {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != VALIDATOR_DESC_TAG && tag != VALIDATOR_DESC_ADDR_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "ValidatorDescr".to_string()
@@ -311,7 +311,7 @@ impl Deserializable for ValidatorSet {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != VALIDATOR_SET_TAG && tag != VALIDATOR_SET_EX_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "ValidatorSet".to_string()
@@ -331,14 +331,10 @@ impl Deserializable for ValidatorSet {
         }
         self.list_key = self.list.len()? as u16;
         if self.main > self.total {
-            failure::bail!(
-                BlockError::InvalidData("main > total while read ValidatorSet".to_string())
-            )
+            fail!(BlockError::InvalidData("main > total while read ValidatorSet".to_string()))
         }
         if self.main < Number16(1) {
-            failure::bail!(
-                BlockError::InvalidData("main < 1 while read ValidatorSet".to_string())
-            )
+            fail!(BlockError::InvalidData("main < 1 while read ValidatorSet".to_string()))
         }
         Ok(())
     }

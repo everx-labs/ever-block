@@ -295,7 +295,7 @@ impl Deserializable for InMsg {
             MSG_IMPORT_TR =>  read_msg_descr!(cell, InMsgTransit, Transit),
             MSG_DISCARD_FIN => read_msg_descr!(cell, InMsgDiscardedFinal, DiscardedFinal),
             MSG_DISCARD_TR => read_msg_descr!(cell, InMsgDiscardedTransit, DiscardedTransit),
-            tag => failure::bail!(
+            tag => fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "InMsg".to_string()
@@ -673,7 +673,7 @@ impl InMsgDescr {
         if self.0.set(key.clone(), msg_slice, fees).is_ok() {
             Ok(())
         } else {
-            failure::bail!(BlockError::Other("Error insert serialized message".to_string()))
+            fail!(BlockError::Other("Error insert serialized message".to_string()))
         }
     }
 }

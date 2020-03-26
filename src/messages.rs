@@ -12,19 +12,19 @@
 * limitations under the License.
 */
 
+use crate::GetRepresentationHash;
 use super::{
-    BlockError, Deserializable, Grams, MaybeDeserialize, MaybeSerialize, 
-    Number5, Number9, Serializable, UnixTime32, VarUInteger32, MerkleProof
+    Block, BlockError, Deserializable, Grams, MaybeDeserialize, MaybeSerialize, 
+    Number5, Number9, Serializable, UnixTime32, VarUInteger32, MerkleProof,
+    hashmapaug::Augmentable
 };
-use super::hashmapaug::Augmentable;
-use {BuilderData, Cell, SliceData, UsageTree, Block, GetRepresentationHash,
-     MAX_REFERENCES_COUNT, MAX_DATA_BITS};
-use cell::IBitstring;
-use dictionary::{HashmapE, HashmapType};
 use std::fmt;
 use std::str::FromStr;
-use ton_types::Result;
-use {AccountId, UInt256};
+use ton_types::{
+    BuilderData, Cell, error, fail, MAX_DATA_BITS, MAX_REFERENCES_COUNT, Result, 
+    SliceData, UsageTree, cell::IBitstring, dictionary::{HashmapE, HashmapType}, 
+    types::{AccountId, UInt256}
+};
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -50,7 +50,7 @@ _ MsgAddressExt = MsgAddress;
 impl AnycastInfo {
     pub fn with_rewrite_pfx(pfx: SliceData) -> Result<Self> {
         if pfx.remaining_bits() > Number5::get_max_len() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("pfx can't be longer than 2^5-1 bits".to_string())
             )
         }
@@ -61,7 +61,7 @@ impl AnycastInfo {
     }
     pub fn set_rewrite_pfx(&mut self, pfx: SliceData) -> Result<()>{
         if pfx.remaining_bits() > Number5::get_max_len() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("pfx can't be longer than 2^5-1 bits".to_string())
             )
         }
@@ -100,7 +100,7 @@ _ MsgAddressExt = MsgAddress;
 impl MsgAddrVar {
     pub fn with_address(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> Result<MsgAddrVar> {
         if address.remaining_bits() > Number9::get_max_len(){
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("address can't be longer than 2^9-1 bits".to_string())
             )
         }
@@ -168,7 +168,7 @@ impl fmt::Display for MsgAddrStd {
 impl MsgAddrExt {
     pub fn with_address(address: SliceData) -> Result<Self>{
         if address.remaining_bits() > Number9::get_max_len(){
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg("address can't be longer than 2^9-1 bits".to_string())
             )
         }
@@ -213,7 +213,7 @@ impl FromStr for MsgAddressExt {
         match MsgAddress::from_str(string)? {
             MsgAddress::AddrNone => Ok(MsgAddressExt::AddrNone),
             MsgAddress::AddrExt(addr) => Ok(MsgAddressExt::AddrExtern(addr)),
-            _ => failure::bail!(BlockError::Other("Wrong type of address".to_string()))
+            _ => fail!(BlockError::Other("Wrong type of address".to_string()))
         }
     }
 }
@@ -284,16 +284,16 @@ impl FromStr for MsgAddress {
         let parts: Vec<&str> = string.split(':').take(4).collect();
         let len = parts.len();
         if len > 3 {
-            failure::bail!(BlockError::InvalidArg("too many components in address".to_string()))
+            fail!(BlockError::InvalidArg("too many components in address".to_string()))
         }
         if len == 0 {
-            failure::bail!(BlockError::InvalidArg("bad split".to_string()))
+            fail!(BlockError::InvalidArg("bad split".to_string()))
         }
         if parts[len - 1].is_empty() {
             if len == 1 {
                 return Ok(MsgAddress::AddrNone)
             } else {
-                failure::bail!(BlockError::InvalidArg("wrong format".to_string()))
+                fail!(BlockError::InvalidArg("wrong format".to_string()))
             }
         }
         let address = SliceData::from_string(parts[len - 1])?;
@@ -330,7 +330,7 @@ impl FromStr for MsgAddress {
 
         if workchain_id < 128 && workchain_id >= -128 {
             if address.remaining_bits() != 256 {
-                failure::bail!(
+                fail!(
                     BlockError::InvalidArg(
                         format!(
                             "account address should be 256 bits long in workchain {}", 
@@ -392,7 +392,7 @@ impl FromStr for MsgAddressInt {
         match MsgAddress::from_str(string)? {
             MsgAddress::AddrStd(addr) => Ok(MsgAddressInt::AddrStd(addr)),
             MsgAddress::AddrVar(addr) => Ok(MsgAddressInt::AddrVar(addr)),
-            _ => failure::bail!(BlockError::Other("Wrong type of address".to_string()))
+            _ => fail!(BlockError::Other("Wrong type of address".to_string()))
         }
     }
 }
@@ -555,7 +555,7 @@ impl Deserializable for MsgAddressIntOrNone {
                 var.read_from(cell)?;
                 *self = MsgAddressIntOrNone::Some(MsgAddressInt::AddrVar(var));
             },
-            _ => failure::bail!(BlockError::Other("Wrong type of address".to_string()))
+            _ => fail!(BlockError::Other("Wrong type of address".to_string()))
         }
         Ok(())
     } 
@@ -1914,7 +1914,7 @@ impl Deserializable for MsgAddressInt {
         *self = match cell.get_next_int(2)? {
             0b10 => MsgAddressInt::AddrStd(MsgAddrStd::construct_from::<MsgAddrStd>(cell)?),
             0b11 => MsgAddressInt::AddrVar(MsgAddrVar::construct_from::<MsgAddrVar>(cell)?),
-            _ => failure::bail!(BlockError::Other("Wrong type of address".to_string()))
+            _ => fail!(BlockError::Other("Wrong type of address".to_string()))
         };
         // TODO: fix autogen for error checking!
         /*

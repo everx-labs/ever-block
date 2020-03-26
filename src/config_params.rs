@@ -449,7 +449,7 @@ impl Deserializable for GlobalVersion {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != GLOBAL_VERSION_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "GlobalVersion".to_string()
@@ -553,7 +553,7 @@ impl Deserializable for BlockCreateFees {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != BLOCK_CREATE_FEES {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "BlockCreateFees".to_string()
@@ -761,7 +761,7 @@ impl Deserializable for StoragePrices {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != STORAGE_PRICES_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "StoragePrices".to_string()
@@ -845,7 +845,7 @@ impl Deserializable for ConfigParam18 {
 impl Serializable for ConfigParam18 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.map.is_empty() {
-            failure::bail!(BlockError::InvalidOperation("self.map is empty".to_string()))
+            fail!(BlockError::InvalidOperation("self.map is empty".to_string()))
         }
         self.map.write_hashmap_root(cell)?;
         Ok(())
@@ -967,7 +967,7 @@ impl Deserializable for GasFlatPfx {
         self.flat_gas_price.read_from(cell)?;
         self.other = Arc::new(GasLimitsPrices::construct_from(cell)?);
         if let GasLimitsPrices::FlatPfx(_) = self.other.deref() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData("GasFlatPfx.other can't be GasFlatPfx".to_string())
             )
         }
@@ -980,7 +980,7 @@ impl Serializable for GasFlatPfx {
         self.flat_gas_limit.write_to(cell)?;
         self.flat_gas_price.write_to(cell)?;
         if let GasLimitsPrices::FlatPfx(_) = self.other.deref() {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData("GasFlatPfx.other can't be GasFlatPfx".to_string())
             )
         }
@@ -1019,7 +1019,7 @@ impl Deserializable for GasLimitsPrices {
             GAS_PRICES_EXT_TAG => GasLimitsPrices::Ex(GasPricesEx::construct_from(cell)?),
             GAS_FLAT_PFX_TAG => GasLimitsPrices::FlatPfx(GasFlatPfx::construct_from(cell)?),
             tag => {
-                failure::bail!(
+                fail!(
                     BlockError::InvalidConstructorTag {
                         t: tag as u32,
                         s: "GasLimitsPrices".to_string()
@@ -1100,7 +1100,7 @@ impl Deserializable for MsgForwardPrices {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != MSG_FWD_PRICES_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "MsgForwardPrices".to_string()
@@ -1171,7 +1171,7 @@ impl Deserializable for CatchainConfig {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != CATCHAIN_CONFIG_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "CatchainConfig".to_string()
@@ -1240,7 +1240,7 @@ impl Deserializable for ConsensusConfig {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != CONSENSUS_CONFIG_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "ConsensusConfig".to_string()
@@ -1539,7 +1539,7 @@ impl WorkchainFormat0 {
                )
            }
         else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "min_addr_len >= 64 && min_addr_len <= max_addr_len \
                      && max_addr_len <= 1023 && addr_len_step <= 1023 \
@@ -1564,7 +1564,7 @@ impl WorkchainFormat0 {
             self.min_addr_len = min_addr_len;
             Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "should: min_addr_len >= 64 && min_addr_len <= 1023".to_string()
                 )
@@ -1587,7 +1587,7 @@ impl WorkchainFormat0 {
             self.max_addr_len = max_addr_len;
             Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "should: max_addr_len >= 64 && max_addr_len <= 1024 \
                      && self.min_addr_len <= max_addr_len".to_string()
@@ -1611,7 +1611,7 @@ impl WorkchainFormat0 {
             self.addr_len_step = addr_len_step;
             Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData("should: addr_len_step <= 1024".to_string())
             )
         }
@@ -1632,7 +1632,7 @@ impl WorkchainFormat0 {
             self.workchain_type_id = workchain_type_id;
             Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData("should: workchain_type_id >= 1".to_string())
             )
         }
@@ -1656,7 +1656,7 @@ impl Deserializable for WorkchainFormat0 {
            self.workchain_type_id >= 1 {
                 Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "should: min_addr_len >= 64 && min_addr_len <= max_addr_len \
                      && max_addr_len <= 1023 && addr_len_step <= 1023".to_string()
@@ -1681,7 +1681,7 @@ impl Serializable for WorkchainFormat0 {
                 id.write_to(cell)?;
                 Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "should: min_addr_len >= 64 && min_addr_len <= max_addr_len \
                      && max_addr_len <= 1023 && addr_len_step <= 1023".to_string()
@@ -1771,7 +1771,7 @@ impl WorkchainDescr {
             self.min_split = min_split;
             Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "should: min_split <= max_split && max_split <= 60".to_string()
                 )
@@ -1801,7 +1801,7 @@ impl WorkchainDescr {
             self.max_split = max_split;
             Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "should: min_split <= max_split && max_split <= 60".to_string()
                 )
@@ -1817,7 +1817,7 @@ impl Deserializable for WorkchainDescr {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
         if tag != WORKCHAIN_DESCRIPTOR_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "WorkchainDescr".to_string()
@@ -1893,7 +1893,7 @@ impl Serializable for WorkchainDescr {
 
             Ok(())
         } else {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "should: min_split <= max_split && max_split <= 60".to_string()
                 )
@@ -1940,7 +1940,7 @@ impl Deserializable for ConfigProposalSetup {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
         if tag != CONFIG_PROPOSAL_SETUP_TAG {
-            failure::bail!(BlockError::InvalidConstructorTag {
+            fail!(BlockError::InvalidConstructorTag {
                 t: tag as u32,
                 s: "ConfigProposalSetup".into()
             })
@@ -2020,7 +2020,7 @@ impl Deserializable for ConfigVotingSetup {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
         if tag != CONFIG_VOTING_SETUP_TAG {
-            bail!(BlockError::InvalidConstructorTag {
+            fail!(BlockError::InvalidConstructorTag {
                 t: tag as u32,
                 s: "ConfigVotingSetup".into()
             })
@@ -2166,7 +2166,7 @@ impl Deserializable for ValidatorTempKey {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?; // TODO what is tag length in bits???
         if tag != VALIDATOR_TEMP_KEY_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "ValidatorTempKey".to_string()
@@ -2226,7 +2226,7 @@ impl Deserializable for ValidatorSignedTempKey {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?; // TODO what is tag length in bits???
         if tag != VALIDATOR_SIGNED_TEMP_KEY_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "ValidatorSignedTempKey".to_string()
@@ -2285,7 +2285,7 @@ impl ConfigParam39 {
                     if let Some(s) = s {
                        sp.read_from(s)?
                     } else {
-                        failure::bail!(
+                        fail!(
                             BlockError::NotFound("ValidatorSignedTempKey".to_string())
                         )
                     }; 
@@ -2344,14 +2344,14 @@ impl ParamLimits {
 
     pub fn with_limits(underload: u32, soft_limit: u32, hard_limit: u32) -> Result<Self> {
         if underload > soft_limit { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg(
                     "`underload` have to be less or equal `soft_limit`".to_string() 
                 )
             )
         }
         if soft_limit > hard_limit { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg(
                    "`soft_limit` have to be less or equal `hard_limit`".to_string() 
                 )
@@ -2366,7 +2366,7 @@ impl ParamLimits {
 
     pub fn set_underload(&mut self, underload: u32) -> Result<()>{
         if underload > self.soft_limit { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg(
                     "`underload` have to be less or equal `soft_limit`".to_string() 
                 )
@@ -2382,7 +2382,7 @@ impl ParamLimits {
 
     pub fn set_soft_limit(&mut self, soft_limit: u32) -> Result<()>{
         if soft_limit > self.hard_limit { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg(
                     "`soft_limit` have to be less or equal `hard_limit`".to_string() 
                 )
@@ -2398,7 +2398,7 @@ impl ParamLimits {
 
     pub fn set_hard_limit(&mut self, hard_limit: u32) -> Result<()>{
         if self.soft_limit > hard_limit { 
-            failure::bail!(
+            fail!(
                 BlockError::InvalidArg(
                     "`hard_limit` have to be larger or equal `soft_limit`".to_string()
                 )
@@ -2413,7 +2413,7 @@ impl Deserializable for ParamLimits {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
         if tag != PARAM_LIMITS_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "ParamLimits".to_string()
@@ -2424,14 +2424,14 @@ impl Deserializable for ParamLimits {
         self.soft_limit.read_from(slice)?;
         self.hard_limit.read_from(slice)?;
         if self.underload > self.soft_limit {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidData(
                     "`underload` have to be less or equal `soft_limit`".to_string()
                 )
             )
         }
         if self.soft_limit > self.hard_limit {
-            failure::bail!( 
+            fail!( 
                 BlockError::InvalidData(
                     "`soft_limit` have to be less or equal `hard_limit`".to_string()
                 )
@@ -2508,7 +2508,7 @@ impl Deserializable for BlockLimits {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
         if tag != BLOCK_LIMITS_TAG {
-            failure::bail!(
+            fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "BlockLimits".to_string()
