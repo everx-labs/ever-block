@@ -99,6 +99,7 @@ pub enum ConfigParamEnum {
     ConfigParam7(ConfigParam7),
     ConfigParam8(ConfigParam8),
     ConfigParam9(ConfigParam9),
+    ConfigParam10(ConfigParam10),
     ConfigParam11(ConfigParam11),
     ConfigParam12(ConfigParam12),
     ConfigParam14(ConfigParam14),
@@ -149,6 +150,7 @@ impl ConfigParamEnum {
             7 => { read_config!(ConfigParam7, ConfigParam7, slice) },
             8 => { read_config!(ConfigParam8, ConfigParam8, slice) },
             9 => { read_config!(ConfigParam9, ConfigParam9, slice) },
+            10 => { read_config!(ConfigParam10, ConfigParam10, slice) },
             11 => { read_config!(ConfigParam11, ConfigParam11, slice) },
             12 => { read_config!(ConfigParam12, ConfigParam12, slice) },
             14 => { read_config!(ConfigParam14, ConfigParam14, slice) },
@@ -188,6 +190,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam7(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(7)},
             ConfigParamEnum::ConfigParam8(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(8)},
             ConfigParamEnum::ConfigParam9(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(9)},
+            ConfigParamEnum::ConfigParam10(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(10)},
             ConfigParamEnum::ConfigParam11(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(11)},
             ConfigParamEnum::ConfigParam12(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(12)},
             ConfigParamEnum::ConfigParam14(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(14)},
@@ -516,14 +519,42 @@ impl ConfigParam9 {
 
 impl Deserializable for ConfigParam9 {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.mandatory_params.read_from(cell)?;
+        self.mandatory_params.read_hashmap_root(cell)?;
         Ok(())
     }
 }
 
 impl Serializable for ConfigParam9 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.mandatory_params.write_to(cell)?;
+        self.mandatory_params.write_hashmap_root(cell)?;
+        Ok(())
+    }
+}
+
+///
+/// Config Param 10 structure
+/// 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ConfigParam10 {
+    pub critical_params: MandatoryParams,
+}
+
+impl ConfigParam10 {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Deserializable for ConfigParam10 {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        self.critical_params.read_hashmap_root(cell)?;
+        Ok(())
+    }
+}
+
+impl Serializable for ConfigParam10 {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.critical_params.write_hashmap_root(cell)?;
         Ok(())
     }
 }

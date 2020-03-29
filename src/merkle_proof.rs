@@ -178,7 +178,7 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
     let block_info = check_block_info_proof(&block, &proof.hash, block_id)?;
 
     // check if acc is belonged the block's shard
-    if !block_info.shard.contains_account(tr.account_id().clone())? {
+    if !block_info.shard().contains_account(tr.account_id().clone())? {
         fail!(
             BlockError::WrongMerkleProof(
                 "Account address in transaction belongs other shardchain".to_string()
@@ -187,7 +187,7 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
     }
 
     // check if transaction is potencially belonged the block by logical time
-    if tr.logical_time() < block_info.start_lt || tr.logical_time() > block_info.end_lt {
+    if tr.logical_time() < block_info.start_lt() || tr.logical_time() > block_info.end_lt() {
         fail!(
             BlockError::WrongMerkleProof(
                 "Transaction's logical time doesn't belong to \

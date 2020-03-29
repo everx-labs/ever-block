@@ -90,70 +90,72 @@ pub struct BlockSeqNoAndShard {
     pub shard_id: ShardIdent,
 }
 
-/* Blockchain 5.1.6 (outdated)
+const GEN_SOFTWARE_EXISTS_FLAG: u8 = 1;
 
-TL-B from Lite Client v11:
-
+/* 
 block_info#9bc7a987 
-  
+
   version:uint32 
-  
   not_master:(## 1) 
   after_merge:(## 1)
   before_split:(## 1) 
   after_split:(## 1) 
   want_split:Bool
   want_merge:Bool
-  key_block:Bool
+  key_block:Bool 
 
   vert_seqno_incr:(## 1)
-  flags:(## 8)
+  flags:(## 8) { flags <= 1 }
   seq_no:# 
-  vert_seq_no:# { vert_seq_no >= vert_seqno_incr } 
+  vert_seq_no:# 
+  { vert_seq_no >= vert_seqno_incr } 
   { prev_seq_no:# } { ~prev_seq_no + 1 = seq_no } 
-  
-  shard:ShardIdent 
+
+  shard:ShardIdent
   gen_utime:uint32
-  start_lt:uint64
+  start_lt:uint64 
   end_lt:uint64
   gen_validator_list_hash_short:uint32
   gen_catchain_seqno:uint32
   min_ref_mc_seqno:uint32
   prev_key_block_seqno:uint32
+  gen_software:flags . 0?GlobalVersion
+
   master_ref:not_master?^BlkMasterInfo 
   prev_ref:^(BlkPrevInfo after_merge)
   prev_vert_ref:vert_seqno_incr?^(BlkPrevInfo 0)
-  = BlockInfo;
+
+= BlockInfo;
 */
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockInfo {
-    
-    pub version: u32,
-    
-    pub after_merge: bool,
-    pub before_split: bool,
-    pub after_split: bool,
-    pub want_split: bool,
-    pub want_merge: bool,
-    pub key_block: bool,
 
-    pub vert_seqno_incr: u32,
-    pub flags: u8,
-    pub seq_no: u32,
-    pub vert_seq_no: u32,
+    version: u32,
+    after_merge: bool,
+    before_split: bool,
+    after_split: bool,
+    want_split: bool,
+    want_merge: bool,
+    key_block: bool,
 
-    pub shard: ShardIdent,
-    pub gen_utime: UnixTime32,
-    pub start_lt: u64,
-    pub end_lt: u64,
-    pub gen_validator_list_hash_short: u32,
-    pub gen_catchain_seqno: u32,
-    pub min_ref_mc_seqno: u32,
-    pub prev_key_block_seqno: u32,
+    vert_seqno_incr: u32,
+    flags: u8,
+    seq_no: u32,
+    vert_seq_no: u32,
 
-    pub master_ref: Option<BlkMasterInfo>,  // reference
-    pub prev_ref: BlkPrevInfo,              // reference, master = after_merge
-    pub prev_vert_ref: Option<BlkPrevInfo>, // reference, depends on `vert_seq_no`, master = 0
+    shard: ShardIdent,
+    gen_utime: UnixTime32,
+    start_lt: u64,
+    end_lt: u64,
+    gen_validator_list_hash_short: u32,
+    gen_catchain_seqno: u32,
+    min_ref_mc_seqno: u32,
+    prev_key_block_seqno: u32,
+    gen_software: Option<GlobalVersion>,
+
+    master_ref: Option<ChildCell<BlkMasterInfo>>,
+    prev_ref: ChildCell<BlkPrevInfo>,
+    prev_vert_ref: Option<ChildCell<BlkPrevInfo>>,
 }
 
 impl Default for BlockInfo {
@@ -178,64 +180,140 @@ impl Default for BlockInfo {
             gen_catchain_seqno: 0,
             min_ref_mc_seqno: 0,
             prev_key_block_seqno: 0,
+            gen_software: None,
             master_ref: None,
-            prev_ref: BlkPrevInfo::Block{prev: ExtBlkRef::default()},
+            prev_ref: ChildCell::default(),
             prev_vert_ref: None,
         }
     }
 }
 
 impl BlockInfo {
-    ///
-    /// Create new instance BlockInfo with sequence number of block
-    ///
-    pub fn with_seq_no(
-        seq_no: u32,
-        prev_ref: BlkPrevInfo,
-        vert_seq_no: u32,
-        prev_vert_ref: Option<BlkPrevInfo>,
-    ) -> Self {
-        assert!(seq_no != 0, "seq_no should not be 0");
-        assert!(
-            (vert_seq_no == 0) ^ prev_vert_ref.is_some(),
-            "if vert_sec_no !=0 then vert_prev_ref can't be equal to None"
-        );
-        assert!(
-            prev_vert_ref.is_none() || prev_vert_ref.as_ref().unwrap().is_one_prev(),
-            "prev_vert_ref can have only one prev block"
-        );
 
-        let mut info = BlockInfo::default();
-
-        info.seq_no = seq_no;
-
-        info.after_merge = !prev_ref.is_one_prev();
-        info.prev_ref = prev_ref;
-
-        info.vert_seq_no = vert_seq_no;
-        info.prev_vert_ref = prev_vert_ref;
-
-        info
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    ///
-    /// Create new instance BlockInfo with shard_ident
-    /// and sequence number of block
-    ///
-    pub fn with_shard_ident_and_seq_no(
-        shard: ShardIdent,
-        seq_no: u32,
-        prev_ref: BlkPrevInfo,
-        vert_seq_no: u32,
-        prev_vert_ref: Option<BlkPrevInfo>,
-    ) -> Self {
-        let mut info = BlockInfo::with_seq_no(seq_no, prev_ref, vert_seq_no, prev_vert_ref);
-        info.shard = shard;
-        info
+    pub fn version(&self) -> u32 { self.version }
+    pub fn set_version(&mut self, version: u32) { self.version = version; }
+
+
+    pub fn before_split(&self) -> bool { self.before_split }
+    pub fn set_before_split(&mut self, before_split: bool) { self.before_split = before_split }
+
+    pub fn after_split(&self) -> bool { self.after_split }
+    pub fn set_after_split(&mut self, after_split: bool) { self.after_split = after_split }
+
+    pub fn want_split(&self) -> bool { self.want_split }
+    pub fn set_want_split(&mut self, want_split: bool) { self.want_split = want_split }
+
+    pub fn want_merge(&self) -> bool { self.want_merge }
+    pub fn set_want_merge(&mut self, want_merge: bool) { self.want_merge = want_merge }
+
+    pub fn key_block(&self) -> bool { self.key_block }
+    pub fn set_key_block(&mut self, key_block: bool) { self.key_block = key_block }
+
+
+    pub fn flags(&self) -> u8 { self.flags }
+    // For now flags is related only on gen_software, so it is set automatically if need
+    //pub fn set_flags(&mut self, flags) { self.flags = flags }
+
+    pub fn seq_no(&self) -> u32 { self.seq_no }
+    pub fn set_seq_no(&mut self, seq_no: u32) -> Result<()> {
+        if seq_no == 0 {
+            fail!(BlockError::InvalidArg("`seq_no` can't be zero".to_string()))
+        }
+        self.seq_no = seq_no;
+        Ok(())
     }
 
-    pub fn seq_no(&self) -> u32 {
-        self.seq_no
+
+    pub fn shard(&self) -> &ShardIdent { &self.shard }
+    pub fn set_shard(&mut self, shard: ShardIdent) { self.shard = shard }
+
+    pub fn gen_utime(&self) -> UnixTime32 { self.gen_utime }
+    pub fn set_gen_utime(&mut self, gen_utime: UnixTime32) { self.gen_utime = gen_utime }
+
+    pub fn start_lt(&self) -> u64 { self.start_lt }
+    pub fn set_start_lt(&mut self, start_lt: u64) { self.start_lt = start_lt }
+
+    pub fn end_lt(&self) -> u64 { self.end_lt }
+    pub fn set_end_lt(&mut self, end_lt: u64) { self.end_lt = end_lt }
+
+    pub fn gen_validator_list_hash_short(&self) -> u32 { self.gen_validator_list_hash_short }
+    pub fn set_gen_validator_list_hash_short(&mut self, hash: u32) { self.gen_validator_list_hash_short = hash }
+
+    pub fn gen_catchain_seqno(&self) -> u32 { self.gen_catchain_seqno }
+    pub fn set_gen_catchain_seqno(&mut self, cc_seqno: u32) { self.gen_catchain_seqno = cc_seqno }
+
+    pub fn min_ref_mc_seqno(&self) -> u32 { self.min_ref_mc_seqno }
+    pub fn set_min_ref_mc_seqno(&mut self, min_ref_mc_seqno: u32) { self.min_ref_mc_seqno = min_ref_mc_seqno }
+
+    pub fn prev_key_block_seqno(&self) -> u32 { self.prev_key_block_seqno }
+    pub fn set_prev_key_block_seqno(&mut self, prev_key_block_seqno: u32) { self.prev_key_block_seqno = prev_key_block_seqno }
+
+    pub fn gen_software(&self) -> Option<&GlobalVersion> { self.gen_software.as_ref() }
+    pub fn set_gen_software(&mut self, gen_software: Option<GlobalVersion>) {
+        self.gen_software = gen_software;
+        if self.gen_software.is_some() {
+            self.flags |= GEN_SOFTWARE_EXISTS_FLAG;
+        } else {
+            self.flags &= !GEN_SOFTWARE_EXISTS_FLAG;
+        }
+    }
+
+    pub fn read_master_ref(&self) -> Result<Option<BlkMasterInfo>> {
+        self.master_ref.as_ref().map(|mr| mr.read_struct()).transpose()
+    }
+
+    pub fn write_master_ref(&mut self, value: Option<&BlkMasterInfo>) -> Result<()> {
+        self.master_ref = value.map(|v| ChildCell::with_struct(v)).transpose()?;
+        Ok(())
+    }
+
+    pub fn after_merge(&self) -> bool { self.after_merge }
+    pub fn read_prev_ref(&self) -> Result<BlkPrevInfo> {
+        let mut prev_ref = if self.after_merge {
+            BlkPrevInfo::default_blocks() 
+        } else { 
+            BlkPrevInfo::default_block()
+        };
+        prev_ref.read_from(&mut self.prev_ref.cell().into())?;
+        Ok(prev_ref)
+    }
+    pub fn set_prev_stuff(&mut self, after_merge: bool, prev_ref: &BlkPrevInfo) -> Result<()> {
+        if !after_merge ^ prev_ref.is_one_prev() {
+            fail!(BlockError::InvalidArg(
+                "`prev_ref` may handle two blocks only if `after_merge`".to_string()))
+        }
+        self.after_merge = after_merge;
+        self.prev_ref.write_struct(prev_ref)
+    }
+
+    pub fn vert_seq_no(&self) -> u32 { self.vert_seq_no }
+    pub fn vert_seqno_incr(&self) -> u32 { self.vert_seqno_incr }
+    pub fn read_prev_vert_ref(&self) -> Result<Option<BlkPrevInfo>> {
+        self.prev_vert_ref.as_ref().map(|mr| mr.read_struct()).transpose()
+    }
+    pub fn set_vertical_stuff(
+        &mut self,
+        vert_seqno_incr: u32,
+        vert_seq_no: u32,
+        prev_vert_ref: Option<BlkPrevInfo>)
+    -> Result<()> {
+        if vert_seq_no < vert_seqno_incr {
+            fail!(BlockError::InvalidArg(
+                "`vert_seq_no` can't be less then `vert_seqno_incr`".to_string()))
+        }
+        if (vert_seqno_incr == 0) ^ prev_vert_ref.is_none() {
+            fail!(BlockError::InvalidArg(
+                "`prev_vert_ref` may be Some only if `vert_seqno_incr != 0` and vice versa".to_string()))
+        }
+
+        self.vert_seqno_incr = vert_seqno_incr;
+        self.vert_seq_no = vert_seq_no;
+        self.prev_vert_ref = prev_vert_ref.map(|v| ChildCell::with_struct(&v)).transpose()?;
+        Ok(())
     }
 }
 
@@ -350,7 +428,7 @@ unsigned_block info:^BlockInfo value_flow:^ValueFlow
 */
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct Block {
-    pub global_id: u32,
+    pub global_id: i32,
     pub info: ChildCell<BlockInfo>,            // reference
     pub value_flow: ChildCell<ValueFlow>,      // reference
     pub state_update: ChildCell<MerkleUpdate>, // reference
@@ -359,7 +437,7 @@ pub struct Block {
 
 impl Block {
     pub fn with_params(
-        global_id: u32,
+        global_id: i32,
         info: BlockInfo,
         value_flow: ValueFlow,
         state_update: MerkleUpdate,
@@ -374,11 +452,11 @@ impl Block {
         })
     }
 
-    pub fn global_id(&self) -> u32 {
+    pub fn global_id(&self) -> i32 {
         self.global_id
     }
 
-    pub fn set_global_id(&mut self, global_id: u32) {
+    pub fn set_global_id(&mut self, global_id: i32) {
         self.global_id = global_id
     }
 
@@ -648,7 +726,7 @@ pub struct ValueFlow {
 ext_blk_ref$_ start_lt:uint64 end_lt:uint64
     seq_no:uint32 hash:uint256 = ExtBlkRef;
 */
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ExtBlkRef {
     pub end_lt: u64,
     pub seq_no: u32,
@@ -676,22 +754,11 @@ impl Serializable for ExtBlkRef {
     }
 }
 
-impl Default for ExtBlkRef {
-    fn default() -> Self {
-        Self {
-            end_lt: 0,
-            seq_no: 0,
-            root_hash: UInt256::from([0; 32]),
-            file_hash: UInt256::from([0; 32]),
-        }
-    }
-}
-
 /*
 shard_ident$00 shard_pfx_bits:(#<= 60)
     workchain_id:int32 shard_prefix:uint64 = ShardIdent;
 */
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct ShardIdent {
     pub shard_pfx_bits: u8, // 6 bits
     pub workchain_id: i32,
@@ -797,6 +864,12 @@ impl ShardIdent {
 }
 
 impl Display for ShardIdent {
+	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+		write!(f, "{}, {}", self.workchain_id, self.shard_prefix_as_str_with_tag())
+	}
+}
+
+impl fmt::Debug for ShardIdent {
 	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
 		write!(f, "{}, {}", self.workchain_id, self.shard_prefix_as_str_with_tag())
 	}
@@ -1263,8 +1336,6 @@ const BLOCK_INFO_TAG: u32 = 0x9bc7a987;
 
 impl Serializable for BlockInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        assert!(self.seq_no != 0);
-        assert!((self.vert_seq_no == 0) ^ self.prev_vert_ref.is_some());
 
         let mut byte = 0;
         if self.master_ref.is_some() {
@@ -1309,20 +1380,22 @@ impl Serializable for BlockInfo {
             .append_u32(self.min_ref_mc_seqno)?
             .append_u32(self.prev_key_block_seqno)?;
 
-        // master_ref:not_master?^BlkMasterInfo
+        if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
+            if let Some(gen_software) = self.gen_software.as_ref() {
+                gen_software.write_to(cell)?;
+            } else {
+                fail!(BlockError::InvalidData("GEN_SOFTWARE_EXISTS_FLAG is set but gen_software is None".to_string()))
+            }
+        } else if self.gen_software.is_some() {
+            fail!(BlockError::InvalidData("GEN_SOFTWARE_EXISTS_FLAG is not set but gen_software is Some".to_string()))
+        }
+
         if let Some(ref master) = self.master_ref {
             cell.append_reference(master.write_to_new_cell()?);
         }
-
-        // prev_ref:^(BlkPrevInfo after_merge)
         cell.append_reference(self.prev_ref.write_to_new_cell()?);
-
-        // prev_vert_ref:vert_seq_no?^(BlkPrevInfo 0)
-        match &self.prev_vert_ref {
-            Some(prev) => {
-                cell.append_reference(prev.write_to_new_cell()?);
-            }
-            None => (),
+        if let Some(prev_vert_ref) = self.prev_vert_ref.as_ref() {
+            cell.append_reference(prev_vert_ref.write_to_new_cell()?);
         }
 
         Ok(())
@@ -1396,29 +1469,18 @@ impl Deserializable for BlockInfo {
         
         let next_byte = cell.get_next_byte()?;
         let not_master = (next_byte >> 7) & 1 == 1;
-        self.after_merge = (next_byte >> 6) & 1 == 1;
+        let after_merge = (next_byte >> 6) & 1 == 1;
         self.before_split = (next_byte >> 5) & 1 == 1;
         self.after_split = (next_byte >> 4) & 1 == 1;
         self.want_split = (next_byte >> 3) & 1 == 1;
         self.want_merge = (next_byte >> 2) & 1 == 1;
         self.key_block = (next_byte >> 1) & 1 == 1;
-        self.vert_seqno_incr = ((next_byte) & 1) as u32;
+        let vert_seqno_incr = ((next_byte) & 1) as u32;
 
         self.flags = cell.get_next_byte()?;
-        self.seq_no = cell.get_next_u32()?;
-        self.vert_seq_no = cell.get_next_u32()?;
-        if self.vert_seqno_incr > self.vert_seq_no {
-            fail!(
-                BlockError::InvalidData(
-                    format!("BlockInfo {} < {}", self.vert_seqno_incr, self.vert_seq_no)
-                )
-            )
-        }
-        if self.seq_no < 1 {
-            fail!(
-                BlockError::InvalidData(format!("BlockInfo {}", self.seq_no))
-            )
-        }
+        let seq_no = cell.get_next_u32()?;
+        self.set_seq_no(seq_no)?;
+        let vert_seq_no = cell.get_next_u32()?;
         self.shard.read_from(cell)?;
         self.gen_utime.0 = cell.get_next_u32()?;
         self.start_lt = cell.get_next_u64()?;
@@ -1428,32 +1490,32 @@ impl Deserializable for BlockInfo {
         self.min_ref_mc_seqno = cell.get_next_u32()?;
         self.prev_key_block_seqno = cell.get_next_u32()?;
 
-        // master_ref:not_master?^BlkMasterInfo 
+        if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
+            self.gen_software = Some(GlobalVersion::construct_from(cell)?);
+        }
+
         self.master_ref = if not_master {
-                let mut bli = BlkMasterInfo::default();
-                bli.read_from(&mut cell.checked_drain_reference()?.into())?;
-                Some(bli)
-            } else { 
-                None
-            };
-
-        // prev_ref:^(BlkPrevInfo after_merge)
-        self.prev_ref = if self.after_merge {
-                BlkPrevInfo::default_blocks() 
-            } else { 
-                BlkPrevInfo::default_block()
-            };
-        self.prev_ref.read_from(&mut cell.checked_drain_reference()?.into())?;
-
-        // prev_vert_ref:vert_seqno_incr?^(BlkPrevInfo 0)
-        self.prev_vert_ref = match self.vert_seq_no {
-            0 => None,
-            _ => {
-                let mut bpi = BlkPrevInfo::default_block();
-                bpi.read_from(&mut cell.checked_drain_reference()?.into())?;
-                Some(bpi)
-            }
+            let mut bli = BlkMasterInfo::default();
+            bli.read_from(&mut cell.checked_drain_reference()?.into())?;
+            Some(ChildCell::with_struct(&bli)?)
+        } else { 
+            None
         };
+
+        let mut prev_ref = if after_merge {
+            BlkPrevInfo::default_blocks() 
+        } else { 
+            BlkPrevInfo::default_block()
+        };
+        prev_ref.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.set_prev_stuff(after_merge, &prev_ref)?;
+
+        let prev_vert_ref = if vert_seq_no == 0 {
+            None
+        } else {
+            Some(BlkPrevInfo::construct_from(&mut cell.checked_drain_reference()?.into())?)
+        };
+        self.set_vertical_stuff(vert_seqno_incr, vert_seq_no, prev_vert_ref)?;
 
         Ok(())
     }
@@ -1486,7 +1548,7 @@ impl Deserializable for Block {
 impl Serializable for Block {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_u32(BLOCK_TAG)?;
-        builder.append_u32(self.global_id)?;
+        builder.append_i32(self.global_id)?;
         builder.append_reference(self.info.write_to_new_cell()?); // info:^BlockInfo
         builder.append_reference(self.value_flow.write_to_new_cell()?); // value_flow:^ValueFlow
         builder.append_reference(self.state_update.write_to_new_cell()?); // state_update:^(MERKLE_UPDATE ShardState)

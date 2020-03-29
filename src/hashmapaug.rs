@@ -185,6 +185,30 @@ pub struct HashmapAugE<X: Default + Deserializable + Serializable, Y: Augmentabl
     data: Option<Cell>,
 }
 
+impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, Y> {
+    pub fn get_with_aug(&self, mut key: SliceData, gas_consumer: &mut dyn GasConsumer) -> Result<(Option<SliceData>, Option<Y>)> {
+        let mut bit_len = self.bit_len;
+        let data = match self.data() {
+            Some(data) if !key.is_empty() && Self::check_key(bit_len, &key) => data,
+            _ => return Ok((None, None))
+        };
+        let mut cursor = gas_consumer.load_cell(data.clone());
+        let mut label = cursor.get_label(bit_len)?;
+        while SliceData::erase_prefix(&mut key, &label) && !key.is_empty() {
+            let next_index = key.get_next_bit_int()? as usize;
+            cursor = gas_consumer.load_cell(cursor.reference(next_index)?);
+            bit_len -= label.remaining_bits() + 1;
+            label = cursor.get_label(bit_len)?;
+        }
+        if key.is_empty() {
+            let aug = Y::construct_from::<Y>(&mut cursor)?;
+            Ok((Some(cursor), Some(aug)))
+        } else {
+            Ok((None, None))
+        }
+    }
+}
+
 #[cfg_attr(rustfmt, rustfmt_skip)]
 impl<X: Default + Deserializable + Serializable, Y: Augmentable> fmt::Display for HashmapAugE<X, Y> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -239,31 +263,8 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapType for
     fn bit_len_mut(&mut self) -> &mut usize {
         &mut self.bit_len
     }
-    fn hashmap_get(&self, mut key: SliceData, gas_consumer: &mut dyn GasConsumer) -> Leaf {
-        let mut bit_len = self.bit_len;
-        if self.is_empty() || key.is_empty() || !Self::check_key(bit_len, &key) {
-            return Ok(None);
-        }
-        let data = if let Some(data) = self.data() {
-            data
-        } else {
-            return Ok(None)
-        };
-        let mut cursor = gas_consumer.load_cell(data.clone());
-        let mut label = cursor.get_label(bit_len)?;
-        while SliceData::erase_prefix(&mut key, &label) && !key.is_empty() {
-            let next_index = key.get_next_bit_int()? as usize;
-            cursor = gas_consumer.load_cell(cursor.reference(next_index)?);
-            bit_len -= label.remaining_bits() + 1;
-            label = cursor.get_label(bit_len)?;
-        }
-        if key.is_empty() {
-            Y::skip::<Y>(&mut cursor)
-                .map_err(|_| ExceptionCode::CellUnderflow)?; // TODO how not to lose original error here?
-            Ok(Some(cursor))
-        } else {
-            Ok(None)
-        }
+    fn hashmap_get(&self, key: SliceData, gas_consumer: &mut dyn GasConsumer) -> Leaf {
+        self.get_with_aug(key, gas_consumer).map(|(leaf, _)| leaf)
     }
 }
 
