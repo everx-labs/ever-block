@@ -42,7 +42,7 @@ impl ShardHashes {
     where F: FnMut(ShardIdent, ShardDescr) -> Result<bool> {
         self.iterate_with_keys(&mut |wc_id: i32, shardes_tree| {
             shardes_tree.0.iterate(&mut |prefix, shard_descr| {
-                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
+                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix);
                 func(shard_ident, shard_descr)
             })
         })
@@ -79,14 +79,18 @@ impl McBlockExtra {
         Ok(ident)
     }
     /// Split Shard
-    pub fn split_shard(&mut self, ident: &mut ShardIdent, descr: &ShardDescr, _fee: &CurrencyCollection) -> Result<()> {
-        // TODO fee?
+    pub fn split_shard(&mut self, ident: &mut ShardIdent, descr: &ShardDescr, fee: &CurrencyCollection) -> Result<()> {
         let shards = match self.hashes.get(&ident.workchain_id())? {
             Some(InRefValue(mut shards)) => {
                 shards.split(ident.shard_key(), descr)?;
+                ident.enlarge();
+                let fee = ShardFeeCreated::with_fee(fee.clone());
+                self.fees.0.set(ident.full_key(), &fee.write_to_new_cell()?.into(), &fee)?;
                 shards
             }
             None => {
+                let fee = ShardFeeCreated::with_fee(fee.clone());
+                self.fees.0.set(ident.full_key(), &fee.write_to_new_cell()?.into(), &fee)?;
                 BinTree::with_item(descr)
             }
         };

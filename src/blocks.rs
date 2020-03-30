@@ -754,90 +754,60 @@ impl Serializable for ExtBlkRef {
     }
 }
 
-pub const MAX_SPLIT_DEPTH: u8 = 60;
-
 /*
-shard_ident$00 
-    shard_pfx_bits: (#<= 60)
-    workchain_id: int32
-    shard_prefix: uint64
-= ShardIdent;
+shard_ident$00 shard_pfx_bits:(#<= 60)
+    workchain_id:int32 shard_prefix:uint64 = ShardIdent;
 */
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct ShardIdent {
-    workchain_id: i32,
-    shard_prefix: u64, // with terminated bit!
-}
-
-impl Default for ShardIdent {
-    fn default() -> Self {
-        ShardIdent {
-            workchain_id: 0,
-            shard_prefix: 0x8000_0000_0000_0000,
-        }
-    }
+    pub shard_pfx_bits: u8, // 6 bits
+    pub workchain_id: i32,
+    pub shard_prefix: u64,
 }
 
 impl ShardIdent {
-    pub fn with_prefix_len(shard_pfx_len: u8, workchain_id: i32, shard_prefix: u64) -> Result<Self> {
-        if shard_pfx_len > MAX_SPLIT_DEPTH {
-            fail!(
-                BlockError::InvalidArg(
-                    format!("Shard prefix length can't greater than {}", MAX_SPLIT_DEPTH)
-                )
-            )
+    pub fn new(shard_pfx_bits: u8, workchain_id: i32, shard_prefix: u64) -> Self {
+        ShardIdent {
+            shard_pfx_bits,
+            workchain_id,
+            shard_prefix,
         }
-        Ok(
-            ShardIdent {
-                workchain_id,
-                shard_prefix: Self::add_tag(shard_prefix, shard_pfx_len),
-            }
-        )
     }
 
-    pub fn with_tagged_prefix(workchain_id: i32, shard_prefix_tagged: u64) -> Result<Self> {
-        if (shard_prefix_tagged & (!0 >> MAX_SPLIT_DEPTH + 1)) != 0 {
-            fail!(
-                BlockError::InvalidArg(
-                    format!("Shard prefix can't longer than {}", MAX_SPLIT_DEPTH)
-                )
-            )
+    pub fn with_tagged_prefix(workchain_id: i32, shard_prefix_tagged: u64) -> Self {
+        let mut shard_pfx_bits = 0;
+        let mut prefix = shard_prefix_tagged;
+        while prefix != 0x8000000000000000 {
+            shard_pfx_bits += 1;
+            prefix = prefix << 1;
         }
-        Ok(
-            ShardIdent {
-                workchain_id,
-                shard_prefix: shard_prefix_tagged,
-            }
-        )
+        ShardIdent {
+            shard_pfx_bits,
+            workchain_id,
+            shard_prefix: shard_prefix_tagged & !(1 << 63 - shard_pfx_bits),
+        }
     }
 
-    pub fn with_prefix_slice(workchain_id: i32, mut shard_prefix_slice: SliceData) -> Result<Self> {
+    pub fn with_prefix_slice(workchain_id: i32, mut shard_prefix_slice: SliceData) -> Self {
         let mut shard_pfx_bits = 0;
         let mut shard_prefix = 0;
         while let Ok(bit) = shard_prefix_slice.get_next_bit_int() {
             shard_pfx_bits += 1;
             shard_prefix = shard_prefix | ((bit as u64) << 64 - shard_pfx_bits)
         }
-        if shard_pfx_bits > MAX_SPLIT_DEPTH {
-            fail!(
-                BlockError::InvalidArg(
-                    format!("Shard prefix length can't greater than {}", MAX_SPLIT_DEPTH)
-                )
-            )
+        ShardIdent {
+            shard_pfx_bits,
+            workchain_id,
+            shard_prefix,
         }
-        Ok(
-            ShardIdent {
-                workchain_id,
-                shard_prefix: Self::add_tag(shard_prefix, shard_pfx_bits),
-            }
-        )
     }
 
     /// Creates new
     pub fn with_workchain_id(workchain_id: i32) -> Self {
         Self {
+            shard_pfx_bits: 0,
             workchain_id,
-            shard_prefix: 0x8000_0000_0000_0000,
+            shard_prefix: 0,
         }
     }
     ///
@@ -845,12 +815,8 @@ impl ShardIdent {
     ///
     pub fn shard_key(&self) -> SliceData {
         let mut cell = BuilderData::new();
-        let mut p = self.shard_prefix;
-        debug_assert!(p != 0);
-        while p != 1 << 63 {
-            cell.append_bit_bool(p >> 63 != 0).unwrap(); // unsafe - cell is longer than 64 bit
-            p = p << 1;
-        }
+        cell.append_bits(self.shard_prefix as usize, self.shard_pfx_bits as usize)
+            .unwrap();
         cell.into()
     }
 
@@ -861,9 +827,15 @@ impl ShardIdent {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)
             .unwrap()
-            .append_u64(self.shard_prefix_without_tag())
+            .append_u64(self.shard_prefix)
             .unwrap();
         cell.into()
+    }
+
+    pub fn enlarge(&mut self) {
+        debug_assert!(self.shard_pfx_bits < 60);
+        self.shard_prefix |= 1u64 << self.shard_pfx_bits as u64;
+        self.shard_pfx_bits += 1;
     }
 
     ///
@@ -874,88 +846,20 @@ impl ShardIdent {
     }
 
     pub fn contains_account(&self, mut acc_addr: AccountId) -> Result<bool> {
-        Ok(
-            if self.shard_prefix == 1 << 63 {
-                true
-            } else {
-                let len = self.prefix_len();
-                let addr = acc_addr.get_next_int(len as usize)?;
-                let pfx_without_tag = self.shard_prefix >> (64 - len);
-                addr ^ pfx_without_tag == 0
-            }
-        )
+        Ok(self.shard_pfx_bits == 0
+            || acc_addr.get_next_int(self.shard_pfx_bits as usize)?
+                == self.shard_prefix >> 64 - self.shard_pfx_bits)
     }
 
     pub fn shard_prefix_as_str_with_tag(&self) -> String {
         format!(
-            "{:016x}",
+            "{:x}",
             self.shard_prefix_with_tag()
         )
     }
 
     pub fn shard_prefix_with_tag(&self) -> u64 {
-        self.shard_prefix
-    }
-
-    pub fn merge(&self) -> Result<ShardIdent> {
-        let lb = Self::lower_bits(self.shard_prefix);
-        if self.shard_prefix == lb {
-            fail!(
-                BlockError::InvalidArg(
-                    format!("Can't merge shard {}", self.shard_prefix_as_str_with_tag())
-                )
-            )
-        } else {
-            Ok(
-                ShardIdent {
-                    workchain_id: self.workchain_id,
-                    shard_prefix: (self.shard_prefix - lb) | (lb << 1),
-                }
-            )
-        }
-    }
-
-    pub fn split(&self) -> Result<(ShardIdent, ShardIdent)> {
-        let lb = Self::lower_bits(self.shard_prefix) >> 1;
-        if lb & (!0 >> MAX_SPLIT_DEPTH + 1) != 0 {
-            fail!(
-                BlockError::InvalidArg(
-                    format!("Can't split shard {}, because of max split depth is {}",
-                        self.shard_prefix_as_str_with_tag(), MAX_SPLIT_DEPTH)
-                )
-            )
-        } else {
-            Ok((
-                ShardIdent {
-                    workchain_id: self.workchain_id,
-                    shard_prefix: self.shard_prefix - lb,
-                },
-                ShardIdent {
-                    workchain_id: self.workchain_id,
-                    shard_prefix: self.shard_prefix + lb,
-                }
-            ))
-        }
-    }
-
-    pub fn shard_prefix_without_tag(self) -> u64 {
-        self.shard_prefix - Self::lower_bits(self.shard_prefix)
-    }
-
-    // returns all 0 and first 1 from right to left
-    // i.e. 1010000 -> 10000
-    fn lower_bits(n: u64) -> u64 { n & (!n + 1) }
-
-    fn add_tag(prefix: u64, len: u8) -> u64 { prefix | (1 << (63 - len)) }
-
-    fn prefix_len(&self) -> u8 {
-        let mut len = 0;
-        let mut p = self.shard_prefix;
-        while p != (1 << 63) { 
-            len = len + 1;
-            p = p << 1;
-        }
-        len
+        self.shard_prefix | (1 << (63 - self.shard_pfx_bits))
     }
 }
 
@@ -982,16 +886,9 @@ impl Deserializable for ShardIdent {
                 )
             )
         }
-        let shard_pfx_bits = constructor_and_pfx & 0x3F;
-        if shard_pfx_bits > MAX_SPLIT_DEPTH {
-            fail!(
-                BlockError::InvalidArg(
-                    format!("Shard prefix can't longer than {}", MAX_SPLIT_DEPTH)
-                )
-            )
-        }
+        self.shard_pfx_bits = constructor_and_pfx & 0x3F;
         self.workchain_id = cell.get_next_u32()? as i32;
-        self.shard_prefix = Self::add_tag(cell.get_next_u64()?, shard_pfx_bits);
+        self.shard_prefix = cell.get_next_u64()?;
 
         Ok(())
     }
@@ -999,7 +896,7 @@ impl Deserializable for ShardIdent {
 
 impl Serializable for ShardIdent {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.prefix_len().write_to(cell)?;
+        (self.shard_pfx_bits & 0x3F).write_to(cell)?;
         self.workchain_id.write_to(cell)?;
         self.shard_prefix.write_to(cell)?;
         Ok(())
