@@ -42,15 +42,22 @@ impl ShardHashes {
     where F: FnMut(ShardIdent, ShardDescr) -> Result<bool> {
         self.iterate_with_keys(&mut |wc_id: i32, shardes_tree| {
             shardes_tree.0.iterate(&mut |prefix, shard_descr| {
-                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix);
+                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
                 func(shard_ident, shard_descr)
             })
         })
+    }
+    pub fn get_shard_descr(&self, shard: &ShardIdent, _exact: bool) -> Result<Option<ShardDescr>> {
+        match self.get(&shard.workchain_id())? {
+            Some(InRefValue(bintree)) => bintree.get(shard.shard_prefix_without_tag().write_to_new_cell()?.into()),
+            None => Ok(None)
+        }
     }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct McBlockExtra {
+    pub key_block: bool,
     pub hashes: ShardHashes, // workchain_id of ShardIdent from all blocks
     pub fees: ShardFees,
     pub prev_blk_signatures: CryptoSignatures,
@@ -72,25 +79,21 @@ impl McBlockExtra {
         let shards = BinTree::with_item(descr);
         self.hashes.set(&workchain_id, &InRefValue(shards))?;
 
-        let ident = ShardIdent::with_workchain_id(workchain_id);
+        let ident = ShardIdent::with_workchain_id(workchain_id)?;
 
         let fee = ShardFeeCreated::with_fee(fee.clone());
         self.fees.0.set(ident.full_key(), &fee.write_to_new_cell()?.into(), &fee)?;
         Ok(ident)
     }
     /// Split Shard
-    pub fn split_shard(&mut self, ident: &mut ShardIdent, descr: &ShardDescr, fee: &CurrencyCollection) -> Result<()> {
+    pub fn split_shard(&mut self, ident: &mut ShardIdent, descr: &ShardDescr, _fee: &CurrencyCollection) -> Result<()> {
+        // TODO fee?
         let shards = match self.hashes.get(&ident.workchain_id())? {
             Some(InRefValue(mut shards)) => {
                 shards.split(ident.shard_key(), descr)?;
-                ident.enlarge();
-                let fee = ShardFeeCreated::with_fee(fee.clone());
-                self.fees.0.set(ident.full_key(), &fee.write_to_new_cell()?.into(), &fee)?;
                 shards
             }
             None => {
-                let fee = ShardFeeCreated::with_fee(fee.clone());
-                self.fees.0.set(ident.full_key(), &fee.write_to_new_cell()?.into(), &fee)?;
                 BinTree::with_item(descr)
             }
         };
@@ -160,7 +163,7 @@ impl Deserializable for McBlockExtra {
                 }
             )
         }
-        let key_block = cell.get_next_bit()?;
+        self.key_block = cell.get_next_bit()?;
         self.hashes.read_from(cell)?;
         self.fees.read_from(cell)?;
 
@@ -169,7 +172,7 @@ impl Deserializable for McBlockExtra {
         self.recover_create_msg = InRefValue::<InMsg>::read_maybe_from(cell1)?;
         self.mint_msg = InRefValue::<InMsg>::read_maybe_from(cell1)?;
 
-        self.config = if key_block {
+        self.config = if self.key_block {
             Some(ConfigParams::construct_from(cell)?)
         } else {
             None
@@ -442,7 +445,7 @@ masterchain_state_extra#cc26
 */
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct McStateExtra {
-    hashes: ShardHashes,
+    pub hashes: ShardHashes,
     pub config: ConfigParams,
     pub validator_info: ValidatorInfo,
     pub prev_blocks: OldMcBlocksInfo,
@@ -461,7 +464,7 @@ impl McStateExtra {
     pub fn add_workchain(&mut self, workchain_id: i32, descr: &ShardDescr) -> Result<ShardIdent> {
         let shards = BinTree::with_item(descr);
         self.hashes.set(&workchain_id, &InRefValue(shards))?;
-        Ok(ShardIdent::with_workchain_id(workchain_id))
+        Ok(ShardIdent::with_workchain_id(workchain_id)?)
     }
 
     /// Split Shard

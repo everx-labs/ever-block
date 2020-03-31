@@ -165,7 +165,7 @@ impl MerkleUpdate {
                 self.traverse_on_apply(&self.new, &old_cells).into();
 
             // constructed tree's hash have to coinside with self.new_hash
-            assert_eq!(new_root.repr_hash(), self.new_hash);
+            debug_assert_eq!(new_root.repr_hash(), self.new_hash);
 
             Ok(new_root)
         }

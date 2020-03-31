@@ -67,6 +67,10 @@ impl DepthBalanceInfo {
     pub fn set_balance(&mut self, balance: CurrencyCollection) {
         self.balance = balance
     }
+
+    pub fn balance(&self) -> &CurrencyCollection {
+        &self.balance
+    }
 }
 
 impl Augmentable for DepthBalanceInfo {

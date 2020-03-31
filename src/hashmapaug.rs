@@ -116,6 +116,14 @@ macro_rules! define_HashmapAugE {
                 self.0.hashmap_get(key, &mut 0)?
                     .map(|ref mut slice| Self::construct_from::<$x_type>(slice)).transpose()
             }
+            /// returns item with aug from hasmapaug
+            pub fn get_with_aug<K: Serializable>(&self, key: &K) -> Result<(Option<$x_type>, Option<$y_type>)> {
+                let key = key.write_to_new_cell()?.into();
+                match self.0.get_with_aug(key, &mut 0)? {
+                    (Some(mut slice), aug) => Ok((Some(Self::construct_from::<$x_type>(&mut slice)?), aug)),
+                    _ => Ok((None, None))
+                }
+            }
             /// returns item from hasmapaug as slice
             pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
                 let key = key.write_to_new_cell()?.into();

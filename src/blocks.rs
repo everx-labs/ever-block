@@ -60,6 +60,17 @@ impl BlockIdExt {
             file_hash,
         }
     }
+    pub fn dummy_masterchain() -> Self {
+        BlockIdExt {
+            shard_id: ShardIdent::masterchain(),
+            seq_no: 0,
+            root_hash: UInt256::default(),
+            file_hash: UInt256::default(),
+        }
+    }
+    pub fn shard(&self) -> &ShardIdent {
+        &self.shard_id
+    }
 }
 
 impl Serializable for BlockIdExt {
@@ -271,6 +282,13 @@ impl BlockInfo {
         Ok(())
     }
 
+    pub fn read_master_id(&self) -> Result<ExtBlkRef> {
+        match self.master_ref {
+            Some(ref mr) => Ok(mr.read_struct()?.master),
+            None => self.read_prev_ref()?.prev1()
+        }
+    }
+
     pub fn after_merge(&self) -> bool { self.after_merge }
     pub fn read_prev_ref(&self) -> Result<BlkPrevInfo> {
         let mut prev_ref = if self.after_merge {
@@ -280,6 +298,14 @@ impl BlockInfo {
         };
         prev_ref.read_from(&mut self.prev_ref.cell().into())?;
         Ok(prev_ref)
+    }
+    pub fn read_prev_ids(&self) -> Result<Vec<ExtBlkRef>> {
+        let prev = self.read_prev_ref()?;
+        let mut vec = vec!(prev.prev1()?);
+        if let Some(prev2) = prev.prev2()? {
+            vec.push(prev2);
+        }
+        Ok(vec)
     }
     pub fn set_prev_stuff(&mut self, after_merge: bool, prev_ref: &BlkPrevInfo) -> Result<()> {
         if !after_merge ^ prev_ref.is_one_prev() {
@@ -754,125 +780,281 @@ impl Serializable for ExtBlkRef {
     }
 }
 
+pub const MAX_SPLIT_DEPTH: u8 = 60;
+pub const MASTERCHAIN_ID: i32 = -1;
+pub const BASE_WORKCHAIN_ID: i32 = 0;
+pub const INVALID_WORKCHAIN_ID: i32 = 0x8000_0000u32 as i32;
+pub const SHARD_FULL: u64 = 0x8000_0000_0000_0000u64;
+
 /*
-shard_ident$00 shard_pfx_bits:(#<= 60)
-    workchain_id:int32 shard_prefix:uint64 = ShardIdent;
+shard_ident$00 
+    shard_pfx_bits: (#<= 60)
+    workchain_id: int32
+    shard_prefix: uint64
+= ShardIdent;
 */
-#[derive(Clone, Copy, Default, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct ShardIdent {
-    pub shard_pfx_bits: u8, // 6 bits
-    pub workchain_id: i32,
-    pub shard_prefix: u64,
+    workchain_id: i32,
+    prefix: u64, // with terminated bit!
+}
+
+impl Default for ShardIdent {
+    fn default() -> Self {
+        ShardIdent {
+            workchain_id: 0,
+            prefix: SHARD_FULL,
+        }
+    }
 }
 
 impl ShardIdent {
-    pub fn new(shard_pfx_bits: u8, workchain_id: i32, shard_prefix: u64) -> Self {
+    pub fn masterchain() -> Self {
         ShardIdent {
-            shard_pfx_bits,
-            workchain_id,
-            shard_prefix,
+            workchain_id: MASTERCHAIN_ID,
+            prefix: SHARD_FULL,
         }
     }
-
-    pub fn with_tagged_prefix(workchain_id: i32, shard_prefix_tagged: u64) -> Self {
-        let mut shard_pfx_bits = 0;
-        let mut prefix = shard_prefix_tagged;
-        while prefix != 0x8000000000000000 {
-            shard_pfx_bits += 1;
-            prefix = prefix << 1;
+    pub fn with_prefix_len(shard_pfx_len: u8, workchain_id: i32, shard_prefix: u64) -> Result<Self> {
+        if shard_pfx_len > MAX_SPLIT_DEPTH {
+            fail!(BlockError::InvalidArg(
+                    format!("Shard prefix length can't greater than {}", MAX_SPLIT_DEPTH)
+            ))
         }
-        ShardIdent {
-            shard_pfx_bits,
-            workchain_id,
-            shard_prefix: shard_prefix_tagged & !(1 << 63 - shard_pfx_bits),
-        }
+        Self::check_workchain_id(workchain_id)?;
+        Ok(
+            ShardIdent {
+                workchain_id,
+                prefix: Self::add_tag(shard_prefix, shard_pfx_len),
+            }
+        )
     }
 
-    pub fn with_prefix_slice(workchain_id: i32, mut shard_prefix_slice: SliceData) -> Self {
+    pub fn with_tagged_prefix(workchain_id: i32, shard_prefix_tagged: u64) -> Result<Self> {
+        if (shard_prefix_tagged & (!0 >> (MAX_SPLIT_DEPTH + 1))) != 0 {
+            fail!(
+                BlockError::InvalidArg(
+                    format!("Shard prefix can't longer than {}", MAX_SPLIT_DEPTH)
+                )
+            )
+        }
+        Self::check_workchain_id(workchain_id)?;
+        Ok(
+            ShardIdent {
+                workchain_id,
+                prefix: shard_prefix_tagged,
+            }
+        )
+    }
+
+    pub fn with_prefix_slice(workchain_id: i32, mut shard_prefix_slice: SliceData) -> Result<Self> {
         let mut shard_pfx_bits = 0;
         let mut shard_prefix = 0;
         while let Ok(bit) = shard_prefix_slice.get_next_bit_int() {
             shard_pfx_bits += 1;
             shard_prefix = shard_prefix | ((bit as u64) << 64 - shard_pfx_bits)
         }
-        ShardIdent {
-            shard_pfx_bits,
-            workchain_id,
-            shard_prefix,
+        if shard_pfx_bits > MAX_SPLIT_DEPTH {
+            fail!(
+                BlockError::InvalidArg(
+                    format!("Shard prefix length can't greater than {}", MAX_SPLIT_DEPTH)
+                )
+            )
         }
+        Self::check_workchain_id(workchain_id)?;
+        Ok(
+            ShardIdent {
+                workchain_id,
+                prefix: Self::add_tag(shard_prefix, shard_pfx_bits),
+            }
+        )
     }
 
-    /// Creates new
-    pub fn with_workchain_id(workchain_id: i32) -> Self {
-        Self {
-            shard_pfx_bits: 0,
-            workchain_id,
-            shard_prefix: 0,
-        }
+    pub fn with_workchain_id(workchain_id: i32) -> Result<Self> {
+        Self::check_workchain_id(workchain_id)?;
+        Ok(
+            Self {
+                workchain_id,
+                prefix: SHARD_FULL,
+            }
+        )
     }
-    ///
+
+    pub fn check_workchain_id(workchain_id: i32) -> Result<()> {
+        if workchain_id == INVALID_WORKCHAIN_ID {
+            fail!(BlockError::InvalidArg(
+                    format!("Workchain id 0x{:x} is invalid", INVALID_WORKCHAIN_ID)
+            ))
+        }
+        Ok(())
+    } 
+
     /// Get bitstring-key for BinTree operation for Shard
-    ///
     pub fn shard_key(&self) -> SliceData {
         let mut cell = BuilderData::new();
-        cell.append_bits(self.shard_prefix as usize, self.shard_pfx_bits as usize)
-            .unwrap();
+        let mut p = self.prefix;
+        debug_assert!(p != 0);
+        while p != 1 << 63 {
+            cell.append_bit_bool(p >> 63 != 0).unwrap(); // unsafe - cell is longer than 64 bit
+            p = p << 1;
+        }
         cell.into()
     }
 
-    ///
     /// Get bitstring-key for BinTree operation for Shard
-    ///
     pub fn full_key(&self) -> SliceData {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)
             .unwrap()
-            .append_u64(self.shard_prefix)
+            .append_u64(self.shard_prefix_without_tag())
             .unwrap();
         cell.into()
     }
 
-    pub fn enlarge(&mut self) {
-        debug_assert!(self.shard_pfx_bits < 60);
-        self.shard_prefix |= 1u64 << self.shard_pfx_bits as u64;
-        self.shard_pfx_bits += 1;
-    }
-
-    ///
-    /// Get workchain_id
-    ///
     pub fn workchain_id(&self) -> i32 {
         self.workchain_id
     }
 
+    pub fn is_child_for(&self, parent: &ShardIdent) -> bool {
+        parent.is_parent_for(self)
+    }
+
+    pub fn is_parent_for(&self, child: &ShardIdent) -> bool {
+        let parent = child.merge();
+        self.workchain_id() == child.workchain_id() &&
+            parent.is_ok() &&
+            self.shard_prefix_with_tag() == parent.unwrap().shard_prefix_with_tag()
+    }
+
+    pub fn is_ancestor_for(&self, descendant: &ShardIdent) -> bool {
+        descendant.prefix != SHARD_FULL &&
+        self.workchain_id() == descendant.workchain_id() &&
+        (
+            self.prefix == SHARD_FULL ||
+            ((descendant.prefix & !((self.prefix_lower_bits() << 1) - 1)) == self.shard_prefix_without_tag())
+        )
+    }
+
+    pub fn can_split(&self) -> bool {
+        self.prefix_len() == MAX_SPLIT_DEPTH
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.prefix == SHARD_FULL
+    }
+
+    pub fn is_masterchain(&self) -> bool {
+        self.workchain_id == MASTERCHAIN_ID
+    }
+
+    pub fn is_masterchain_ext(&self) -> bool {
+        self.is_masterchain() && self.is_full()
+    }
+
+    pub fn is_base_workchain(&self) -> bool {
+        self.workchain_id() == BASE_WORKCHAIN_ID
+    }
+
     pub fn contains_account(&self, mut acc_addr: AccountId) -> Result<bool> {
-        Ok(self.shard_pfx_bits == 0
-            || acc_addr.get_next_int(self.shard_pfx_bits as usize)?
-                == self.shard_prefix >> 64 - self.shard_pfx_bits)
+        Ok(
+            if self.prefix == SHARD_FULL {
+                true
+            } else {
+                // compare shard prefix and first bits of address 
+                // (take as many bits of the address as the bits in the prefix)
+                let len = self.prefix_len();
+                let addr_pfx = acc_addr.get_next_int(len as usize)?;
+                let shard_pfx = self.prefix >> (64 - len);
+                addr_pfx == shard_pfx
+            }
+        )
     }
 
     pub fn shard_prefix_as_str_with_tag(&self) -> String {
         format!(
-            "{:x}",
+            "{:016x}",
             self.shard_prefix_with_tag()
         )
     }
 
     pub fn shard_prefix_with_tag(&self) -> u64 {
-        self.shard_prefix | (1 << (63 - self.shard_pfx_bits))
+        self.prefix
+    }
+
+    pub fn shard_prefix_without_tag(self) -> u64 {
+        self.prefix - self.prefix_lower_bits()
+    }
+
+    pub fn merge(&self) -> Result<ShardIdent> {
+        let lb = self.prefix_lower_bits();
+        if self.prefix == SHARD_FULL {
+            fail!(
+                BlockError::InvalidArg(
+                    format!("Can't merge shard {}", self.shard_prefix_as_str_with_tag())
+                )
+            )
+        } else {
+            Ok(
+                ShardIdent {
+                    workchain_id: self.workchain_id,
+                    prefix: (self.prefix - lb) | (lb << 1),
+                }
+            )
+        }
+    }
+
+    pub fn split(&self) -> Result<(ShardIdent, ShardIdent)> {
+        let lb = self.prefix_lower_bits() >> 1;
+        if lb & (!0 >> MAX_SPLIT_DEPTH + 1) != 0 {
+            fail!(
+                BlockError::InvalidArg(
+                    format!("Can't split shard {}, because of max split depth is {}",
+                        self.shard_prefix_as_str_with_tag(), MAX_SPLIT_DEPTH)
+                )
+            )
+        } else {
+            Ok((
+                ShardIdent {
+                    workchain_id: self.workchain_id,
+                    prefix: self.prefix - lb,
+                },
+                ShardIdent {
+                    workchain_id: self.workchain_id,
+                    prefix: self.prefix + lb,
+                }
+            ))
+        }
+    }
+
+    // returns all 0 and first 1 from right to left
+    // i.e. 1010000 -> 10000
+    fn prefix_lower_bits(&self) -> u64 {
+        self.prefix & (!self.prefix + 1)
+    }
+
+    fn add_tag(prefix: u64, len: u8) -> u64 { prefix | (1 << (63 - len)) }
+
+    fn prefix_len(&self) -> u8 {
+        let mut len = 0;
+        let mut p = self.prefix;
+        while p != (1 << 63) { 
+            len = len + 1;
+            p = p << 1;
+        }
+        len
     }
 }
 
 impl Display for ShardIdent {
-	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-		write!(f, "{}, {}", self.workchain_id, self.shard_prefix_as_str_with_tag())
-	}
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}, {}", self.workchain_id, self.shard_prefix_as_str_with_tag())
+    }
 }
 
 impl fmt::Debug for ShardIdent {
-	fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-		write!(f, "{}, {}", self.workchain_id, self.shard_prefix_as_str_with_tag())
-	}
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}, {}", self.workchain_id, self.shard_prefix_as_str_with_tag())
+    }
 }
 
 impl Deserializable for ShardIdent {
@@ -886,9 +1068,18 @@ impl Deserializable for ShardIdent {
                 )
             )
         }
-        self.shard_pfx_bits = constructor_and_pfx & 0x3F;
-        self.workchain_id = cell.get_next_u32()? as i32;
-        self.shard_prefix = cell.get_next_u64()?;
+        let shard_pfx_bits = constructor_and_pfx & 0x3F;
+        if shard_pfx_bits > MAX_SPLIT_DEPTH {
+            fail!(
+                BlockError::InvalidArg(
+                    format!("Shard prefix can't longer than {}", MAX_SPLIT_DEPTH)
+                )
+            )
+        }
+        let workchain_id = cell.get_next_u32()? as i32;
+        let shard_prefix = cell.get_next_u64()?;
+
+        *self = Self::with_prefix_len(shard_pfx_bits, workchain_id, shard_prefix)?;
 
         Ok(())
     }
@@ -896,9 +1087,9 @@ impl Deserializable for ShardIdent {
 
 impl Serializable for ShardIdent {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        (self.shard_pfx_bits & 0x3F).write_to(cell)?;
+        self.prefix_len().write_to(cell)?;
         self.workchain_id.write_to(cell)?;
-        self.shard_prefix.write_to(cell)?;
+        self.prefix.write_to(cell)?;
         Ok(())
     }
 }
@@ -1083,11 +1274,11 @@ impl ShardStateUnsplit {
         self.global_id = value
     }
 
-    pub fn shard_id(&self) -> &ShardIdent {
+    pub fn shard(&self) -> &ShardIdent {
         &self.shard_id
     }
 
-    pub fn shard_id_mut(&mut self) -> &mut ShardIdent {
+    pub fn shard_mut(&mut self) -> &mut ShardIdent {
         &mut self.shard_id
     }
 
@@ -1212,6 +1403,10 @@ impl ShardStateUnsplit {
         self.master_ref.as_mut()
     }
 
+    pub fn custom_cell(&self) -> Option<&Cell> {
+        self.custom.as_ref().map(|c| c.cell())
+    }
+
     pub fn read_custom(&self) -> Result<Option<McStateExtra>> {
         match self.custom {
             None => Ok(None),
@@ -1225,6 +1420,10 @@ impl ShardStateUnsplit {
             None => None
         };
         Ok(())
+    }
+
+    pub fn split(&self) -> Result<ShardStateSplit> {
+        unimplemented!()
     }
 }
 

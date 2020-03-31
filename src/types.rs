@@ -478,7 +478,11 @@ macro_rules! define_HashmapE {
             pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> Result<()> {
                 self.0.write_hashmap_root(cell).map_err(|e| e.into())
             }
-
+            /// Return true if no items
+            pub fn is_empty(&self) -> bool {
+                self.0.is_empty()
+            }
+            /// Calculates length
             pub fn len(&self) -> Result<usize> {
                 self.0.len().map_err(|e| e.into())
             }

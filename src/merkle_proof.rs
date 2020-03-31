@@ -371,7 +371,7 @@ pub fn check_account_proof(proof: &MerkleProof, acc: &Account) -> Result<BlockSe
                 BlockSeqNoAndShard {
                     seq_no: ss.seq_no(),
                     vert_seq_no: ss.vert_seq_no(),
-                    shard_id: ss.shard_id().clone(),
+                    shard_id: ss.shard().clone(),
                 }
             );
         }
