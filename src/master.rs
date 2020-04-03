@@ -82,7 +82,7 @@ impl McBlockExtra {
         let ident = ShardIdent::with_workchain_id(workchain_id)?;
 
         let fee = ShardFeeCreated::with_fee(fee.clone());
-        self.fees.0.set(ident.full_key(), &fee.write_to_new_cell()?.into(), &fee)?;
+        self.fees.0.set(ident.full_key()?, &fee.write_to_new_cell()?.into(), &fee)?;
         Ok(ident)
     }
     /// Split Shard

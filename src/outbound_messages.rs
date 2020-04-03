@@ -156,7 +156,7 @@ impl OutMsgQueue {
 
 #[derive(Clone,Eq,Hash,Debug,PartialEq,Default)]
 pub struct OutMsgQueueKey{
-    pub workchain_id:i32,
+    pub workchain_id: i32,
     pub address: u64,
     pub hash: UInt256,
 }
@@ -238,6 +238,26 @@ impl OutMsgQueueInfo {
 
     pub fn ihr_pending(&self) -> &IhrPendingInfo {
         &self.ihr_pending
+    }
+
+    pub fn split(&self, split_key: &SliceData) -> Result<(OutMsgQueueInfo, OutMsgQueueInfo)> {
+        let mut left = self.clone();
+        let mut right = self.clone();
+        left.out_queue = OutMsgQueue::default();
+        right.out_queue = OutMsgQueue::default();
+        let prefix_len = split_key.remaining_bits();
+        self.out_queue.iterate_with_keys_and_aug(&mut |key, msg, aug| {
+            if let Some(mut account_id) = msg.read_message()?.get_int_src_account_id() {
+                account_id.move_by(prefix_len)?;
+                if !account_id.get_next_bit()? {
+                    left.out_queue.set(&key, &msg, &aug)?;
+                } else {
+                    right.out_queue.set(&key, &msg, &aug)?;
+                }
+            }
+            Ok(true)
+        })?;
+        Ok((left, right))
     }
 }
 

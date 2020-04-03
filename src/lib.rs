@@ -66,9 +66,6 @@ pub use self::merkle_proof::*;
 pub mod merkle_update;
 pub use self::merkle_update::*;
 
-pub mod logical_time_generator;
-pub use self::logical_time_generator::*;
-
 pub mod validators;
 pub use self::validators::*;
 
@@ -152,15 +149,15 @@ pub trait Serializable {
     }
 }
 
-pub trait Deserializable {
-    fn construct_from<X: Default + Deserializable>(slice: &mut SliceData) -> Result<X> {
-        let mut x = X::default();
+pub trait Deserializable: Default {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let mut x = Self::default();
         x.read_from(slice)?;
         Ok(x)
     }
     // Override it to implement skipping
-    fn skip<X: Default + Deserializable>(slice: &mut SliceData) -> Result<()> {
-        X::construct_from::<X>(slice)?;
+    fn skip(slice: &mut SliceData) -> Result<()> {
+        Self::construct_from(slice)?;
         Ok(())
     }
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()>; 

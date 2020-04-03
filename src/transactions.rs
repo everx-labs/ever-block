@@ -1149,6 +1149,7 @@ impl Deserializable for HashUpdate {
     }
 }
 
+#[derive(Clone, Default)]
 struct U15(i16);
 
 impl Serializable for U15 {

@@ -489,7 +489,7 @@ macro_rules! define_HashmapE {
             /// iterates items
             pub fn iterate<F>(&self, p: &mut F) -> Result<bool>
             where F: FnMut($x_type) -> Result<bool> {
-                self.0.iterate(&mut |_, ref mut slice| p(Self::construct_from::<$x_type>(slice)?))
+                self.0.iterate(&mut |_, ref mut slice| p(<$x_type>::construct_from(slice)?))
             }
             /// iterates items as raw slices
             pub fn iterate_slices<F>(&self, p: &mut F) -> Result<bool>
@@ -508,7 +508,7 @@ macro_rules! define_HashmapE {
             where K: Default + Deserializable, F: FnMut(K, $x_type) -> Result<bool> {
                 self.0.iterate(&mut |ref mut key, ref mut slice| p(
                     K::construct_from(key)?,
-                    Self::construct_from::<$x_type>(slice)?
+                    <$x_type>::construct_from(slice)?
                 ))
             }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
@@ -524,7 +524,7 @@ macro_rules! define_HashmapE {
             pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.get(key)?
-                    .map(|ref mut slice| Self::construct_from::<$x_type>(slice)).transpose()
+                    .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
@@ -705,7 +705,7 @@ impl<T: Default + Serializable + Deserializable> Serializable for ChildCell<T> {
     }
 }
 
-impl<T: Default + Serializable + Deserializable> Deserializable for ChildCell<T> {
+impl<T: Default + Clone + Serializable + Deserializable> Deserializable for ChildCell<T> {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         if !slice.is_full_cell_slice() {
             fail!(

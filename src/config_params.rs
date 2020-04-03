@@ -1425,6 +1425,11 @@ pub enum WorkchainFormat {
     Extended(WorkchainFormat0),
 }
 
+impl Default for WorkchainFormat {
+    fn default() -> Self {
+        WorkchainFormat::Basic(WorkchainFormat1::default())
+    }
+}
 
 impl Deserializable for WorkchainFormat {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {

@@ -228,7 +228,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
             }
         }
         if key.is_empty() {
-            X::skip::<X>(&mut cursor)?;
+            X::skip(&mut cursor)?;
             Y::construct_from(&mut cursor).map(|extra| Some(extra))
         } else {
             Ok(None)
@@ -284,15 +284,15 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
                 return Ok(false)
             }
             if cell.update_cell(Self::internal_split_next, (key, value, aug))? {
-                let mut fork_aug = Y::construct_from::<Y>(slice)?;
+                let mut fork_aug = Y::construct_from(slice)?;
                 fork_aug.calc(aug)?;
                 fork_aug.write_to(&mut cell)?;
                 *slice = cell.into();
                 return Ok(true)
             }
         } else if key.is_empty() {
-            X::skip::<X>(slice)?;
-            let mut fork_aug = Y::construct_from::<Y>(slice)?;
+            X::skip(slice)?;
+            let mut fork_aug = Y::construct_from(slice)?;
             fork_aug.calc(aug)?;
             let mut builder = BuilderData::with_bitstring(vec![0xC0])?;
             builder.append_reference(cell);
@@ -321,7 +321,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> Deserializable 
         if slice.get_next_bit()? {
             slice.shrink_references(2..);
         } else {
-            X::skip::<X>(slice)?;
+            X::skip(slice)?;
         }
         self.extra.read_from(slice)?;
         self.data.shrink_by_remainder(slice);

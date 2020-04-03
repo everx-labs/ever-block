@@ -1912,8 +1912,8 @@ pub enum MsgAddressInt {
 impl Deserializable for MsgAddressInt {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         *self = match cell.get_next_int(2)? {
-            0b10 => MsgAddressInt::AddrStd(MsgAddrStd::construct_from::<MsgAddrStd>(cell)?),
-            0b11 => MsgAddressInt::AddrVar(MsgAddrVar::construct_from::<MsgAddrVar>(cell)?),
+            0b10 => MsgAddressInt::AddrStd(MsgAddrStd::construct_from(cell)?),
+            0b11 => MsgAddressInt::AddrVar(MsgAddrVar::construct_from(cell)?),
             _ => fail!(BlockError::Other("Wrong type of address".to_string()))
         };
         // TODO: fix autogen for error checking!

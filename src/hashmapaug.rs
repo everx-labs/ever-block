@@ -69,7 +69,7 @@ macro_rules! define_HashmapAugE {
             }
             pub fn single(&self) -> Result<Option<$x_type>> {
                 match self.0.single()? {
-                    Some(ref mut slice) => Some(Self::construct_from::<$x_type>(slice)).transpose(),
+                    Some(ref mut slice) => Some(<$x_type>::construct_from(slice)).transpose(),
                     None => Ok(None)
                 }
             }
@@ -78,15 +78,15 @@ macro_rules! define_HashmapAugE {
             }
             pub fn iterate<F>(&self, p: &mut F) -> Result<bool>
             where F: FnMut($x_type) -> Result<bool> {
-                self.0.iterate(&mut |_, ref mut slice| p(Self::construct_from::<$x_type>(slice)?))
+                self.0.iterate(&mut |_, ref mut slice| p(<$x_type>::construct_from(slice)?))
             }
             pub fn iterate_with_keys<F>(&self, p: &mut F) -> Result<bool>
             where F: FnMut(SliceData, $x_type) -> Result<bool> {
-                self.0.iterate(&mut |key, ref mut slice| p(key, Self::construct_from::<$x_type>(slice)?))
+                self.0.iterate(&mut |key, ref mut slice| p(key, <$x_type>::construct_from(slice)?))
             }
             pub fn iterate_with_keys_and_aug<F>(&self, p: &mut F) -> Result<bool>
             where F: FnMut(SliceData, $x_type, $y_type) -> Result<bool> {
-                self.0.iterate_with_aug(&mut |key, ref mut slice, aug| p(key, Self::construct_from::<$x_type>(slice)?, aug))
+                self.0.iterate_with_aug(&mut |key, ref mut slice, aug| p(key, <$x_type>::construct_from(slice)?, aug))
             }
             pub fn iterate_slices_with_keys_and_aug<F>(&self, p: &mut F) -> Result<bool>
             where F: FnMut(SliceData, SliceData, $y_type) -> Result<bool> {
@@ -114,13 +114,13 @@ macro_rules! define_HashmapAugE {
             pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.hashmap_get(key, &mut 0)?
-                    .map(|ref mut slice| Self::construct_from::<$x_type>(slice)).transpose()
+                    .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             }
             /// returns item with aug from hasmapaug
             pub fn get_with_aug<K: Serializable>(&self, key: &K) -> Result<(Option<$x_type>, Option<$y_type>)> {
                 let key = key.write_to_new_cell()?.into();
                 match self.0.get_with_aug(key, &mut 0)? {
-                    (Some(mut slice), aug) => Ok((Some(Self::construct_from::<$x_type>(&mut slice)?), aug)),
+                    (Some(mut slice), aug) => Ok((Some(<$x_type>::construct_from(&mut slice)?), aug)),
                     _ => Ok((None, None))
                 }
             }
@@ -140,17 +140,25 @@ macro_rules! define_HashmapAugE {
             //     let key = key.write_to_new_cell()?.into();
             //     let value = value.write_to_new_cell()?.into();
             //     self.0.set(key, value, aug)?
-            //         .map(|ref mut slice| Self::construct_from::<$x_type>(slice)).transpose()
+            //         .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             // }
             // /// removes item from hashmapaug
             // pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<Option<$x_type>> {
             //     let key = key.write_to_new_cell()?.into();
             //     self.0.remove(key)?
-            //         .map(|ref mut slice| Self::construct_from::<$x_type>(slice)).transpose()
+            //         .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             // }
             // returns root augmentation
             pub fn root_extra(&self) -> &$y_type {
                 self.0.root_extra()
+            }
+            /// splits tree by key for two trees
+            pub fn split(&self, split_key: &SliceData) -> Result<($varname, $varname)> {
+                self.0.split(split_key).map(|(left, right)| ($varname(left), $varname(right)))
+            }
+            /// merge self with other tree using merge key
+            pub fn merge(&mut self, other: &$varname, merge_key: &SliceData) -> Result<()> {
+                self.0.merge(&other.0, merge_key)
             }
         }
 
@@ -175,7 +183,7 @@ macro_rules! define_HashmapAugE {
 
         impl Deserializable for $varname {
             fn read_from(&mut self, slice: &mut SliceData) -> Result<()>{
-                self.0 = HashmapAugE::with_data($bit_len, slice);
+                self.0 = HashmapAugE::with_data($bit_len, slice)?;
                 Ok(())
             }
         }
@@ -209,11 +217,40 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
             label = cursor.get_label(bit_len)?;
         }
         if key.is_empty() {
-            let aug = Y::construct_from::<Y>(&mut cursor)?;
+            let aug = Y::construct_from(&mut cursor)?;
             Ok((Some(cursor), Some(aug)))
         } else {
             Ok((None, None))
         }
+    }
+
+    pub fn split(&self, key: &SliceData) -> Result<(Self, Self)> {
+        let (left, right) = self.hashmap_split(key)?;
+        Ok((Self::with_hashmap(self.bit_len, left)?, Self::with_hashmap(self.bit_len, right)?))
+    }
+
+    pub fn merge(&mut self, other: &Self, key: &SliceData) -> Result<()> {
+        if self.bit_len != other.bit_len || key.remaining_bits() > self.bit_len {
+            fail!("data in hashmaps do not correspond each other or key too long")
+        }
+        if self.data.is_none() {
+            self.data = other.data.clone();
+            self.extra = other.extra.clone();
+        } else {
+            let old_data = self.data().cloned();
+            self.extra.calc(&other.extra)?;
+            self.hashmap_merge(other, key)?;
+            if old_data.as_ref() == self.data() { // nothing was changed
+                return Ok(())
+            } else if let Some(root) = self.data() {
+                let mut builder = BuilderData::from(root);
+                self.extra.write_to(&mut builder)?;
+                *self.data_mut() = Some(builder.into());
+            } else {
+                fail!("after merge tree is empty")
+            }
+        }
+        Ok(())
     }
 }
 
@@ -254,10 +291,10 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapType for
         Ok(builder)
     }
     fn is_fork(_slice: &mut SliceData) -> Result<bool> {
-        panic!("Should not be called")
+        fail!("should not be called")
     }
     fn is_leaf(_slice: &mut SliceData) -> bool {
-        panic!("Should not be called")
+        true
     }
     fn data(&self) -> Option<&Cell> {
         self.data.as_ref()
@@ -291,19 +328,37 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         }
     }
     /// Deserialization from SliceData - just clone and set window
-    pub fn with_data(bit_len: usize, slice: &mut SliceData) -> Self {
-        let data = if !slice.is_empty() && slice.get_next_bit().unwrap() && slice.remaining_references() != 0 {
-            Some(slice.checked_drain_reference().unwrap().clone()) // drain root
-        } else {
-            None
+    pub fn with_data(bit_len: usize, slice: &mut SliceData) -> Result<Self> {
+        let data;
+        let extra = match slice.get_next_bit()? {
+            true => {
+                data = Some(slice.checked_drain_reference()?);
+                Y::construct_from(slice)?
+            }
+            false => {
+                data = None;
+                Y::default()
+            }
         };
-        let extra = Y::construct_from(slice).unwrap_or_default();
-        Self {
+        Ok(Self {
             phantom: PhantomData::<X>,
             extra,
             bit_len,
             data
-        }
+        })
+    }
+    /// Constructs from cell, extracts total aug
+    pub fn with_hashmap(bit_len: usize, data: Option<Cell>) -> Result<Self> {
+        let extra = match data {
+            Some(ref root) => Self::find_extra(&mut root.into(), bit_len)?,
+            None => Y::default()
+        };
+        Ok(Self {
+            phantom: PhantomData::<X>, 
+            extra,
+            bit_len,
+            data,
+        })
     }
     /// Serialization HashmapAug root of HashmapAugE to BuilderData - just append
     pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> Result<()> {
@@ -348,7 +403,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
             let mut slice = SliceData::from(root);
             let label = slice.get_label(self.bit_len)?;
             if label.remaining_bits() == self.bit_len {
-                Y::skip::<Y>(&mut slice)?;
+                Y::skip(&mut slice)?;
                 return Ok(Some(slice))
             }
         }
@@ -490,7 +545,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         let label = slice.get_label(bit_len)?;
         let builder = if label == key {
             // replace existing leaf
-            Y::skip::<Y>(&mut slice)?; // skip extra
+            Y::skip(&mut slice)?; // skip extra
             let res_extra = extra.clone();
             result = Ok((Some(slice), res_extra));
             Self::make_cell_with_label_and_data(
@@ -559,7 +614,7 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
             }
             slice.shrink_references(2..); // drain left, right
         }
-        let mut fork_extra = Y::construct_from::<Y>(slice)?;
+        let mut fork_extra = Y::construct_from(slice)?;
         fork_extra.calc(extra)?;
         // Leaf for fork
         let another_cell = Self::make_cell_with_label_and_data(

@@ -902,13 +902,11 @@ impl ShardIdent {
     }
 
     /// Get bitstring-key for BinTree operation for Shard
-    pub fn full_key(&self) -> SliceData {
+    pub fn full_key(&self) -> Result<SliceData> {
         let mut cell = BuilderData::new();
-        cell.append_i32(self.workchain_id)
-            .unwrap()
-            .append_u64(self.shard_prefix_without_tag())
-            .unwrap();
-        cell.into()
+        cell.append_i32(self.workchain_id)?
+            .append_u64(self.shard_prefix_without_tag())?;
+        Ok(cell.into())
     }
 
     pub fn workchain_id(&self) -> i32 {
@@ -1089,7 +1087,7 @@ impl Serializable for ShardIdent {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.prefix_len().write_to(cell)?;
         self.workchain_id.write_to(cell)?;
-        self.prefix.write_to(cell)?;
+        self.shard_prefix_without_tag().write_to(cell)?;
         Ok(())
     }
 }
@@ -1152,11 +1150,9 @@ impl Serializable for ShardState {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
             ShardState::UnsplitState(ss) => {
-                cell.append_u32(SHARD_STATE_UNSPLIT_PFX)?;
                 ss.write_to(cell)?;
             }
             ShardState::SplitState(ss) => {
-                cell.append_u32(SHARD_STATE_SPLIT_PFX)?;
                 ss.write_to(cell)?;
             }
         }
@@ -1319,7 +1315,7 @@ impl ShardStateUnsplit {
         self.min_ref_mc_seqno
     }
 
-    pub fn set_(&mut self, value: u32) {
+    pub fn set_min_ref_mc_seqno(&mut self, value: u32) {
         self.min_ref_mc_seqno = value
     }
 
@@ -1423,6 +1419,27 @@ impl ShardStateUnsplit {
     }
 
     pub fn split(&self) -> Result<ShardStateSplit> {
+        let mut left = self.clone();
+        let mut right = self.clone();
+        let (ls, rs) = self.shard().split()?;
+        left.shard_id = ls;
+        right.shard_id = rs;
+        let split_key = self.shard_id.shard_key();
+        let info = self.read_out_msg_queue_info()?;
+        let (li, ri) = info.split(&split_key)?;
+        left.write_out_msg_queue_info(&li)?;
+        right.write_out_msg_queue_info(&ri)?;
+        let accounts = self.read_accounts()?;
+        let (al, ar) = accounts.split(&split_key)?;
+        left.write_accounts(&al)?;
+        right.write_accounts(&ar)?;
+        left.total_balance = al.root_extra().balance().clone();
+        right.total_balance = ar.root_extra().balance().clone();
+        // debug_assert!(self.master_ref.is_some());
+        Ok(ShardStateSplit { left, right })
+    }
+
+    pub fn merge_with(&mut self, _other: &ShardStateUnsplit) -> Result<()> {
         unimplemented!()
     }
 }

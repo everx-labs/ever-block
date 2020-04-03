@@ -339,3 +339,54 @@ impl Deserializable for ValidatorSet {
         Ok(())
     }
 }
+
+define_HashmapE!{TopBlockDescrCollection, 96, InRefValue<TopBlockDescr>}
+/*
+top_block_descr_set#4ac789f3 collection:(HashmapE 96 ^TopBlockDescr) = TopBlockDescrSet;
+*/
+#[derive(Clone, Debug, Default)]
+pub struct TopBlockDescrSet {
+    collection: TopBlockDescrCollection
+}
+
+impl TopBlockDescrSet {
+    pub fn get_top_block_descr(&self, shard: &ShardIdent) -> Result<Option<TopBlockDescr>> {
+        match self.collection.get(&shard.full_key()?)? {
+            Some(InRefValue(descr)) => Ok(Some(descr)),
+            None => Ok(None)
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.collection.is_empty()
+    }
+    pub fn count(&self, _max: usize) -> Result<usize> {
+        self.collection.len()
+    }
+}
+
+const TOPBLOCK_DESCR_SET_TAG: u32 = 0x4ac789f3;
+
+impl Serializable for TopBlockDescrSet {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        let tag = TOPBLOCK_DESCR_SET_TAG;
+        cell.append_u32(tag)?;
+        self.collection.write_to(cell)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for TopBlockDescrSet {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        let tag = cell.get_next_u32()?;
+        if tag != TOPBLOCK_DESCR_SET_TAG {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "TopBlockDescrSet".to_string()
+                }
+            )
+        }
+        self.collection = TopBlockDescrCollection::construct_from(cell)?;
+        Ok(())
+    }
+}
