@@ -692,13 +692,6 @@ pub struct ShardDescr {
 }
 
 impl ShardDescr {
-    pub fn tag() -> u32 {
-        0xb
-    }
-
-    pub fn tag_len_bits() -> usize {
-        4
-    }
 
     /// Constructs ShardDescr as slice with its params
     pub fn with_params(seq_no: u32, start_lt: u64, end_lt: u64, root_hash: UInt256, split_merge_at: FutureSplitMerge) -> Self {
@@ -727,13 +720,17 @@ impl ShardDescr {
     }
 }
 
+const SHARD_IDENT_TAG_A: u8 = 0xa; // 4 bit
+const SHARD_IDENT_TAG_B: u8 = 0xb; // 4 bit
+const SHARD_IDENT_TAG_LEN: usize = 4;
+
 impl Deserializable for ShardDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        let tag = slice.get_next_int(Self::tag_len_bits())? as u32;
-        if tag != Self::tag() {
+        let tag = slice.get_next_int(SHARD_IDENT_TAG_LEN)? as u8;
+        if tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B {
             fail!(
                 BlockError::InvalidConstructorTag {
-                    t: tag,
+                    t: tag as u32,
                     s: "ShardDescr".to_string()
                 } 
             )
@@ -758,15 +755,21 @@ impl Deserializable for ShardDescr {
         self.min_ref_mc_seqno.read_from(slice)?;
         self.gen_utime.read_from(slice)?;
         self.split_merge_at.read_from(slice)?;
-        self.fees_collected.read_from(slice)?;
-        self.funds_created.read_from(slice)?;
+        if tag == SHARD_IDENT_TAG_B {
+            self.fees_collected.read_from(slice)?;
+            self.funds_created.read_from(slice)?;
+        } else {
+            let mut slice1 = slice.checked_drain_reference()?.into();
+            self.fees_collected.read_from(&mut slice1)?;
+            self.funds_created.read_from(&mut slice1)?;
+        }
         Ok(())
     }
 }
 
 impl Serializable for ShardDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_bits(Self::tag() as usize, Self::tag_len_bits())?;
+        cell.append_bits(SHARD_IDENT_TAG_A as usize, SHARD_IDENT_TAG_LEN)?;
 
         self.seq_no.write_to(cell)?;
         self.reg_mc_seqno.write_to(cell)?;
@@ -800,8 +803,12 @@ impl Serializable for ShardDescr {
         self.min_ref_mc_seqno.write_to(cell)?;
         self.gen_utime.write_to(cell)?;
         self.split_merge_at.write_to(cell)?;
-        self.fees_collected.write_to(cell)?;
-        self.funds_created.write_to(cell)?;
+
+        let mut child = BuilderData::new();
+        self.fees_collected.write_to(&mut child)?;
+        self.funds_created.write_to(&mut child)?;
+        cell.append_reference(child);
+
         Ok(())
     }
 }
