@@ -67,6 +67,9 @@ macro_rules! define_HashmapAugE {
             pub fn len(&self) -> Result<usize> {
                 self.0.len()
             }
+            pub fn count(&self, max: usize) -> Result<usize> {
+                self.0.count(max)
+            }
             pub fn single(&self) -> Result<Option<$x_type>> {
                 match self.0.single()? {
                     Some(ref mut slice) => Some(<$x_type>::construct_from(slice)).transpose(),
@@ -415,6 +418,15 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
         self.iterate(&mut |_,_| {
             len += 1;
             Ok(true)
+        })?;
+        Ok(len)
+    }
+    /// returns count of objects in tree - it can be used as validate
+    pub fn count(&self, max: usize) -> Result<usize> {
+        let mut len = 0;
+        self.iterate(&mut |_,_| {
+            len += 1;
+            Ok(len < max)
         })?;
         Ok(len)
     }

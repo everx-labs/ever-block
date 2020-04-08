@@ -15,7 +15,6 @@
 use super::*;
 use super::{Deserializable, Serializable};
 use super::hashmapaug::Augmentable;
-use super::messages::AddSub;
 use num::{BigInt, Zero, One};
 use num::bigint::Sign;
 use {BuilderData, IBitstring, SliceData};
@@ -313,6 +312,161 @@ define_NumberN_up32bit!(Number13, 13);
 define_NumberN_up32bit!(Number16, 16);
 define_NumberN_up32bit!(Number32, 32);
 
+/*
+extra_currencies$_
+    dict:(HashMapE 32 (VarUInteger 32))
+= ExtraCurrencyCollection;
+
+currencies$_
+    grams: Grams
+    other:ExtraCurrencyCollection
+= CurrencyCollection;
+*/
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CurrencyCollection {
+    pub grams: Grams,
+    pub other: HashmapE
+}
+
+impl Default for CurrencyCollection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Augmentable for CurrencyCollection {
+    fn calc(&mut self, other: &Self) -> Result<()> {
+        self.add(other)
+    }
+}
+
+impl CurrencyCollection {
+    pub fn new() -> Self {
+        Self::from_grams(Grams::zero())
+    }
+
+    pub fn set_other(&mut self, key: u32, other: u128) {
+        self.set_other_ex(key, &VarUInteger32::from_two_u128(0, other).unwrap())
+    }
+
+    pub fn set_other_ex(&mut self, key: u32, other: &VarUInteger32) {
+        let key = key.write_to_new_cell().unwrap();
+        self.other.set(key.into(), &other.write_to_new_cell().unwrap().into()).unwrap();
+    }
+
+    pub fn with_grams(grams: u64) -> Self {
+        Self::from_grams(Grams(grams.into()))
+    }
+
+    pub fn from_grams(grams: Grams) -> Self {
+        CurrencyCollection {
+            grams,
+            other: HashmapE::with_bit_len(32)
+        }
+    }
+
+    pub fn is_zero(&self) -> Result<bool> {
+        if !self.grams.is_zero() {
+            return Ok(false)
+        }
+        self.other
+            .iterate(&mut |_, ref mut slice| VarUInteger32::construct_from(slice).map(|value| value.is_zero()))
+    }
+}
+
+impl Serializable for CurrencyCollection {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.grams.write_to(cell)?;
+        self.other.write_to(cell)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for CurrencyCollection {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
+        self.grams.read_from(cell)?;
+        self.other.read_from(cell)?;
+        Ok(())
+    }
+}
+
+pub trait AddSub {
+    fn sub(&mut self, other: &Self) -> Result<bool>;
+    fn add(&mut self, other: &Self) -> Result<()>;
+}
+
+impl AddSub for CurrencyCollection {
+    fn sub(&mut self, other: &Self) -> Result<bool> {
+        if self.grams < other.grams {
+            return Ok(false)
+        }
+        let mut result = self.other.clone();
+        if other.other.iterate(&mut |key, ref mut slice| -> Result<bool> {
+            let b = VarUInteger32::construct_from(slice)?;
+            if let Some(ref mut slice) = self.other.get(key.clone())? {
+                let mut a: VarUInteger32 = VarUInteger32::construct_from(slice)?;
+                if a >= b {
+                    a.sub(&b)?;
+                    result.set(key, &a.write_to_new_cell()?.into())?;
+                    return Ok(true)
+                }
+            }
+            Ok(false) // coin not found in mine or amount is smaller - cannot subtract
+        })? {
+            self.other = result;
+            self.grams.sub(&other.grams)
+        } else {
+            Ok(false)
+        }
+    }
+    fn add(&mut self, other: &Self) -> Result<()> {
+        self.grams.add(&other.grams)?;
+        let mut result = self.other.clone();
+        other.other.iterate(&mut |key, ref mut slice_b| -> Result<bool> {
+            match self.other.get(key.clone())? {
+                Some(ref mut slice_a) => {
+                    let b = VarUInteger32::construct_from(slice_b)?;
+                    let mut a: VarUInteger32 = VarUInteger32::construct_from(slice_a)?;
+                    a.add(&b)?;
+                    result.set(key, &a.write_to_new_cell()?.into())?;
+                }
+                None => {
+                    result.set(key, slice_b)?;
+                }
+            }
+            Ok(true)
+        })?;
+        self.other = result;
+        Ok(())
+    }
+}
+
+impl fmt::Display for CurrencyCollection {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CurrencyCollection: Grams {}, other curencies:\n", self.grams)?;
+        let mut len = 0;
+        self.other.iterate(&mut |key, ref mut slice| -> Result<bool> {
+            let value = VarUInteger32::construct_from(slice)?;
+            write!(f, "key: {}, value: {}\n", key, value).unwrap();
+            len += 1;
+            Ok(true)
+        }).unwrap();
+        write!(f, "count: {}", len)
+    }
+}
+
+impl From<u64> for CurrencyCollection {
+    fn from(value: u64) -> Self {
+        Self::with_grams(value)
+    }
+}
+
+impl From<u32> for CurrencyCollection {
+    fn from(value: u32) -> Self {
+        Self::with_grams(value as u64)
+    }
+}
+
 impl Serializable for u64 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u64(*self)?;
@@ -529,6 +683,14 @@ macro_rules! define_HashmapE {
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.remove(key).map(|_|()).map_err(|e| e.into())
+            }
+            pub fn export_vector(&self) -> Result<Vec<$x_type>> {
+                let mut vec = Vec::new();
+                self.0.iterate(&mut |_, ref mut slice| {
+                    vec.push(<$x_type>::construct_from(slice)?);
+                    Ok(true)
+                })?;
+                Ok(vec)
             }
         }
 

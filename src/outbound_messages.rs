@@ -126,7 +126,7 @@ impl OutMsgDescr {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Blockchain: 3.3.6
 // _ (HashmapAugE 352 OutMsg uint64) = OutMsgQueue;
-//
+// 352 = 32 - workchain_id, 64 - first 64 bit of account address, 256 - message hash
 define_HashmapAugE!(OutMsgQueue, 352, OutMsg, MsgTime);
 
 type MsgTime = u64;

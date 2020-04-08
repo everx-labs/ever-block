@@ -30,6 +30,9 @@ pub use self::hashmapaug::HashmapAugE;
 pub mod blocks;
 pub use self::blocks::*;
 
+pub mod shard;
+pub use self::shard::*;
+
 pub mod accounts;
 pub use self::accounts::*;
 

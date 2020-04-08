@@ -40,18 +40,34 @@ define_HashmapAugE!{ShardFees, 96, ShardFeeCreated, ShardFeeCreated}
 impl ShardHashes {
     pub fn iterate_shardes<F>(&self, func: &mut F) -> Result<bool>
     where F: FnMut(ShardIdent, ShardDescr) -> Result<bool> {
-        self.iterate_with_keys(&mut |wc_id: i32, shardes_tree| {
-            shardes_tree.0.iterate(&mut |prefix, shard_descr| {
+        self.iterate_with_keys(&mut |wc_id: i32, InRefValue(shardes_tree)| {
+            shardes_tree.iterate(&mut |prefix, shard_descr| {
                 let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
                 func(shard_ident, shard_descr)
             })
         })
     }
-    pub fn get_shard_descr(&self, shard: &ShardIdent, _exact: bool) -> Result<Option<ShardDescr>> {
+    pub fn get_shard_descr(&self, _shard: &ShardIdent) -> Result<Option<(ShardIdent, ShardDescr)>> {
+        unimplemented!()
+    }
+    pub fn get_shard_descr_exact(&self, shard: &ShardIdent) -> Result<Option<ShardDescr>> {
         match self.get(&shard.workchain_id())? {
             Some(InRefValue(bintree)) => bintree.get(shard.shard_prefix_without_tag().write_to_new_cell()?.into()),
             None => Ok(None)
         }
+    }
+    pub fn get_neighbours(&self, shard: &ShardIdent) -> Result<Vec<(ShardIdent, ShardDescr)>> {
+        let mut vec = Vec::new();
+        if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
+            bintree.iterate(&mut |prefix, shard_descr| {
+                let shard_ident = ShardIdent::with_prefix_slice(shard.workchain_id(), prefix)?;
+                if shard.is_neighbor_for(&shard_ident) {
+                    vec.push((shard_ident, shard_descr));
+                }
+                Ok(true)
+            })?;
+        }
+        Ok(vec)
     }
 }
 

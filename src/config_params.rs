@@ -1749,7 +1749,7 @@ workchain#a5
 ///
 /// WorkchainDescr structure
 /// 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct WorkchainDescr {
     pub enabled_since: u32,
     actual_min_split: u8,
@@ -1763,25 +1763,6 @@ pub struct WorkchainDescr {
     pub zerostate_file_hash: UInt256,
     pub version: u32,
     pub format: WorkchainFormat
-}
-
-impl Default for WorkchainDescr {
-    fn default() -> Self {
-        WorkchainDescr {
-            enabled_since: 0,
-            actual_min_split: 0,
-            min_split: 0,
-            max_split: 0,
-            //basic: bool, // depends on format 
-            active: false,
-            accept_msgs: false,
-            flags: 0,
-            zerostate_root_hash: UInt256::from([0;32]),
-            zerostate_file_hash: UInt256::from([0;32]),
-            version: 0,
-            format: WorkchainFormat::Basic(WorkchainFormat1::default()),
-        }        
-    }
 }
 
 impl WorkchainDescr {
@@ -2570,3 +2551,4 @@ impl Serializable for BlockLimits {
 
 type ConfigParam22 = BlockLimits;
 type ConfigParam23 = BlockLimits;
+
