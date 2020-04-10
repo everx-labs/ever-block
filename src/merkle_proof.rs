@@ -15,7 +15,7 @@
 use super::{
     MerkleUpdate, Serializable, Deserializable,
     Block, BlockInfo, Transaction, GetRepresentationHash, BlockError, 
-    Message, Account, ShardStateUnsplit, BlockSeqNoAndShard
+    Message, Account, ShardStateUnsplit, BlockSeqNoAndShard,
 };
 use std::cmp::max;
 use ton_types::{
@@ -321,9 +321,9 @@ pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt25
             )
         )?;
     if let Ok(Some(out_msg)) = out_msg_descr.get(&msg_hash) {
-        if let Ok(msg_cell) = out_msg.message_cell() {
+        if let Ok(real_msg_hash) = out_msg.read_message_hash() {
             check_transaction_id(tr_id, out_msg.transaction_cell())?;
-            if msg_cell.repr_hash() != msg_hash {
+            if real_msg_hash != msg_hash {
                 fail!(
                     BlockError::WrongMerkleProof("Wrong message's hash in proof".to_string())
                 )
