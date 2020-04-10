@@ -12,25 +12,11 @@
 * limitations under the License.
 */
 
-use crate::{
-    bintree::{BinTree, BinTreeType},
-    blocks::ExtBlkRef,
-    config_params::ConfigParams,
-    define_HashmapE, define_HashmapAugE,
-    error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugE},
-    inbound_messages::InMsg,
-    shard::{ShardIdent},
-    signature::CryptoSignaturePair,
-    types::{CurrencyCollection, InRefValue},
-    validators::ValidatorInfo,
-    Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
-};
-use ton_types::{
-    error, fail, Result,
-    AccountId, UInt256,
-    Cell, IBitstring, SliceData, BuilderData, HashmapE, HashmapType,
-};
+use super::*;
+use super::hashmapaug::Augmentable;
+use {IBitstring, SliceData, BuilderData};
+use dictionary::HashmapE;
+use {AccountId, UInt256};
 
 
 /*
@@ -292,7 +278,6 @@ impl Serializable for KeyExtBlkRef {
 }
 
 // _ (HashmapAugE 32 KeyExtBlkRef KeyMaxLt) = OldMcBlocksInfo;
-// key - seq_no
 define_HashmapAugE!(OldMcBlocksInfo, 32, KeyExtBlkRef, KeyMaxLt);
 
 // _ fees:CurrencyCollection create:CurrencyCollection = ShardFeeCreated;
@@ -480,10 +465,10 @@ pub struct McStateExtra {
     pub config: ConfigParams,
     pub validator_info: ValidatorInfo,
     pub prev_blocks: OldMcBlocksInfo,
-    pub after_key_block: bool,
+    after_key_block: bool,
     pub last_key_block: Option<ExtBlkRef>,
-    pub block_create_stats: Option<BlockCreateStats>,
-    pub global_balance: CurrencyCollection,
+    block_create_stats: Option<BlockCreateStats>,
+    global_balance: CurrencyCollection,
 }
 
 impl McStateExtra {

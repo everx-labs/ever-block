@@ -12,24 +12,12 @@
 * limitations under the License.
 */
 
-use crate::{
-    define_HashmapE, define_HashmapAugE,
-    accounts::{Account, AccountStatus, StorageUsedShort},
-    blocks::Block,
-    error::BlockError,
-    hashmapaug::HashmapAugE,
-    merkle_proof::MerkleProof,
-    messages::{generate_big_msg, Message},
-    shard::ShardStateUnsplit,
-    types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
-    MaybeSerialize, MaybeDeserialize, Serializable, Deserializable,
-};
+use super::*;
+use super::types::{InRefValue};
 use std::sync::Arc;
-use ton_types::{
-    error, fail, Result,
-    AccountId, UInt256,
-    BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType, UsageTree,
-};
+use {AccountId, UInt256};
+use ton_types::{BuilderData, IBitstring, SliceData};
+use ton_types::dictionary::{HashmapE, HashmapType};
 
 
 /*
@@ -1622,9 +1610,10 @@ impl AccountBlock {
     /// count of transactions
     pub fn transaction_count(&self) -> Result<usize> {
         if self.tr_count < 0 {
-            fail!(BlockError::InvalidData("self.tr_count is negative".to_string()))
+            self.transactions.len()
+        } else {
+            Ok(self.tr_count as usize)
         }
-        self.transactions.len()
     }
     /// update
     pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> Result<()> {
@@ -1693,8 +1682,7 @@ impl Deserializable for AccountBlock {
 
         let mut trs = Transactions::default();
         trs.read_hashmap_root(slice)?;
-        // TODO: is it realy need to have it now? init with negative and move to using
-        self.tr_count = trs.len().unwrap() as isize;
+        self.tr_count = -1;
         self.transactions = trs;
 
         self.state_update.read_from(&mut slice.checked_drain_reference()?.into())?;   // ^(HASH_UPDATE Account)

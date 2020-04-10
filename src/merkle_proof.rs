@@ -12,15 +12,10 @@
 * limitations under the License.
 */
 
-use crate::{
-    merkle_update::MerkleUpdate,
-    Serializable, Deserializable, GetRepresentationHash,
-    accounts::Account,
-    shard::ShardStateUnsplit,
-    error::BlockError,
-    blocks::{Block, BlockInfo, BlockSeqNoAndShard},
-    transactions::Transaction,
-    messages::Message,
+use super::{
+    MerkleUpdate, Serializable, Deserializable,
+    Block, BlockInfo, Transaction, GetRepresentationHash, BlockError, 
+    Message, Account, ShardStateUnsplit, BlockSeqNoAndShard,
 };
 use std::cmp::max;
 use ton_types::{

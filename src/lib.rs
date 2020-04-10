@@ -13,13 +13,17 @@
 */
 
 #![cfg_attr(feature = "ci_run", deny(warnings))]
+//#![recursion_limit="128"] // needs for error_chain
 
+#[macro_use]
 pub mod error;
 pub use self::error::*;
 
+#[macro_use]
 pub mod types;
 pub use self::types::*;
 
+#[macro_use]
 mod hashmapaug;
 pub use self::hashmapaug::HashmapAugE;
 
@@ -82,11 +86,13 @@ pub use self::config_params::*;
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use ton_types::{
-    error, fail, Result,
-    AccountId, ExceptionCode, UInt256,
-    BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
-};
+use ton_types::{BuilderData, Cell, IBitstring, SliceData};
+
+use ton_types::dictionary::{HashmapE, HashmapType};
+use std::sync::Arc;
+
+pub use ton_types::*;
+pub use ton_types::types::*;
 
 impl<K, V> Serializable for HashMap<K, V>
 where

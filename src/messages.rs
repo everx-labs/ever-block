@@ -13,18 +13,16 @@
 */
 
 use crate::GetRepresentationHash;
-use crate::{
-    blocks::Block,
-    error::BlockError,
-    merkle_proof::MerkleProof,
-    types::{AddSub, CurrencyCollection, Grams, Number5, Number9, UnixTime32},
-    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
+use super::{
+    AddSub, Block, BlockError, CurrencyCollection, Deserializable, Grams,
+    MaybeDeserialize, MaybeSerialize, MerkleProof, Number5, Number9, Serializable, UnixTime32,
 };
 use std::fmt;
 use std::str::FromStr;
 use ton_types::{
     BuilderData, Cell, error, fail, MAX_DATA_BITS, MAX_REFERENCES_COUNT, Result, 
-    SliceData, UsageTree, IBitstring, AccountId, UInt256
+    SliceData, UsageTree, cell::IBitstring, 
+    types::{AccountId, UInt256}
 };
 
 
