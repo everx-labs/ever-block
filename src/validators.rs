@@ -12,8 +12,19 @@
 * limitations under the License.
 */
 
-use super::*;
+use crate::{
+    define_HashmapE,
+    error::BlockError,
+    signature::SigPubKey,
+    types::{Number16},
+    Serializable, Deserializable,
+};
 use sha2::{Sha256, Digest};
+use ton_types::{
+    error, fail, Result,
+    UInt256,
+    BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData,
+};
 
 /*
 validator_info$_
