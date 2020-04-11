@@ -12,10 +12,8 @@
 * limitations under the License.
 */
 
-use crate::{
-	blocks::Block,
-	error::BlockError,
-	Deserializable, Serializable,
+use super::{
+    Block, BlockError, Deserializable, Serializable
 };
 use sha2::Digest;
 use std::cmp::Ordering;
@@ -23,8 +21,8 @@ use std::collections::HashMap;
 use std::io::{Write, Read, Cursor};
 use ton_types::{
     BuilderData, Cell, error, fail, Result, SliceData,
-    BagOfCells, deserialize_tree_of_cells,
-    ExceptionCode, UInt256
+    cells_serialization::{BagOfCells, deserialize_tree_of_cells},
+    types::{ExceptionCode, UInt256}
 };
 
 

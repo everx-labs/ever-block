@@ -12,17 +12,11 @@
 * limitations under the License.
 */
 
-use crate::{
-    error::BlockError,
-    Serializable, Deserializable,
-};
+use ton_types::{SliceData, Cell, CellType, BuilderData, IBitstring, LevelMask};
+use UInt256;
+use ton_types::cells_serialization::{BagOfCells};
 use std::collections::{HashMap, HashSet};
-use ton_types::{
-    error, fail, Result,
-    BagOfCells,
-    UInt256,
-    BuilderData, Cell, CellType, IBitstring, LevelMask, SliceData,
-};
+use super::*;
 
 
 /*

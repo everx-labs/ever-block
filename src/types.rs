@@ -12,25 +12,19 @@
 * limitations under the License.
 */
 
+use super::*;
+use super::{Deserializable, Serializable};
+use super::hashmapaug::Augmentable;
+use num::{BigInt, Zero, One};
+use num::bigint::Sign;
+use {BuilderData, IBitstring, SliceData};
 use std::cmp::Ordering;
-use std::fmt::{self, Display, Formatter};
-use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-use num::{BigInt, bigint::Sign, One, Zero};
-use ton_types::{error, fail, Result,
-    BuilderData, Cell, CellType, IBitstring, SliceData, ExceptionCode, UInt256};
-
-use crate::{
-    Deserializable,
-    error::BlockError,
-    hashmapaug::Augmentable,
-    HashmapE,
-    HashmapType,
-    Serializable
-};
+use std::fmt::{self, Display, Formatter};
+use ExceptionCode;
+use std::marker::PhantomData;
 
 
 ///
@@ -266,9 +260,11 @@ macro_rules! define_NumberN_up32bit {
         impl $varname {
             pub fn from_u32(value: u32, max_value: u32) -> Result<Self> {
                 if value > max_value {
-                    fail!(BlockError::InvalidArg(
-                        format!("value: {} must be <= {}", value, max_value) 
-                    ))
+                    fail!(
+                        BlockError::InvalidArg(
+                            format!("value: {} must be <= {}", value, max_value) 
+                        )
+                    )
                 }
                 Ok($varname(value))
             }

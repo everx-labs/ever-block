@@ -17,20 +17,8 @@
 //! Implementation of blockchain spec (3.2) structs: InMsg and InMsgDescr.
 //! Serialization and deserialization of this structs.
 
-use crate::{
-    define_HashmapAugE,
-    envelope_message::MsgEnvelope,
-    error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugE},
-    messages::{CommonMsgInfo, Message},
-    transactions::Transaction,
-    types::{AddSub, ChildCell, CurrencyCollection, Grams},
-    Serializable, Deserializable,
-};
-use ton_types::{
-    error, fail, Result,
-    BuilderData, Cell, IBitstring, SliceData, HashmapType
-};
+use super::*;
+use self::hashmapaug::Augmentable;
 
 
 ///internal helper macros for reading InMsg variants
