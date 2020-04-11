@@ -13,10 +13,16 @@
 */
 
 
-use super::*;
-use ton_types::SliceData;
+use crate::{
+    error::BlockError,
+    hashmapaug::Augmentable,
+    Serializable, Deserializable,
+};
 use std::marker::PhantomData;
-use self::hashmapaug::Augmentable;
+use ton_types::{
+    error, fail, Result,
+    BuilderData, Cell, IBitstring, SliceData
+};
 
 
 pub trait BinTreeType<X: Default + Serializable + Deserializable> {

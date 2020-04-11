@@ -12,10 +12,21 @@
 * limitations under the License.
 */
 
-use ton_types::{BuilderData, SliceData};
-use super::*;
-use dictionary::HashmapE;
+use crate::{
+    accounts::ShardAccount,
+    error::BlockError,
+    master::{BlkMasterInfo, McStateExtra},
+    outbound_messages::OutMsgQueueInfo,
+    shard_accounts::{DepthBalanceInfo, ShardAccounts},
+    types::{ChildCell, CurrencyCollection},
+    Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
+};
 use std::fmt::{self, Display, Formatter};
+use ton_types::{
+    error, fail, Result,
+    types::AccountId,
+    BuilderData, Cell, HashmapE, IBitstring, SliceData
+};
 
 
 pub const MAX_SPLIT_DEPTH: u8 = 60;
@@ -666,6 +677,10 @@ impl ShardStateUnsplit {
 
     pub fn custom_cell(&self) -> Option<&Cell> {
         self.custom.as_ref().map(|c| c.cell())
+    }
+
+    pub fn is_key_state(&self) -> bool {
+        self.custom.is_some()
     }
 
     pub fn read_custom(&self) -> Result<Option<McStateExtra>> {
