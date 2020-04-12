@@ -12,10 +12,15 @@
 * limitations under the License.
 */
 
-use super::*;
-use ton_types::dictionary::{HashmapE};
-use {BuilderData, SliceData};
-use UInt256;
+use crate::{
+    define_HashmapE,
+    Serializable, Deserializable,
+};
+use ton_types::{
+    Result,
+    UInt256,
+    BuilderData, Cell, SliceData, HashmapE, HashmapType,
+};
 
 
 

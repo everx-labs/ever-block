@@ -12,11 +12,20 @@
 * limitations under the License.
 */
 
-use ton_types::IBitstring;
-use AccountId;
-use super::*;
+use crate::{
+    error::BlockError,
+    merkle_proof::MerkleProof,
+    messages::{AnycastInfo, CommonMsgInfo, Message, MsgAddressInt, StateInit, TickTock},
+    types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
+    shard::ShardStateUnsplit,
+    GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
+};
 use std::fmt;
-use ton_types::cells_serialization::BagOfCells;
+use ton_types::{
+    error, fail, Result,
+    BagOfCells,
+    UInt256, AccountId, BuilderData, Cell, IBitstring, SliceData, UsageTree,
+};
 
 
 ///////////////////////////////////////////////////////////////////////////////

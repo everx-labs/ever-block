@@ -12,15 +12,15 @@
 * limitations under the License.
 */
 
-use super::*;
-use dictionary::{HashmapType, Leaf};
-use dictionary::hm_label;
-use {BuilderData, Cell, IBitstring, SliceData};
-use std::fmt;
-use super::{Serializable, Deserializable};
-use std::marker::PhantomData;
-use ton_types::GasConsumer;
-use ExceptionCode;
+use crate::{
+    error::BlockError,
+    Serializable, Deserializable
+};
+use std::{fmt, marker::PhantomData};
+use ton_types::{
+    error, fail, Result,
+    ExceptionCode, BuilderData, Cell, GasConsumer, IBitstring, SliceData, HashmapType, Leaf, hm_label
+};
 
 type AugResult<Y> = Result<(Option<SliceData>, Y)>;
 
@@ -162,6 +162,30 @@ macro_rules! define_HashmapAugE {
             /// merge self with other tree using merge key
             pub fn merge(&mut self, other: &$varname, merge_key: &SliceData) -> Result<()> {
                 self.0.merge(&other.0, merge_key)
+            }
+            /// gets item with minimal key
+            pub fn get_min<K: Deserializable>(&self, signed: bool) -> Result<Option<(K, $x_type)>> {
+                match ton_types::dictionary::get_min::<HashmapAugE<$x_type, $y_type>>(
+                    self.0.data().cloned(), self.0.bit_len(), self.0.bit_len(), signed, &mut 0)? {
+                        (Some(key), Some(mut val)) => {
+                            let key = K::construct_from(&mut key.into())?;
+                            let val = <$x_type>::construct_from(&mut val)?;
+                            Ok(Some((key, val)))
+                        },
+                        _ => Ok(None)
+                    }
+            }
+            /// gets item with maximal key
+            pub fn get_max<K: Deserializable>(&self, signed: bool) -> Result<Option<(K, $x_type)>> {
+                match ton_types::dictionary::get_max::<HashmapAugE<$x_type, $y_type>>(
+                    self.0.data().cloned(), self.0.bit_len(), self.0.bit_len(), signed, &mut 0)? {
+                        (Some(key), Some(mut val)) => {
+                            let key = K::construct_from(&mut key.into())?;
+                            let val = <$x_type>::construct_from(&mut val)?;
+                            Ok(Some((key, val)))
+                        },
+                        _ => Ok(None)
+                    }
             }
         }
 
