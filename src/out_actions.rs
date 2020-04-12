@@ -12,20 +12,8 @@
 * limitations under the License.
 */
 
-use crate::{
-    error::BlockError,
-    messages::Message,
-    types::{CurrencyCollection},
-    Serializable, Deserializable,
-};
+use super::*;
 use std::collections::LinkedList;
-use std::sync::Arc;
-use ton_types::{
-    error, fail, Result,
-    UInt256,
-    BuilderData, Cell, IBitstring, SliceData,
-};
-
 pub const ACTION_SEND_MSG: u32 = 0x0ec3c86d;
 pub const ACTION_SET_CODE: u32 = 0xad4de08e;
 pub const ACTION_RESERVE:  u32 = 0x36e6b809;

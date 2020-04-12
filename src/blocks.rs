@@ -12,26 +12,11 @@
 * limitations under the License.
 */
 
-use crate::{
-    define_HashmapE,
-    config_params::GlobalVersion,
-    error::BlockError,
-    inbound_messages::InMsgDescr,
-    master::{BlkMasterInfo, McBlockExtra},
-    merkle_update::MerkleUpdate,
-    outbound_messages::OutMsgDescr,
-    signature::BlockSignatures,
-    shard::ShardIdent,
-    transactions::ShardAccountBlocks,
-    types::{ChildCell, CurrencyCollection, InRefValue, UnixTime32},
-    Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
-};
+use ton_types::{BuilderData, SliceData};
+use {ExceptionCode, UInt256};
+use super::*;
 use std::cmp::Ordering;
 use std::io::{Cursor, Write};
-use ton_types::{
-    error, fail, Result,
-    ExceptionCode, UInt256, BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
-};
 
 
 /*
@@ -71,14 +56,6 @@ impl BlockIdExt {
             seq_no,
             root_hash,
             file_hash,
-        }
-    }
-    pub fn from_ext_blk(blk: ExtBlkRef) -> Self {
-        BlockIdExt {
-            shard_id: ShardIdent::masterchain(),
-            seq_no: blk.seq_no,
-            root_hash: blk.root_hash,
-            file_hash: blk.file_hash,
         }
     }
     pub fn dummy_masterchain() -> Self {
@@ -685,10 +662,6 @@ impl BlockExtra {
 
     pub fn custom_cell(&self) -> Option<&Cell> {
         self.custom.as_ref().map(|c| c.cell())
-    }
-
-    pub fn is_key_block(&self) -> bool {
-        self.custom.is_some()
     }
 }
 
