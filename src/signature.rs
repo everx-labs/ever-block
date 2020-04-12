@@ -12,8 +12,18 @@
 * limitations under the License.
 */
 
-use super::*;
+use crate::{
+    blocks::{BlockIdExt},
+    error::BlockError,
+    validators::ValidatorBaseInfo,
+    Serializable, Deserializable,
+};
 use std::io::{Cursor, Write};
+use ton_types::{
+    error, fail, Result,
+    UInt256,
+    BuilderData, Cell, IBitstring, SliceData, HashmapE,
+};
 
 /*
 ed25519_signature#5 R:bits256 s:bits256 = CryptoSignature; 

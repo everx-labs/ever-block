@@ -12,10 +12,18 @@
 * limitations under the License.
 */
 
-use super::*;
-use super::hashmapaug::Augmentable;
-use {SliceData, BuilderData};
-use AccountId;
+use crate::{
+    define_HashmapAugE,
+    accounts::{Account, ShardAccount},
+    hashmapaug::{Augmentable, HashmapAugE},
+    types::{CurrencyCollection, Number5},
+    Serializable, Deserializable,
+};
+use ton_types::{
+    Result,
+    AccountId, UInt256,
+    BuilderData, Cell, IBitstring, HashmapType, SliceData,
+};
 
 
 /////////////////////////////////////////////////////////////////////////////////////////

@@ -12,11 +12,24 @@
 * limitations under the License.
 */
 
-use super::*;
+use crate::{
+    define_HashmapAugE,
+    error::BlockError,
+    envelope_message::MsgEnvelope,
+    hashmapaug::{Augmentable, HashmapAugE},
+    inbound_messages::InMsg,
+    messages::{CommonMsgInfo, Message},
+    miscellaneous::{IhrPendingInfo, ProcessedInfo},
+    types::{AddSub, ChildCell, CurrencyCollection},
+    transactions::Transaction,
+    GetRepresentationHash, Serializable, Deserializable,
+};
 use std::sync::Arc;
-use {AccountId, UInt256};
-use ton_types::{BuilderData, SliceData};
-use self::hashmapaug::Augmentable;
+use ton_types::{
+    error, fail, Result,
+    AccountId, UInt256,
+    BuilderData, Cell, IBitstring, HashmapType, SliceData
+};
 
 
 /*
