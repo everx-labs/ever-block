@@ -1190,6 +1190,16 @@ catchain_config#c1
     shard_validators_lifetime:uint32 
     shard_validators_num:uint32 
 = CatchainConfig;
+
+catchain_config_new#c2
+    flags: (## 7) 
+    { flags = 0 } 
+    shuffle_mc_validators: Bool
+    mc_catchain_lifetime: uint3
+    shard_catchain_lifetime: uint32
+    shard_validators_lifetime: uint32 
+    shard_validators_num: uint32 
+= CatchainConfig;
 */
 
 ///
@@ -1197,6 +1207,7 @@ catchain_config#c1
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct CatchainConfig {
+    pub shuffle_mc_validators: bool,
     pub mc_catchain_lifetime: u32,
     pub shard_catchain_lifetime: u32,
     pub shard_validators_lifetime: u32,
@@ -1209,18 +1220,26 @@ impl CatchainConfig {
     }
 }
 
-const CATCHAIN_CONFIG_TAG: u8 = 0xC1;
+const CATCHAIN_CONFIG_TAG_1: u8 = 0xC1;
+const CATCHAIN_CONFIG_TAG_2: u8 = 0xC2;
 
 impl Deserializable for CatchainConfig {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
-        if tag != CATCHAIN_CONFIG_TAG {
+        if (tag != CATCHAIN_CONFIG_TAG_1) && (tag != CATCHAIN_CONFIG_TAG_2) {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
                     s: "CatchainConfig".to_string()
                 }
             )
+        }
+        if tag == CATCHAIN_CONFIG_TAG_2 {
+            let flags = u8::construct_from(cell)?;
+            self.shuffle_mc_validators = flags == 1;
+            if flags >> 1 != 0 {
+                fail!(BlockError::InvalidArg("`flags` should be zero".to_string()))
+            }
         }
         self.mc_catchain_lifetime.read_from(cell)?;
         self.shard_catchain_lifetime.read_from(cell)?;
@@ -1232,7 +1251,8 @@ impl Deserializable for CatchainConfig {
 
 impl Serializable for CatchainConfig {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_u8(CATCHAIN_CONFIG_TAG)?;
+        cell.append_u8(CATCHAIN_CONFIG_TAG_2)?;
+        cell.append_u8(self.shuffle_mc_validators as u8)?;
         self.mc_catchain_lifetime.write_to(cell)?;
         self.shard_catchain_lifetime.write_to(cell)?;
         self.shard_validators_lifetime.write_to(cell)?;
@@ -1248,20 +1268,36 @@ impl Serializable for CatchainConfig {
 
 /*
 _ fundamental_smc_addr:(HashmapE 256 True) = ConfigParam 31;
+
+consensus_config#d6
+    round_candidates:# { round_candidates >= 1 }
+    next_candidate_delay_ms:uint32
+    consensus_timeout_ms:uint32
+    fast_attempts:uint32
+    attempt_duration:uint32
+    catchain_max_deps:uint32
+    max_block_bytes:uint32
+    max_collated_bytes:uint32
+= ConsensusConfig;
+
+consensus_config_new#d7
+    flags: (## 7)
+    { flags = 0 }
+    new_catchain_ids: Bool
+    round_candidates: (## 8) { round_candidates >= 1 }
+    next_candidate_delay_ms: uint32 
+    consensus_timeout_ms: uint32
+    fast_attempts: uint32
+    attempt_duration: uint32
+    catchain_max_deps: uint32
+    max_block_bytes: uint32
+    max_collated_bytes: uint32 
+= ConsensusConfig;
 */
 
-// consensus_config#d6
-//     round_candidates:# { round_candidates >= 1 }
-//     next_candidate_delay_ms:uint32
-//     consensus_timeout_ms:uint32
-//     fast_attempts:uint32
-//     attempt_duration:uint32
-//     catchain_max_deps:uint32
-//     max_block_bytes:uint32
-//     max_collated_bytes:uint32
-// = ConsensusConfig;
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ConsensusConfig {
+    pub new_catchain_ids: bool,
     pub round_candidates: u32,
     pub next_candidate_delay_ms: u32,
     pub consensus_timeout_ms: u32,
@@ -1278,12 +1314,13 @@ impl ConsensusConfig {
     }
 }
 
-const CONSENSUS_CONFIG_TAG: u8 = 0xD6;
+const CONSENSUS_CONFIG_TAG_1: u8 = 0xD6;
+const CONSENSUS_CONFIG_TAG_2: u8 = 0xD7;
 
 impl Deserializable for ConsensusConfig {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
-        if tag != CONSENSUS_CONFIG_TAG {
+        if (tag != CONSENSUS_CONFIG_TAG_1) && (tag != CONSENSUS_CONFIG_TAG_2) {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
@@ -1291,7 +1328,19 @@ impl Deserializable for ConsensusConfig {
                 }
             )
         }
-        self.round_candidates.read_from(cell)?;
+        if tag == CONSENSUS_CONFIG_TAG_1 {
+            self.round_candidates.read_from(cell)?;
+        } else {
+            let flags = u8::construct_from(cell)?;
+            self.new_catchain_ids = flags == 1;
+            if flags >> 1 != 0 {
+                fail!(BlockError::InvalidArg("`flags` should be zero".to_string()))
+            }
+            self.round_candidates = u8::construct_from(cell)? as u32;
+            if self.round_candidates == 0 {
+                fail!(BlockError::InvalidArg("`round_candidates` should be positive".to_string()))
+            }
+        }
         self.next_candidate_delay_ms.read_from(cell)?;
         self.consensus_timeout_ms.read_from(cell)?;
         self.fast_attempts.read_from(cell)?;
@@ -1305,8 +1354,12 @@ impl Deserializable for ConsensusConfig {
 
 impl Serializable for ConsensusConfig {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_u8(CONSENSUS_CONFIG_TAG)?;
-        self.round_candidates.write_to(cell)?;
+        if self.round_candidates == 0 {
+            fail!(BlockError::InvalidArg("`round_candidates` should be positive".to_string()))
+        }
+        cell.append_u8(CONSENSUS_CONFIG_TAG_2)?;
+        cell.append_u8(self.new_catchain_ids as u8)?;
+        (self.round_candidates as u8).write_to(cell)?;
         self.next_candidate_delay_ms.write_to(cell)?;
         self.consensus_timeout_ms.write_to(cell)?;
         self.fast_attempts.write_to(cell)?;
