@@ -17,16 +17,12 @@ use crate::{
     error::BlockError,
     validators::ValidatorBaseInfo,
     Serializable, Deserializable,
-    validators::ValidatorDescr
 };
-use std::{
-    io::{Cursor, Write},
-    collections::HashMap
-};
+use std::io::{Cursor, Write};
 use ton_types::{
     error, fail, Result,
     UInt256,
-    BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType
+    BuilderData, Cell, IBitstring, SliceData, HashmapE,
 };
 
 /*
@@ -294,12 +290,12 @@ impl BlockSignaturesPure {
     }
 
     /// Get count of signatures
-    pub fn count(&self) -> u32 {
+    pub fn get_count(&self) -> u32 {
         self.sig_count
     }
 
     /// Get weight
-    pub fn weight(&self) -> u64 {
+    pub fn get_weight(&self) -> u64 {
         self.sig_weight
     }
 
@@ -312,27 +308,6 @@ impl BlockSignaturesPure {
 
     pub fn signatures(&self) -> &HashmapE {
         &self.signatures
-    }
-
-    pub fn check_signatures(&self, validators_list: Vec<ValidatorDescr>, data: &[u8]) -> Result<u64> {
-        // Calc validators short ids
-        let mut validators_map = HashMap::new();
-        for vd in validators_list {
-            validators_map.insert(vd.compute_node_id_short(), vd);
-        };
-
-        // Check signatures
-        let mut weight = 0;
-        self.signatures().iterate(&mut |ref mut _key, ref mut slice| {
-            let sign = CryptoSignaturePair::construct_from(slice)?;
-            let vd = &validators_map[&sign.node_id_short];
-            if !vd.public_key.verify_signature(data, &sign.sign) {
-                fail!(BlockError::BadSignature)
-            }
-            weight += vd.weight;
-            Ok(true)
-        })?;
-        Ok(weight)
     }
 }
 
