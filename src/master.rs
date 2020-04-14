@@ -22,7 +22,7 @@ use crate::{
     inbound_messages::InMsg,
     shard::{ShardIdent},
     signature::CryptoSignaturePair,
-    types::{CurrencyCollection, InRefValue},
+    types::{CurrencyCollection, InRefValue, ChildCell},
     validators::ValidatorInfo,
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
@@ -85,15 +85,26 @@ impl ShardHashes {
     }
 }
 
+/*
+masterchain_block_extra#cca5
+  key_block:(## 1)
+  shard_hashes:ShardHashes
+  shard_fees:ShardFees
+  ^[ prev_blk_signatures:(HashmapE 16 CryptoSignaturePair)
+     recover_create_msg:(Maybe ^InMsg)
+     mint_msg:(Maybe ^InMsg) ]
+  config:key_block?ConfigParams
+= McBlockExtra;
+*/
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct McBlockExtra {
-    pub key_block: bool,
-    pub hashes: ShardHashes, // workchain_id of ShardIdent from all blocks
-    pub fees: ShardFees,
-    pub prev_blk_signatures: CryptoSignatures,
-    pub recover_create_msg: Option<InRefValue<InMsg>>,
-    pub mint_msg: Option<InRefValue<InMsg>>,
-    pub config: Option<ConfigParams>
+    key_block: bool,
+    hashes: ShardHashes, // workchain_id of ShardIdent from all blocks
+    fees: ShardFees,
+    prev_blk_signatures: CryptoSignatures,
+    recover_create_msg: Option<ChildCell<InMsg>>,
+    mint_msg: Option<ChildCell<InMsg>>,
+    config: Option<ConfigParams>
 }
 
 pub fn shard_ident_to_u64(shard: &[u8]) -> u64 {
@@ -131,10 +142,6 @@ impl McBlockExtra {
         Ok(())
     }
 
-    pub fn hashes(&self) -> &ShardHashes {
-        &self.hashes
-    }
-
     ///
     /// Get all fees for blockchain
     /// 
@@ -170,13 +177,41 @@ impl McBlockExtra {
         })
     }
 
-    /// Get fees
-    pub fn fees(&self) -> &ShardFees {
-        &self.fees
+    pub fn is_key_block(&self) -> bool { self.key_block }
+    pub fn set_is_key_block(&mut self, is_key_block: bool) { self.key_block = is_key_block }
+
+    pub fn hashes(&self) -> &ShardHashes { &self.hashes }
+    pub fn hashes_mut(&mut self) -> &mut ShardHashes { &mut self.hashes }
+
+    pub fn fees(&self) -> &ShardFees { &self.fees }
+    pub fn fees_mut(&mut self) -> &mut ShardFees { &mut self.fees }
+
+    pub fn prev_blk_signatures(&self) -> &CryptoSignatures { &self.prev_blk_signatures }
+    pub fn prev_blk_signatures_mut(&mut self) -> &mut CryptoSignatures { &mut self.prev_blk_signatures }
+
+    pub fn config(&self) -> Option<&ConfigParams> { self.config.as_ref() }
+    pub fn config_mut(&mut self) -> &mut Option<ConfigParams> { &mut self.config }
+
+    pub fn read_recover_create_msg(&self) -> Result<Option<InMsg>> {
+        self.recover_create_msg.as_ref().map(|mr| mr.read_struct()).transpose()
+    }
+    pub fn write_recover_create_msg(&mut self, value: Option<&InMsg>) -> Result<()> {
+        self.recover_create_msg = value.map(|v| ChildCell::with_struct(v)).transpose()?;
+        Ok(())
+    }
+    pub fn recover_create_msg_cell(&self) -> Option<&Cell> {
+        self.recover_create_msg.as_ref().map(|mr| mr.cell())
     }
 
-    pub fn config(&self) -> Option<&ConfigParams> {
-        self.config.as_ref()
+    pub fn read_mint_msg(&self) -> Result<Option<InMsg>> {
+        self.mint_msg.as_ref().map(|mr| mr.read_struct()).transpose()
+    }
+    pub fn write_mint_msg(&mut self, value: Option<&InMsg>) -> Result<()> {
+        self.mint_msg = value.map(|v| ChildCell::with_struct(v)).transpose()?;
+        Ok(())
+    }
+    pub fn mint_msg_cell(&self) -> Option<&Cell> {
+        self.mint_msg.as_ref().map(|mr| mr.cell())
     }
 }
 
@@ -199,8 +234,18 @@ impl Deserializable for McBlockExtra {
 
         let ref mut cell1 = cell.checked_drain_reference()?.into();
         self.prev_blk_signatures.read_from(cell1)?;
-        self.recover_create_msg = InRefValue::<InMsg>::read_maybe_from(cell1)?;
-        self.mint_msg = InRefValue::<InMsg>::read_maybe_from(cell1)?;
+        
+        self.recover_create_msg = if cell1.get_next_bit()? {
+            Some(ChildCell::construct_from(&mut cell1.checked_drain_reference()?.into())?)
+        } else {
+            None
+        };
+        
+        self.mint_msg = if cell1.get_next_bit()? {
+            Some(ChildCell::construct_from(&mut cell1.checked_drain_reference()?.into())?)
+        } else {
+            None
+        };
 
         self.config = if self.key_block {
             Some(ConfigParams::construct_from(cell)?)
@@ -221,8 +266,20 @@ impl Serializable for McBlockExtra {
 
         let mut cell1 = BuilderData::new();
         self.prev_blk_signatures.write_to(&mut cell1)?;
-        self.recover_create_msg.write_maybe_to(&mut cell1)?;
-        self.mint_msg.write_maybe_to(&mut cell1)?;
+        if let Some(msg) = self.recover_create_msg.as_ref() {
+            cell1.append_bit_one()?;
+            cell1.append_reference(msg.write_to_new_cell()?);
+        } else {
+            cell1.append_bit_zero()?;
+        }
+        
+        if let Some(msg) = self.mint_msg.as_ref() {
+            cell1.append_bit_one()?;
+            cell1.append_reference(msg.write_to_new_cell()?);
+        } else {
+            cell1.append_bit_zero()?;
+        }
+        
         cell.append_reference(cell1);
 
         if let Some(config) = &self.config {
