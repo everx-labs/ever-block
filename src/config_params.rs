@@ -2154,7 +2154,7 @@ impl ConfigParam12 {
     } 
 
     /// get value by index
-    pub fn get(&self, workchain_id: i32) -> Result<Option<WorkchainDescr>> {
+    pub fn get(&self, workchain_id: u32) -> Result<Option<WorkchainDescr>> {
         self.workchains.get(&workchain_id)
     }
 
