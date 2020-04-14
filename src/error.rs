@@ -57,5 +57,7 @@ pub enum BlockError {
     WrongMerkleProof(String),
     /// Wrong merkle update.
     #[fail(display = "Wrong merkle update: {}", 0)]
-    WrongMerkleUpdate(String)
+    WrongMerkleUpdate(String),
+    #[fail(display = "Bad signature")]
+    BadSignature,
 }
