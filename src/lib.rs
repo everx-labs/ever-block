@@ -259,24 +259,19 @@ impl Serializable for AccountId {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TrueTlbType;
-
-impl Default for TrueTlbType{
-    fn default() -> Self {
-        TrueTlbType
+impl Deserializable for () {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        if cell.remaining_bits() == 0 && cell.remaining_references() == 0 {
+            Ok(())
+        } else {
+            fail!("It must be True by TLB, but some data is present: {}", cell.to_hex_string())
+        }
     }
 }
 
-impl Serializable for TrueTlbType{
+impl Serializable for () {
     fn write_to(&self, _cell: &mut BuilderData) -> Result<()> {
         Ok(())
-    }    
-}
-
-impl Deserializable for TrueTlbType {
-    fn read_from(&mut self, _cell: &mut SliceData) -> Result<()> {
-        Ok(())        
     }
 }
 

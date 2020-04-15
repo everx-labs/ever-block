@@ -17,7 +17,7 @@ use crate::{
     merkle_proof::MerkleProof,
     messages::{AnycastInfo, CommonMsgInfo, Message, MsgAddressInt, StateInit, TickTock},
     types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
-    shard::ShardStateUnsplit,
+    shard::{ShardIdent, ShardStateUnsplit},
     GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
 use std::fmt;
@@ -565,7 +565,7 @@ impl Account {
             },
             _ => (),
         }
-        if let Some(ref init) = msg.state_init() {
+        if let Some(init) = msg.state_init() {
             //code must present in constructor message
             match init.code {
                 Some(_) => storage.state = AccountState::AccountActive(init.clone()),
@@ -625,6 +625,13 @@ impl Account {
         self.stuff().is_none()
     }
 
+    pub fn belongs_to_shard(&self, shard: &ShardIdent) -> Result<bool> {
+        match self.get_addr() {
+            Some(addr) => Ok(addr.get_workchain_id() == shard.workchain_id() && shard.contains_account(addr.get_address())?),
+            None => fail!("Account is None")
+        }
+    }
+
     pub fn stuff(&self) -> Option<&AccountStuff> {
         if let Account::Account(stuff) = self {
             Some(stuff)
@@ -682,6 +689,13 @@ impl Account {
     /// Return None if account is empty (AccountNone)
     pub fn state(&self) -> Option<&AccountState> {
         self.stuff().map(|s| &s.storage.state)
+    }
+
+    pub fn get_tick_tock(&self) -> Option<&TickTock> {
+        match self.state() {
+            Some(AccountState::AccountActive(state_init)) => state_init.special.as_ref(),
+            _ => None
+        }
     }
 
     /// Get copy of account's storage information.
@@ -812,6 +826,10 @@ impl Account {
         }
     }
 
+    pub fn last_tr_time(&mut self) -> Option<u64> {
+        self.stuff().map(|stuff| stuff.storage.last_trans_lt)
+    }
+
     pub fn set_last_tr_time(&mut self, tr_lt: u64) {
         if let Some(stuff) = self.stuff_mut() {
             stuff.storage.last_trans_lt = tr_lt;
@@ -930,6 +948,10 @@ impl ShardAccount {
 
     pub fn account_cell(&self) -> &Cell {
         self.account.cell()
+    }
+
+    pub fn set_account_cell(&mut self, cell: Cell) {
+        self.account.set_cell(cell);
     }
 }
 

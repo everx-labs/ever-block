@@ -15,6 +15,7 @@
 use crate::{
     define_HashmapE, define_HashmapE_empty_val,
     error::BlockError,
+    shard_accounts::ShardAccounts,
     signature::{CryptoSignature, SigPubKey},
     types::{ChildCell, Grams, Number8, Number12, Number16, Number13, Number32, VarUInteger32},
     validators::ValidatorSet,
@@ -54,6 +55,13 @@ impl ConfigParams {
         Self::default()
     }
 
+    pub fn with_address_and_params(config_addr: UInt256, data: Option<Cell>) -> Self {
+        Self {
+            config_addr,
+            config_params: HashmapE::with_hashmap(32, data)
+        }
+    }
+
     /// get config by index
     pub fn config(&self, index: u32) -> Result<Option<ConfigParamEnum>> {
         let key = index.write_to_new_cell().unwrap();
@@ -74,7 +82,91 @@ impl ConfigParams {
         key.append_u32(index).unwrap();
         self.config_params.set(key.into(), &value.into())?;
         Ok(())
-    }   
+    }
+    pub fn fee_collector_address(&self) -> Result<UInt256> {
+        let addr = match self.config(3)? {
+            Some(ConfigParamEnum::ConfigParam3(param)) => param.fee_collector_addr.clone(),
+            _ => match self.config(1)? {
+                Some(ConfigParamEnum::ConfigParam1(param)) => param.elector_addr.clone(),
+                _ => fail!("no fee collector address in config")
+            }
+        };
+        Ok(addr)
+    }
+    pub fn minter_address(&self) -> Result<UInt256> {
+        let addr = match self.config(2)? {
+            Some(ConfigParamEnum::ConfigParam2(param)) => param.minter_addr.clone(),
+            _ => match self.config(0)? {
+                Some(ConfigParamEnum::ConfigParam0(param)) => param.config_addr.clone(),
+                _ => fail!("no minter address in config")
+            }
+        };
+        Ok(addr)
+    }
+    pub fn validator_set(&self) -> Result<ValidatorSet> {
+        let vset = match self.config(35)? {
+            Some(ConfigParamEnum::ConfigParam35(param)) => param.cur_temp_validators.clone(),
+            _ => match self.config(34)? {
+                Some(ConfigParamEnum::ConfigParam34(param)) => param.cur_validators.clone(),
+                _ => ValidatorSet::default()
+            }
+        };
+        Ok(vset)
+    }
+    pub fn fundamental_smc_addr(&self) -> Result<FundamentalSmcAddresses> {
+        match self.config(31)? {
+            Some(ConfigParamEnum::ConfigParam31(param)) => Ok(param.fundamental_smc_addr.clone()),
+            _ => fail!("fundamental_smc_addr not found in config")
+        }
+    }
+    pub fn get_smc_tick_tock(&self, smc_addr: &UInt256, accounts: &ShardAccounts) -> Result<usize> {
+        let account = match accounts.get(smc_addr)? {
+            Some(shard_account) => shard_account.read_account()?,
+            None => fail!("Tick-tock smartcontract not found")
+        };
+        Ok(account.get_tick_tock().map(|tick_tock| tick_tock.as_usize()).unwrap_or_default())
+    }
+    pub fn special_ticktock_smartcontracts(&self, tick_tock: usize, accounts: &ShardAccounts) -> Result<Vec<(UInt256, usize)>> {
+        let mut vec = Vec::new();
+        self.fundamental_smc_addr()?.iterate_keys(&mut |key: UInt256| {
+            let tt = self.get_smc_tick_tock(&key, accounts)?;
+            if (tick_tock & tt) != 0 {
+                vec.push((key, tt))
+            }
+            Ok(true)
+        })?;
+        Ok(vec)
+    }
+    pub fn fwd_prices(&self, masterchain: bool) -> Result<MsgForwardPrices> {
+        if masterchain {
+            if let Some(ConfigParamEnum::ConfigParam24(param)) = self.config(24)? {
+                return Ok(param)
+            }
+        } else {
+            if let Some(ConfigParamEnum::ConfigParam25(param)) = self.config(25)? {
+                return Ok(param)
+            }
+        }
+        fail!("Forward prices not found")
+    }
+    pub fn gas_prices(&self, masterchain: bool) -> Result<GasLimitsPrices> {
+        if masterchain {
+            if let Some(ConfigParamEnum::ConfigParam20(param)) = self.config(20)? {
+                return Ok(param)
+            }
+        } else {
+            if let Some(ConfigParamEnum::ConfigParam21(param)) = self.config(21)? {
+                return Ok(param)
+            }
+        }
+        fail!("Gas prices not found")
+    }
+    pub fn storage_prices(&self) -> Result<ConfigParam18> {
+        match self.config(18)? {
+            Some(ConfigParamEnum::ConfigParam18(param)) => Ok(param),
+            _ => fail!("Storage prices not found")
+        }
+    }
 }
 
 impl Deserializable for ConfigParams {
@@ -833,47 +925,34 @@ impl Serializable for StoragePrices {
     }
 }
 
+define_HashmapE!(ConfigParam18Map, 32, StoragePrices);
+
 ///
 /// ConfigParam 18 struct
 /// 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ConfigParam18 {
-    pub map: HashmapE,
-    index: u32
-}
-
-impl Default for ConfigParam18 {
-    fn default() -> Self {
-        ConfigParam18 {
-            map: HashmapE::with_bit_len(32),
-            index: 0,
-        }
-    }
+    pub map: ConfigParam18Map,
 }
 
 impl ConfigParam18 {
-    /// new instance of ConfigParam18
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// get length
     pub fn len(&self) -> Result<usize> {
-        self.map.len().map_err(|e| e.into())
+        self.map.len()
     } 
 
     /// get value by index
     pub fn get(&self, index: u32) -> Result<StoragePrices> {
-        let key = index.write_to_new_cell().unwrap().into();
-        let mut s = self.map.get(key)?.ok_or(BlockError::InvalidIndex(index as usize))?;
-        StoragePrices::construct_from(&mut s)
+        self.map.get(&index).and_then(|sp| sp.ok_or(error!(BlockError::InvalidIndex(index as usize))))
     }
 
     /// insert value
-    pub fn insert(&mut self, sp: StoragePrices) {
-        self.index += 1;
-        let key = self.index.write_to_new_cell().unwrap();
-        self.map.set(key.into(), &sp.write_to_new_cell().unwrap().into()).unwrap();
+    pub fn insert(&mut self, sp: &StoragePrices) -> Result<()> {
+        let index = match self.map.0.get_max(false, &mut 0)?.0 {
+            Some(key) => SliceData::from(key).get_next_u32()? + 1,
+            _ => 1
+        };
+        self.map.set(&index, sp)
     }
 }
 
@@ -881,7 +960,6 @@ impl ConfigParam18 {
 impl Deserializable for ConfigParam18 {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.map.read_hashmap_root(slice)?;
-        self.index = self.map.len()? as u32;
         Ok(())
     }
 }
@@ -2143,7 +2221,7 @@ pub struct ConfigParam12 {
 }
 
 impl ConfigParam12 {
-    /// new instance of ConfigParam18
+    /// new instance of ConfigParam12
     pub fn new() -> Self {
         Self::default()
     }
@@ -2154,13 +2232,13 @@ impl ConfigParam12 {
     } 
 
     /// get value by index
-    pub fn get(&self, workchain_id: u32) -> Result<Option<WorkchainDescr>> {
+    pub fn get(&self, workchain_id: i32) -> Result<Option<WorkchainDescr>> {
         self.workchains.get(&workchain_id)
     }
 
     /// insert value
-    pub fn insert(&mut self, workchain_id: i32, sp: &WorkchainDescr) {
-        self.workchains.set(&workchain_id, sp).unwrap();
+    pub fn insert(&mut self, workchain_id: i32, sp: &WorkchainDescr) -> Result<()> {
+        self.workchains.set(&workchain_id, sp)
     }
 }
 
@@ -2335,57 +2413,35 @@ impl Serializable for ValidatorSignedTempKey {
 /// ConfigParam 39 struct
 /// 
 // _ (HashmapE 256 ValidatorSignedTempKey) = ConfigParam 39;
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ConfigParam39 {
-    pub validator_keys: HashmapE,
+    pub validator_keys: ValidatorKeys,
 }
 
-impl Default for ConfigParam39 {
-    fn default() -> Self {
-        ConfigParam39 {
-            validator_keys: HashmapE::with_bit_len(256),
-        }
-    }
-}
+define_HashmapE!(ValidatorKeys, 256, ValidatorSignedTempKey);
 
 impl ConfigParam39 {
-    /// new instance of ConfigParam39
     pub fn new() -> Self {
-        Self::default()
+        Default::default()
     }
-
     /// get length
     pub fn len(&self) -> Result<usize> {
-        Ok(self.validator_keys.len()?)
+        self.validator_keys.len()
     } 
 
     /// get value by key
-    pub fn get(&self, key: UInt256) -> Result<ValidatorSignedTempKey> {
-        self.validator_keys.get(key.write_to_new_cell().unwrap().into())
-            .map(|ref mut s| -> Result<ValidatorSignedTempKey> 
-                {
-                    let mut sp = ValidatorSignedTempKey::default(); 
-                    if let Some(s) = s {
-                       sp.read_from(s)?
-                    } else {
-                        fail!(
-                            BlockError::NotFound("ValidatorSignedTempKey".to_string())
-                        )
-                    }; 
-                    Ok(sp)
-                }).unwrap()
+    pub fn get(&self, key: &UInt256) -> Result<ValidatorSignedTempKey> {
+        self.validator_keys.get(key).and_then(|vtk| vtk.ok_or(error!(BlockError::InvalidArg(key.to_hex_string()))))
     }
 
     /// insert value
-    pub fn insert(&mut self, key: &UInt256, validator_key: &ValidatorSignedTempKey) {
-        let key = key.write_to_new_cell().unwrap();
-        self.validator_keys.set(key.into(), &validator_key.write_to_new_cell().unwrap().into()).unwrap();
+    pub fn insert(&mut self, key: &UInt256, validator_key: &ValidatorSignedTempKey) -> Result<()> {
+        self.validator_keys.set(key, &validator_key)
     }
 }
 
 impl Deserializable for ConfigParam39 {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        self.validator_keys = HashmapE::with_bit_len(256);
         self.validator_keys.read_from(slice)?;
         Ok(())
     }

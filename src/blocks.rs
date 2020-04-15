@@ -26,8 +26,11 @@ use crate::{
     types::{ChildCell, CurrencyCollection, InRefValue, UnixTime32},
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
-use std::cmp::Ordering;
-use std::io::{Cursor, Write};
+use std::{
+    cmp::Ordering,
+    io::{Cursor, Write},
+    fmt::{self, Display, Formatter},
+};
 use ton_types::{
     error, fail, Result,
     ExceptionCode, UInt256, BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
@@ -111,6 +114,17 @@ impl Deserializable for BlockIdExt {
         self.root_hash.read_from(cell)?;
         self.file_hash.read_from(cell)?;
         Ok(())
+    }
+}
+
+impl Display for BlockIdExt {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "({}:{}, {}, rh {}, fh {})", 
+            self.shard_id.workchain_id(), 
+            self.shard_id.shard_prefix_as_str_with_tag(), 
+            self.seq_no,
+            self.root_hash.to_hex_string(),
+            self.file_hash.to_hex_string())
     }
 }
 
