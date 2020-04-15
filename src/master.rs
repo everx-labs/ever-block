@@ -13,10 +13,10 @@
 */
 
 use crate::{
+    define_HashmapE, define_HashmapAugE,
     bintree::{BinTree, BinTreeType},
     blocks::ExtBlkRef,
     config_params::ConfigParams,
-    define_HashmapE, define_HashmapAugE,
     error::BlockError,
     hashmapaug::{Augmentable, HashmapAugE},
     inbound_messages::InMsg,
@@ -332,6 +332,15 @@ pub struct KeyExtBlkRef {
     blk_ref: ExtBlkRef
 }
 
+impl KeyExtBlkRef {
+    pub fn key(&self) -> bool {
+        self.key
+    }
+    pub fn blk_ref(&self) -> &ExtBlkRef {
+        &self.blk_ref
+    }
+}
+
 impl Deserializable for KeyExtBlkRef {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.key.read_from(slice)?;
@@ -390,10 +399,14 @@ impl Serializable for ShardFeeCreated {
         Ok(())
     }
 }
+fn umulnexps32(_x: u64, _k: u32, _trunc: bool) -> u64 {
+    unimplemented!("https://www.notion.so/tonlabs/Port-NegExpInt64Table-from-TNode-75664c4ccf794ee9b2485f3ce7945b5d")
+}
 
 /// counters#_ last_updated:uint32 total:uint64 cnt2048:uint64 cnt65536:uint64 = Counters;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Counters {
+    valid: bool,
     last_updated: u32,
     total: u64,
     cnt2048: u64,
@@ -401,6 +414,78 @@ pub struct Counters {
 }
 
 impl Counters {
+    pub fn validate(&mut self) -> bool {
+        if !self.is_valid() {
+            return false
+        }
+        if self.total == 0 {
+            if (self.cnt2048 | self.cnt65536) != 0 {
+                return self.invalidate()
+            }
+        } else if self.last_updated == 0 {
+            return self.invalidate()
+        }
+        return true;
+    }
+    pub fn is_valid(&self) -> bool {
+        self.valid
+    }
+    pub fn invalidate(&mut self) -> bool {
+        self.valid = false;
+        self.valid
+    }
+    pub fn is_zero(&self) -> bool {
+        self.total == 0
+    }
+    pub fn almost_zero(&self) -> bool {
+        (self.cnt2048 | self.cnt65536) <= 1
+    }
+    pub fn almost_equals(&self, other: &Self) -> bool {
+        self.last_updated == other.last_updated
+            && self.total == other.total
+            && self.cnt2048 <= other.cnt2048 + 1
+            && other.cnt2048 <= self.cnt2048 + 1
+            && self.cnt65536 <= other.cnt65536 + 1
+            && other.cnt65536 <= self.cnt65536 + 1
+    }
+    pub fn modified_since(&self, utime: u32) -> bool {
+        self.last_updated >= utime
+    }
+    pub fn increase_by(&mut self, count: u64, now: u32) -> bool {
+        if !self.validate() {
+            return false
+        }
+        let scaled = count << 32;
+        if self.total == 0 {
+            self.last_updated = now;
+            self.total = count;
+            self.cnt2048 = scaled;
+            self.cnt65536 = scaled;
+            return true
+        }
+        if count > !self.total || self.cnt2048 > !scaled || self.cnt65536 > !scaled {
+            return false /* invalidate() */  // overflow
+        }
+        let dt = now.checked_sub(self.last_updated).unwrap_or_default();
+        if dt != 0 {
+            // more precise version of cnt2048 = llround(cnt2048 * exp(-dt / 2048.));
+            // (rounding error has absolute value < 1)
+            self.cnt2048 = if dt >= 48 * 2048 {0} else {
+                umulnexps32(self.cnt2048, dt << 5, false)
+            };
+            // more precise version of cnt65536 = llround(cnt65536 * exp(-dt / 65536.));
+            // (rounding error has absolute value < 1)
+            self.cnt65536 = umulnexps32(self.cnt65536, dt, false);
+        }
+        self.total += count;
+        self.cnt2048 += scaled;
+        self.cnt65536 += scaled;
+        self.last_updated = now;
+        true
+    }
+    pub fn total(&self) -> u64 {
+        self.total
+    }
 }
 
 impl Deserializable for Counters {
@@ -438,6 +523,14 @@ impl CreatorStats {
     pub fn tag_len_bits() -> usize {
         4
     }
+
+    pub fn mc_blocks(&self) -> &Counters {
+        &self.mc_blocks
+    }
+
+    pub fn shard_blocks(&self) -> &Counters {
+        &self.shard_blocks
+    }
 }
 
 impl Deserializable for CreatorStats {
@@ -468,18 +561,12 @@ impl Serializable for CreatorStats {
     }
 }
 
-/// block_create_stats#17 counters:(HashmapE 256 CreatorStats) = BlockCreateStats;
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BlockCreateStats {
-    counters: HashmapE,
-}
+define_HashmapE!{BlockCounters, 256, CreatorStats}
 
-impl Default for BlockCreateStats {
-    fn default() -> Self {
-        Self {
-            counters: HashmapE::with_bit_len(256),
-        }
-    }
+/// block_create_stats#17 counters:(HashmapE 256 CreatorStats) = BlockCreateStats;
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct BlockCreateStats {
+    pub counters: BlockCounters,
 }
 
 impl BlockCreateStats {
@@ -928,41 +1015,36 @@ impl Serializable for BlkMasterInfo {
 }
 
 
+define_HashmapE!(Publishers, 256, ());
 /*
-shared_lib_descr$00 lib:^Cell publishers:(Hashmap 256 False) = LibDescr;
+shared_lib_descr$00 lib:^Cell publishers:(Hashmap 256 True) = LibDescr;
 */
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct LibDescr {
     lib: Cell,
-    publishers: HashmapE // publishers:(Hashmap 256 False)
-}
-
-impl Default for LibDescr {
-    fn default() -> Self {
-        Self {
-            lib: Cell::default(),
-            publishers: HashmapE::with_bit_len(256)
-        }
-    }
+    publishers: Publishers
 }
 
 impl LibDescr {
     pub fn from_lib_data_by_publisher(lib: Cell, publisher: AccountId) -> Self {
-        let mut publishers = HashmapE::with_bit_len(256);
-        publishers.set(
-            publisher.write_to_new_cell().unwrap().into(),
-            &SliceData::default()
-        ).unwrap();
+        let mut publishers = Publishers::default();
+        publishers.set(&publisher, &()).unwrap();
         Self {
             lib,
             publishers
         }
     }
     pub fn add_publisher(&mut self, publisher: AccountId) {
-        self.publishers.set(
-            publisher.write_to_new_cell().unwrap().into(),
-            &SliceData::default()
-        ).unwrap();
+        self.publishers.set(&publisher, &()).unwrap();
+    }
+    pub fn publishers(&self) -> &Publishers {
+        &self.publishers
+    }
+    pub fn lib(&self) -> &Cell {
+        &self.lib
+    }
+    pub fn is_public_library(&self, _key: &UInt256) -> bool {
+        unimplemented!()
     }
 }
 

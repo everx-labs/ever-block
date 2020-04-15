@@ -484,6 +484,15 @@ pub enum TransactionTickTock {
     Tock
 }
 
+impl TransactionTickTock {
+    pub fn is_tick(&self) -> bool {
+        self == &TransactionTickTock::Tick
+    }
+    pub fn is_tock(&self) -> bool {
+        self == &TransactionTickTock::Tock
+    }
+}
+
 impl Default for TransactionTickTock {
     fn default() -> Self {
         TransactionTickTock::Tick
@@ -975,6 +984,22 @@ impl TransactionDescr {
         match self {
             TransactionDescr::Ordinary(ref tr) => Some(tr.credit_first),
             _ => None,
+        }
+    }
+
+    pub fn is_split(&self) -> bool {
+        match self {
+            TransactionDescr::SplitPrepare(_) |
+            TransactionDescr::SplitInstall(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_merge(&self) -> bool {
+        match self {
+            TransactionDescr::MergePrepare(_) |
+            TransactionDescr::MergeInstall(_) => true,
+            _ => false,
         }
     }
 

@@ -14,10 +14,11 @@
 
 use crate::{
     define_HashmapE,
+    outbound_messages::EnqueuedMsg,
     Serializable, Deserializable,
 };
 use ton_types::{
-    Result,
+    fail, Result,
     UInt256,
     BuilderData, Cell, SliceData, HashmapE, HashmapType,
 };
@@ -30,29 +31,47 @@ _ (HashmapE 96 ProcessedUpto) = ProcessedInfo;
 */
 define_HashmapE!(ProcessedInfo, 96, ProcessedUpto);
 
+impl ProcessedInfo {
+    pub fn min_seqno(&self) -> Result<u32> {
+        match self.0.get_min(false, &mut 0)? {
+            (Some(key), _value) => ProcessedInfoKey::construct_from(&mut key.into()).map(|key| key.mc_seqno),
+            _ => fail!("minimal record not found in ProcessedInfo")
+        }
+    }
+    pub fn already_processed(&self, enq: &EnqueuedMsg) -> Result<bool> {
+        let result = self.iterate(&mut |rec| {
+            Ok(!rec.already_processed(enq))
+        })?;
+        Ok(!result)
+    }
+}
+
 /// Struct ProcessedInfoKey describe key for ProcessedInfo
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ProcessedInfoKey {
     shard: u64,
-    mc_seeqno: u32,
+    mc_seqno: u32,
 }
 
 
 impl ProcessedInfoKey {
 
     // New instance ProcessedInfoKey structure
-    pub fn with_params(shard: u64, mc_seeqno: u32) -> Self {
+    pub fn with_params(shard: u64, mc_seqno: u32) -> Self {
         ProcessedInfoKey {
             shard,
-            mc_seeqno,
+            mc_seqno,
         }
+    }
+    pub fn seq_no(&self) -> u32 {
+        self.mc_seqno
     }
 }
 
 impl Serializable for ProcessedInfoKey {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.shard.write_to(cell)?;
-        self.mc_seeqno.write_to(cell)?;
+        self.mc_seqno.write_to(cell)?;
         Ok(())
     }
 }
@@ -60,7 +79,7 @@ impl Serializable for ProcessedInfoKey {
 impl Deserializable for ProcessedInfoKey {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.shard.read_from(cell)?;
-        self.mc_seeqno.read_from(cell)?;
+        self.mc_seqno.read_from(cell)?;
         Ok(())
     }
 }
@@ -72,7 +91,7 @@ impl Deserializable for ProcessedInfoKey {
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ProcessedUpto {
     last_msg_lt: u64,
-	last_msg_hash: UInt256, 
+    last_msg_hash: UInt256,
 }
 
 impl ProcessedUpto {
@@ -83,6 +102,9 @@ impl ProcessedUpto {
             last_msg_lt,
             last_msg_hash,
         }   
+    }
+    pub fn already_processed(&self, enq: &EnqueuedMsg) -> bool {
+        enq.enqueued_lt > self.last_msg_lt
     }
 }
 
