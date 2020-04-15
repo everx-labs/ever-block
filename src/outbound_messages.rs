@@ -52,7 +52,10 @@ const OUT_MSG_TRDEQ: u8 = 0b111;
 
 
 /*
-_ enqueued_lt:uint64 out_msg:^MsgEnvelope = EnqueuedMsg;
+_ 
+	enqueued_lt:uint64 
+	out_msg:^MsgEnvelope 
+= EnqueuedMsg;
 */
 
 ///
@@ -141,9 +144,9 @@ impl OutMsgDescr {
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Blockchain: 3.3.6
-// _ (HashmapAugE 352 EnqueuedMsg uint64) = OutMsgQueue;
+// _ (HashmapAugE 352 OutMsg uint64) = OutMsgQueue;
 // 352 = 32 - workchain_id, 64 - first 64 bit of account address, 256 - message hash
-define_HashmapAugE!(OutMsgQueue, 352, EnqueuedMsg, MsgTime);
+define_HashmapAugE!(OutMsgQueue, 352, OutMsg, MsgTime);
 
 type MsgTime = u64;
 
@@ -158,10 +161,9 @@ impl Augmentable for MsgTime {
 
 impl OutMsgQueue {
     /// insert OutMessage to OutMsgQueue
-    pub fn insert(&mut self, address: u64, env: Arc<MsgEnvelope>, msg_lt: u64) -> Result<()> {
-        let key = OutMsgQueueKey::with_workchain_id_and_message(0, address, env.message_cell().repr_hash()).unwrap();
-        let enq = EnqueuedMsg::with_param(msg_lt, env);
-        self.set(&key, &enq, &msg_lt)
+    pub fn insert(&mut self, address: u64, msg: &OutMsg, msg_lt: u64) -> Result<()> {
+        let key = OutMsgQueueKey::with_workchain_id_and_message(0, address, &msg).unwrap();
+        self.set(&key, &msg, &msg_lt)
     }
 }
 
@@ -179,7 +181,9 @@ pub struct OutMsgQueueKey{
 }
 
 impl OutMsgQueueKey {
-    pub fn with_workchain_id_and_message(id: i32, address: u64, hash: UInt256 ) -> Result<OutMsgQueueKey> {
+    pub fn with_workchain_id_and_message(id: i32, address: u64, out_msg: &OutMsg )
+    -> Result<OutMsgQueueKey> {
+        let hash = out_msg.hash()?;
         Ok(OutMsgQueueKey {
             workchain_id: id,
             address,
@@ -261,14 +265,13 @@ impl OutMsgQueueInfo {
         left.out_queue = OutMsgQueue::default();
         right.out_queue = OutMsgQueue::default();
         let prefix_len = split_key.remaining_bits();
-        self.out_queue.iterate_slices_with_keys_and_aug(&mut |key, msg_slice, aug| {
-            let msg = OutMsg::construct_from(&mut msg_slice.clone())?;
+        self.out_queue.iterate_with_keys_and_aug(&mut |key, msg, aug| {
             if let Some(mut account_id) = msg.read_message()?.and_then(|m| m.get_int_src_account_id()) {
                 account_id.move_by(prefix_len)?;
                 if !account_id.get_next_bit()? {
-                    left.out_queue.set_serialized(&key, &msg_slice, &aug)?;
+                    left.out_queue.set(&key, &msg, &aug)?;
                 } else {
-                    right.out_queue.set_serialized(&key, &msg_slice, &aug)?;
+                    right.out_queue.set(&key, &msg, &aug)?;
                 }
             }
             Ok(true)
@@ -326,25 +329,6 @@ impl Default for OutMsg {
 }
 
 impl OutMsg {
-
-    ///
-    /// the function returns the message envelop (if exists)
-    ///
-    pub fn read_out_message(&self) -> Result<Option<MsgEnvelope>> {
-        Ok(
-            match self {
-                OutMsg::External(_) => None,
-                OutMsg::Immediately(ref x) => Some(x.read_out_message()?),
-                OutMsg::New(ref x) => Some(x.read_out_message()?),
-                OutMsg::Transit(ref x) => Some(x.read_out_message()?),
-                OutMsg::Dequeue(ref x) => Some(x.read_out_message()?),
-                OutMsg::DequeueShort(_) => None,
-                OutMsg::DequeueImmediately(ref x) => Some(x.read_out_message()?),
-                OutMsg::TransitRequired(ref x) => Some(x.read_out_message()?),
-                OutMsg::None => unreachable!(),
-            }
-        )
-    }
 
     ///
     /// the function returns the message (if exists)

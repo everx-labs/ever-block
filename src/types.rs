@@ -73,10 +73,6 @@ macro_rules! define_VarIntegerN {
                 $varname(One::one())
             }
 
-            pub fn sgn(&self) -> bool {
-                self.0.sign() != Sign::NoSign
-            }
-
             pub fn from_two_u128(hi: u128, lo: u128) -> Result<Self> {
                 let val = (BigInt::from(hi) << 128) | BigInt::from(lo);
                 Self::check_owerflow(&val)?;
@@ -673,11 +669,6 @@ macro_rules! define_HashmapE {
                     <$x_type>::construct_from(slice)?
                 ))
             }
-            /// iterates items as slices with keys
-            pub fn iterate_slices_with_keys<F>(&self, p: &mut F) -> Result<bool>
-            where F: FnMut(SliceData, SliceData) -> Result<bool> {
-                self.0.iterate(&mut |key, slice| p(key, slice))
-            }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
                 let value = value.write_to_new_cell()?.into();
@@ -704,10 +695,6 @@ macro_rules! define_HashmapE {
                     Ok(true)
                 })?;
                 Ok(vec)
-            }
-            pub fn scan_diff<K, F>(&self, _other: &Self, _op: F) -> Result<bool>
-            where K: Deserializable, F: FnMut(K, Option<$x_type>, Option<$x_type>) -> Result<bool> {
-                unimplemented!()
             }
         }
 
@@ -747,11 +734,7 @@ macro_rules! define_HashmapE_empty_val {
             pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> Result<()> {
                 self.0.write_hashmap_root(cell).map_err(|e| e.into())
             }
-            /// checks if hashmap is empty
-            pub fn is_empty(&self) -> bool {
-                self.0.is_empty()
-            }
-            /// calculates length
+
             pub fn len(&self) -> Result<usize> {
                 self.0.len().map_err(|e| e.into())
             }
@@ -838,12 +821,6 @@ pub struct ChildCell<T: Default + Serializable + Deserializable> {
 
 impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
 
-    pub fn with_cell(cell: Cell) -> Self {
-        Self {
-            cell,
-            phantom: PhantomData
-        }
-    }
     pub fn with_struct(s: &T) -> Result<Self> {
         Ok(
             ChildCell {
@@ -869,10 +846,6 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
 
     pub fn cell(&self) -> &Cell {
         &self.cell
-    }
-
-    pub fn set_cell(&mut self, cell: Cell) {
-        self.cell = cell;
     }
 
     pub fn hash(&self) -> UInt256 {

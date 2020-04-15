@@ -13,10 +13,9 @@
 */
 
 use crate::{
-    define_HashmapE,
     accounts::ShardAccount,
     error::BlockError,
-    master::{BlkMasterInfo, LibDescr, McStateExtra},
+    master::{BlkMasterInfo, McStateExtra},
     outbound_messages::OutMsgQueueInfo,
     shard_accounts::{DepthBalanceInfo, ShardAccounts},
     types::{ChildCell, CurrencyCollection},
@@ -26,7 +25,7 @@ use std::fmt::{self, Display, Formatter};
 use ton_types::{
     error, fail, Result,
     types::AccountId,
-    BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData
+    BuilderData, Cell, HashmapE, IBitstring, SliceData
 };
 
 
@@ -480,8 +479,6 @@ impl Serializable for ShardStateSplit {
     }
 }
 
-define_HashmapE!(Libraries, 256, LibDescr);
-
 ///
 /// Struct ShardStateUnsplit
 ///
@@ -506,7 +503,7 @@ define_HashmapE!(Libraries, 256, LibDescr);
 //     ]
 //     custom:(Maybe ^McStateExtra)
 // = ShardStateUnsplit;
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ShardStateUnsplit {
     global_id: i32,
     shard_id: ShardIdent,
@@ -523,7 +520,7 @@ pub struct ShardStateUnsplit {
     underload_history: u64,
     total_balance: CurrencyCollection,
     total_validator_fees: CurrencyCollection,
-    libraries: Libraries, // <AccountId, LibDescr>, // currently can be present only in masterchain blocks.
+    libraries: HashmapE, // <AccountId, LibDescr>, // currently can be present only in masterchain blocks.
     master_ref: Option<BlkMasterInfo>,
 
     custom: Option<ChildCell<McStateExtra>>, // The field custom is usually present only
@@ -662,11 +659,11 @@ impl ShardStateUnsplit {
         &mut self.total_validator_fees
     }
 
-    pub fn libraries(&self) -> &Libraries {
+    pub fn libraries(&self) -> &HashmapE {
         &self.libraries
     }
 
-    pub fn libraries_mut(&mut self) -> &mut Libraries {
+    pub fn libraries_mut(&mut self) -> &mut HashmapE {
         &mut self.libraries
     }
 
@@ -811,5 +808,29 @@ impl Serializable for ShardStateUnsplit {
         }
 
         Ok(())
+    }
+}
+
+impl Default for ShardStateUnsplit {
+    fn default() -> Self {
+        Self {
+            global_id: 0,
+            shard_id: ShardIdent::default(),
+            seq_no: 0,
+            vert_seq_no: 0,
+            gen_time: 0,
+            gen_lt: 0,
+            min_ref_mc_seqno: 0,
+            out_msg_queue_info: ChildCell::default(),
+            before_split: false,
+            accounts: ChildCell::default(),
+            overload_history: 0,
+            underload_history: 0,
+            total_balance: CurrencyCollection::default(),
+            total_validator_fees: CurrencyCollection::default(),
+            libraries: HashmapE::with_bit_len(256), // <AccountId, LibDescr>, // currently can be present only in masterchain blocks.
+            master_ref: None,
+            custom: None,
+        }
     }
 }

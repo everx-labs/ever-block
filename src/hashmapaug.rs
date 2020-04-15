@@ -113,12 +113,6 @@ macro_rules! define_HashmapAugE {
                 let value = value.write_to_new_cell()?.into();
                 self.0.set(key, &value, aug).map(|_|())
             }
-            /// sets serialized item to hashmapaug
-            pub fn set_serialized<K: Serializable>(&mut self, key: &K, value: &SliceData, aug: &$y_type)
-            -> Result<()> {
-                let key = key.write_to_new_cell()?.into();
-                self.0.set(key, &value, aug).map(|_|())
-            }
             /// returns item from hasmapaug
             pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {
                 let key = key.write_to_new_cell()?.into();
@@ -192,11 +186,6 @@ macro_rules! define_HashmapAugE {
                         },
                         _ => Ok(None)
                     }
-            }
-            /// scans differences in two hashmaps
-            pub fn scan_diff<K, F>(&self, _other: &Self, _op: F) -> Result<bool>
-            where K: Deserializable, F: FnMut(K, Option<($x_type, $y_type)>, Option<($x_type, $y_type)>) -> Result<bool> {
-                unimplemented!()
             }
         }
 

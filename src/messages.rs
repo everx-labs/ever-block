@@ -509,12 +509,6 @@ impl MsgAddressIntOrNone {
                 }
         }
     }
-    pub fn get_rewrite_pfx(&self) -> Option<AnycastInfo> {
-        match self {
-            MsgAddressIntOrNone::None       => None,
-            MsgAddressIntOrNone::Some(addr) => addr.get_rewrite_pfx()
-        }
-    }
 }
 
 impl Default for MsgAddressIntOrNone {
@@ -1032,12 +1026,6 @@ impl Message {
         &self.header
     }
 
-    pub fn set_header(&mut self, header: CommonMsgInfo) {
-        self.body_to_ref = None;
-        self.init_to_ref = None;
-        self.header = header;
-    }
-
     pub fn header_mut(&mut self) -> &mut CommonMsgInfo {
         self.body_to_ref = None;
         self.init_to_ref = None;
@@ -1052,12 +1040,6 @@ impl Message {
         &self.init
     }
 
-    pub fn set_state_init(&mut self, init: StateInit) {
-        self.body_to_ref = None;
-        self.init_to_ref = None;
-        self.init = Some(init);
-    }
-
     pub fn state_init_mut(&mut self) -> &mut Option<StateInit> {
         self.body_to_ref = None;
         self.init_to_ref = None;
@@ -1066,12 +1048,6 @@ impl Message {
 
     pub fn body(&self) -> Option<SliceData> {
         self.body.clone()
-    }
-
-    pub fn set_body(&mut self, body: SliceData) {
-        self.body_to_ref = None;
-        self.init_to_ref = None;
-        self.body = Some(body);
     }
 
     pub fn body_mut(&mut self) -> &mut Option<SliceData> {
@@ -1111,21 +1087,6 @@ impl Message {
                 None
             }
         }) 
-    }
-
-    ///
-    /// Get source internal address.
-    ///
-    pub fn src(&self) -> Option<MsgAddressInt> {
-        let addr1 = match self.header() {
-            CommonMsgInfo::IntMsgInfo(ref imi)      => &imi.src,
-            CommonMsgInfo::ExtOutMsgInfo(ref eimi)  => &eimi.src,
-            CommonMsgInfo::ExtInMsgInfo(_)          => &MsgAddressIntOrNone::None
-        };
-        match addr1 {
-            MsgAddressIntOrNone::None => None,
-            MsgAddressIntOrNone::Some(ref addr) => Some(addr.clone())
-        }
     }
 
     ///
@@ -1469,17 +1430,17 @@ impl InternalMessageHeader {
     }
 }
 
-////////////////////////////////////////////////////////////////
-/// 
-/// 3.1.7. Message layout.
-/// tick_tock$_ tick:Boolean tock:Boolean = TickTock;
-/// 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TickTock {
     pub tick: bool,
     pub tock: bool,
 }
 
+////////////////////////////////////////////////////////////////
+/// 
+/// 3.1.7. Message layout.
+/// tick_tock$_ tick:Boolean tock:Boolean = TickTock;
+/// 
 impl TickTock{
     pub fn with_values(tick: bool, tock: bool) -> Self {
         TickTock{ tick, tock }
@@ -1491,16 +1452,6 @@ impl TickTock{
 
     pub fn set_tock(&mut self, tock:bool) {
         self.tock = tock;
-    }
-    pub fn as_usize(&self) -> usize {
-        let mut result = 0;
-        if self.tick {
-            result += 2;
-        }
-        if self.tock {
-            result += 1;
-        }
-        result
     }
 }
 

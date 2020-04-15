@@ -31,7 +31,8 @@ use ton_types::types::ByteOrderRead;
 use crc::{crc32, Hasher32};
 use ton_types::{
     error, fail, Result,
-    UInt256, BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData,
+    UInt256,
+    BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData,
 };
 
 /*
@@ -45,9 +46,9 @@ validator_info$_
 /// Validator info struct
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ValidatorInfo {
-    pub validator_list_hash_short: u32,
-    pub catchain_seqno: u32,
-    pub nx_cc_updated: bool
+    validator_list_hash_short: u32,
+    catchain_seqno: u32,
+    nx_cc_updated: bool
 }
 
 impl ValidatorInfo {
