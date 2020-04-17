@@ -205,6 +205,38 @@ impl InMsg {
         )
     }
 
+    ///
+    /// Get in envelope message cell
+    ///
+    pub fn in_msg_envelope_cell(&self) -> Option<&Cell> {
+        match self {
+            InMsg::External(_) => None,
+            InMsg::IHR(_) => None,
+            InMsg::Immediatelly(_) => None,
+            InMsg::Final(ref x) => Some(x.message_cell()),
+            InMsg::Transit(ref x) => Some(x.in_message_cell()),
+            InMsg::DiscardedFinal(ref x) => Some(x.message_cell()),
+            InMsg::DiscardedTransit(ref x) => Some(x.message_cell()),
+            InMsg::None => unreachable!(),
+        }
+    }
+
+    ///
+    /// Get in envelope message cell
+    ///
+    pub fn out_msg_envelope_cell(&self) -> Option<&Cell> {
+        match self {
+            InMsg::External(_) => None,
+            InMsg::IHR(_) => None,
+            InMsg::Immediatelly(_) => None,
+            InMsg::Final(_) => None,
+            InMsg::Transit(ref x) => Some(x.out_message_cell()),
+            InMsg::DiscardedFinal(_) => None,
+            InMsg::DiscardedTransit(_) => None,
+            InMsg::None => unreachable!(),
+        }
+    }
+
     pub fn get_fee(&self) -> Result<Option<ImportFees>> {
         let mut fees = ImportFees::default();
         match self {

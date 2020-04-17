@@ -106,11 +106,11 @@ impl Deserializable for IntermediateAddress{
 /// 
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct IntermediateAddressRegular{
+pub struct IntermediateAddressRegular {
     pub use_src_bits: u8,
 }
 
-impl Default for IntermediateAddressRegular{
+impl Default for IntermediateAddressRegular {
     fn default() -> Self {
         IntermediateAddressRegular {
             use_src_bits: 0
@@ -172,68 +172,45 @@ impl Deserializable for IntermediateAddressRegular{
 /// 
 
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct IntermediateAddressSimple{
     pub workchain_id: i8,
-    pub addr_pfx: SliceData,        // 64 bit
-}
-
-impl Default for IntermediateAddressSimple{
-    fn default() -> Self {
-        IntermediateAddressSimple {
-            workchain_id: 0,
-            addr_pfx: SliceData::new_empty(),
-        }
-    }
+    pub addr_pfx: u64,
 }
 
 impl IntermediateAddressSimple {
-    pub fn new() -> Self{
-        IntermediateAddressSimple {
-            workchain_id: 0,
-            addr_pfx: SliceData::new_empty(),
-        }
+    pub fn new() -> Self {
+        Default::default()
     }
 
-    pub fn with_addr(workchain_id: i8, addr_pfx: SliceData) -> Result<Self> {
-        if addr_pfx.remaining_bits() != 64 { 
-            fail!(
-                BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
-            )
+    pub fn with_addr(workchain_id: i8, addr_pfx: u64) -> Self {
+        Self {
+            workchain_id,
+            addr_pfx,
         }
-        Ok(IntermediateAddressSimple {
-            workchain_id: workchain_id,
-            addr_pfx: addr_pfx,
-        })
     }
 
     pub fn workchain_id(&self) -> i8 {
         self.workchain_id
     }
 
-    pub fn addr_pfx(&self) -> &SliceData {
-        &self.addr_pfx
+    pub fn addr_pfx(&self) -> u64 {
+        self.addr_pfx
     }
 
-    pub fn workchain_id_mut(&mut self) -> &mut i8 {
-        &mut self.workchain_id
+    pub fn set_workchain_id(&mut self, workchain_id: i8) {
+        self.workchain_id = workchain_id;
     }
 
-    pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> Result<()>{
-        if addr_pfx.remaining_bits() != 64 { 
-            fail!(
-                BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
-            )
-        }
+    pub fn set_addr_pfx(&mut self, addr_pfx: u64){
         self.addr_pfx = addr_pfx;
-        Ok(())
     }
 }
 
 impl Serializable for IntermediateAddressSimple{
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.workchain_id.write_to(cell)?;
-        cell.checked_append_references_and_data(&self.addr_pfx).unwrap();
+        self.addr_pfx.write_to(cell)?;
         Ok(())
     } 
 }
@@ -241,7 +218,7 @@ impl Serializable for IntermediateAddressSimple{
 impl Deserializable for IntermediateAddressSimple{
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         self.workchain_id.read_from(cell)?;
-        self.addr_pfx = cell.get_next_slice(64)?;
+        self.addr_pfx.read_from(cell)?;
         Ok(())
     } 
 }
@@ -252,76 +229,53 @@ impl Deserializable for IntermediateAddressSimple{
 /// 
 
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct IntermediateAddressExt{
     pub workchain_id: i32,
-    pub addr_pfx: SliceData, //64 bit
-}
-
-impl Default for IntermediateAddressExt{
-    fn default() -> Self {
-        IntermediateAddressExt {
-            workchain_id: 0,
-            addr_pfx: SliceData::new_empty(),
-        }
-    }
+    pub addr_pfx: u64,
 }
 
 impl IntermediateAddressExt {
-    pub fn new() -> Self{
-        IntermediateAddressExt {
-            workchain_id: 0,
-            addr_pfx: SliceData::new_empty(),
-        }
+    pub fn new() -> Self {
+        Default::default()
     }
 
-    pub fn with_addr(workchain_id: i32, addr_pfx: SliceData) -> Result<Self> {
-        if addr_pfx.remaining_bits() != 64 { 
-            fail!(
-                BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
-            )
+    pub fn with_addr(workchain_id: i32, addr_pfx: u64) -> Self {
+        Self {
+            workchain_id,
+            addr_pfx,
         }
-        Ok(IntermediateAddressExt {
-            workchain_id: workchain_id,
-            addr_pfx: addr_pfx,
-        })
     }
 
     pub fn workchain_id(&self) -> i32 {
         self.workchain_id
     }
 
-    pub fn addr_pfx(&self) -> &SliceData {
-        &self.addr_pfx
+    pub fn addr_pfx(&self) -> u64 {
+        self.addr_pfx
     }
 
-    pub fn workchain_id_mut(&mut self) -> &mut i32 {
-        &mut self.workchain_id
+    pub fn set_workchain_id(&mut self, workchain_id: i32) {
+        self.workchain_id = workchain_id;
     }
 
-    pub fn set_addr_pfx(&mut self, addr_pfx: SliceData) -> Result<()>{
-        if addr_pfx.remaining_bits() != 64 { 
-            fail!(
-                BlockError::InvalidArg("addr_pfx's length in bits must be 64".to_string())
-            )
-        }
+    pub fn set_addr_pfx(&mut self, addr_pfx: u64) {
         self.addr_pfx = addr_pfx;
-        Ok(())
     }
 }
 
-impl Serializable for IntermediateAddressExt{
+impl Serializable for IntermediateAddressExt {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.workchain_id.write_to(cell)?;
-        cell.checked_append_references_and_data(&self.addr_pfx).unwrap();
+        self.addr_pfx.write_to(cell)?;
         Ok(())
     } 
 }
 
-impl Deserializable for IntermediateAddressExt{
+impl Deserializable for IntermediateAddressExt {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         self.workchain_id.read_from(cell)?;
-        self.addr_pfx = cell.get_next_slice(64)?;
+        self.addr_pfx.read_from(cell)?;
         Ok(())
     } 
 }

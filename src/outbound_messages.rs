@@ -61,24 +61,33 @@ _ enqueued_lt:uint64 out_msg:^MsgEnvelope = EnqueuedMsg;
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct EnqueuedMsg {
     pub enqueued_lt: u64,
-    pub out_msg: Arc<MsgEnvelope>
+    pub out_msg: ChildCell<MsgEnvelope>
 }
 
 impl EnqueuedMsg {
     /// New default instance EnqueuedMsg structure
     pub fn new() -> Self {
-        EnqueuedMsg {
-            enqueued_lt: 0,
-            out_msg: Arc::new(MsgEnvelope::default())
-        }
+        Default::default()
     }
 
     /// New instance EnqueuedMsg structure
-    pub fn with_param(enqueued_lt: u64, out_msg: Arc<MsgEnvelope>) -> Self {
-        EnqueuedMsg {
+    pub fn with_param(enqueued_lt: u64, out_msg: &MsgEnvelope) -> Result<Self> {
+        Ok(EnqueuedMsg {
             enqueued_lt,
-            out_msg,
-        }
+            out_msg: ChildCell::with_struct(out_msg)?,
+        })
+    }
+
+    pub fn enqueued_lt(&self) -> u64 {
+        self.enqueued_lt
+    }
+
+    pub fn out_msg_cell(&self) -> &Cell {
+        self.out_msg.cell()
+    }
+
+    pub fn read_out_msg(&self) -> Result<MsgEnvelope> {
+        self.out_msg.read_struct()
     }
 }
 
@@ -93,9 +102,7 @@ impl Serializable for EnqueuedMsg {
 impl Deserializable for EnqueuedMsg {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.enqueued_lt.read_from(cell)?;
-        let mut msg_e = MsgEnvelope::default();
-        msg_e.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.out_msg = Arc::new(msg_e);
+        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
     }
 }
@@ -159,8 +166,9 @@ impl Augmentable for MsgTime {
 impl OutMsgQueue {
     /// insert OutMessage to OutMsgQueue
     pub fn insert(&mut self, address: u64, env: Arc<MsgEnvelope>, msg_lt: u64) -> Result<()> {
-        let key = OutMsgQueueKey::with_workchain_id_and_message(0, address, env.message_cell().repr_hash()).unwrap();
-        let enq = EnqueuedMsg::with_param(msg_lt, env);
+        let hash = env.message_cell().repr_hash();
+        let key = OutMsgQueueKey::with_workchain_id_and_message(0, address, hash)?;
+        let enq = EnqueuedMsg::with_param(msg_lt, &env)?;
         self.set(&key, &enq, &msg_lt)
     }
 }
@@ -189,6 +197,13 @@ impl OutMsgQueueKey {
 
     pub fn first_u64(acc: &AccountId) -> u64 { // TODO: remove to AccountId
         acc.clone().get_next_u64().unwrap()
+    }
+
+    pub fn to_hex_string(&self) -> String {
+        match self.write_to_new_cell() {
+            Ok(builder) => hex::encode(builder.data()),
+            Err(err) => err.to_string() // impossible way
+        }
     }
 }
 
@@ -403,6 +418,23 @@ impl OutMsg {
         )
     }
 
+    ///
+    /// the function returns the message cell (if exists)
+    ///
+    pub fn envelope_message_cell(&self) -> Option<Cell> {
+        match self {
+            OutMsg::External(_) => None,
+            OutMsg::Immediately(ref x) => Some(x.out_message_cell().clone()),
+            OutMsg::New(ref x) => Some(x.out_message_cell().clone()),
+            OutMsg::Transit(ref x) => Some(x.out_message_cell().clone()),
+            OutMsg::Dequeue(ref x) => Some(x.out_message_cell().clone()),
+            OutMsg::DequeueShort(_) => None,
+            OutMsg::DequeueImmediately(ref x) => Some(x.out_message_cell().clone()),
+            OutMsg::TransitRequired(ref x) => Some(x.out_message_cell().clone()),
+            OutMsg::None => unreachable!(),
+        }
+    }
+
     pub fn transaction_cell(&self) -> Option<&Cell> {
         match self {
             OutMsg::External(ref x) => Some(x.transaction_cell()),
@@ -414,6 +446,20 @@ impl OutMsg {
             OutMsg::DequeueImmediately(ref _x) => None,
             OutMsg::TransitRequired(ref _x) => None,
             OutMsg::None => None,
+        }
+    }
+
+    pub fn read_transaction(&self) -> Result<Option<Transaction>> {
+        self.transaction_cell().map(|cell| Transaction::construct_from(&mut cell.into())).transpose()
+    }
+
+    pub fn read_reimport_message(&self) -> Result<Option<InMsg>> {
+        match self {
+            OutMsg::Immediately(ref x) => Some(x.read_reimport_message()).transpose(),
+            OutMsg::Transit(ref x) => Some(x.read_imported()).transpose(),
+            OutMsg::DequeueImmediately(ref x) => Some(x.read_reimport_message()).transpose(),
+            OutMsg::TransitRequired(ref x) => Some(x.read_imported()).transpose(),
+            _ => Ok(None),
         }
     }
 
@@ -673,7 +719,7 @@ impl OutMsgNew {
         self.out_msg.read_struct()
     }
 
-    pub fn message_cell(&self) -> &Cell {
+    pub fn out_message_cell(&self) -> &Cell {
         self.out_msg.cell()
     }
 

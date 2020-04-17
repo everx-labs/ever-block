@@ -83,6 +83,24 @@ impl ConfigParams {
         self.config_params.set(key.into(), &value.into())?;
         Ok(())
     }
+    pub fn get_global_version(&self) -> Result<GlobalVersion> {
+        match self.config(8)? {
+            Some(ConfigParamEnum::ConfigParam8(gb)) => Ok(gb.global_version),
+            _ => fail!("no GlobalVersion in config_params")
+        }
+    }
+    pub fn block_limits(&self, masterchain: bool) -> Result<BlockLimits> {
+        if masterchain {
+            if let Some(ConfigParamEnum::ConfigParam22(param)) = self.config(22)? {
+                return Ok(param)
+            }
+        } else {
+            if let Some(ConfigParamEnum::ConfigParam23(param)) = self.config(23)? {
+                return Ok(param)
+            }
+        }
+        fail!("BlockLimits not found")
+    }
     pub fn catchain_config(&self) -> Result<CatchainConfig> {
         match self.config(28)? {
             Some(ConfigParamEnum::ConfigParam28(ccc)) => Ok(ccc),
@@ -171,6 +189,12 @@ impl ConfigParams {
         match self.config(18)? {
             Some(ConfigParamEnum::ConfigParam18(param)) => Ok(param),
             _ => fail!("Storage prices not found")
+        }
+    }
+    pub fn workchains(&self) -> Result<Workchains> {
+        match self.config(12)? {
+            Some(ConfigParamEnum::ConfigParam12(param)) => Ok(param.workchains),
+            _ => fail!("Workchains not found in config")
         }
     }
 }
@@ -1974,7 +1998,18 @@ impl WorkchainDescr {
                 )
             )
         }
-    } 
+    }
+
+    pub fn active(&self) -> bool {
+        self.active
+    }
+
+    pub fn basic(&self) -> bool {
+        match self.format {
+            WorkchainFormat::Basic(_) => true,
+            _ => false
+        }
+    }
 
 }
 
@@ -2018,7 +2053,7 @@ impl Deserializable for WorkchainDescr {
 
 impl Serializable for WorkchainDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        if self.min_split <= self.max_split && self.max_split <= 60 {
+        if self.min_split <= self.max_split && self.max_split <= crate::shard::MAX_SPLIT_DEPTH {
 
             cell.append_u8(WORKCHAIN_DESCRIPTOR_TAG)?;
 
@@ -2615,7 +2650,6 @@ pub struct BlockLimits {
 }
 
 impl BlockLimits {
-    /// new instance of ConfigParam39
     pub fn new() -> Self {
         Self::default()
     }
