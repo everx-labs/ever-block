@@ -17,7 +17,6 @@ use crate::{
     accounts::ShardAccount,
     error::BlockError,
     master::{BlkMasterInfo, LibDescr, McStateExtra},
-    messages::MsgAddressInt,
     outbound_messages::OutMsgQueueInfo,
     shard_accounts::{DepthBalanceInfo, ShardAccounts},
     types::{ChildCell, CurrencyCollection},
@@ -29,7 +28,6 @@ use ton_types::{
     types::AccountId,
     BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData
 };
-use failure::err_msg;
 
 
 pub const MAX_SPLIT_DEPTH: u8 = 60;
@@ -37,99 +35,6 @@ pub const MASTERCHAIN_ID: i32 = -1;
 pub const BASE_WORKCHAIN_ID: i32 = 0;
 pub const INVALID_WORKCHAIN_ID: i32 = 0x8000_0000u32 as i32;
 pub const SHARD_FULL: u64 = 0x8000_0000_0000_0000u64;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AccountIdPrefixFull {
-    pub workchain_id: i32,
-    pub prefix: u64,
-}
-
-impl Default for AccountIdPrefixFull {
-    fn default() -> Self {
-        Self {
-            workchain_id: INVALID_WORKCHAIN_ID,
-            prefix: 0,
-        }
-    }
-}
-
-impl AccountIdPrefixFull {
-    /// Tests address for validity (workchain_id != 0x80000000)
-    pub fn is_valid(&self) -> bool {
-        self.workchain_id != INVALID_WORKCHAIN_ID
-    }
-
-    /// Constructs AccountIdPrefixFull prefix for specified address.
-    /// Returns Err in a case of insufficient bits (less than 64) in the address slice.
-    pub fn prefix(address: &MsgAddressInt) -> Result<Self> {
-        Ok(Self {
-            workchain_id: address.get_workchain_id(),
-            prefix: address.get_address().get_next_u64()?
-        })
-    }
-
-    /// Constructs AccountIdPrefixFull prefix for specified address with checking for validity (workchain_id != 0x80000000).
-    /// Returns Err in a case of insufficient bits (less than 64) in the address slice or invalid address.
-    pub fn checked_prefix(address: &MsgAddressInt) -> Result<Self> {
-        Self::prefix(address)
-            .and_then(|result| {
-                if result.is_valid() {
-                    return Ok(result)
-                }
-                Err(err_msg("Address is invalid"))
-            })
-    }
-
-    /// Constructs AccountIdPrefixFull prefix for specified address and stores it in the "to" argument.
-    /// Returns true if there are sufficient bits in the address (64 or more) and address is valid
-    /// (workchain_id != 0x80000000); false otherwise.
-    pub fn prefix_to(address: &MsgAddressInt, to: &mut AccountIdPrefixFull) -> bool {
-        if let Ok(result) = Self::prefix(address) {
-            *to = result;
-            return to.is_valid()
-        }
-        false
-    }
-
-    /// Combines count bits from dest, remaining 64 - count bits from self
-    pub fn interpolate_addr(&self, dest: &Self, count: isize) -> Self {
-        if count <= 0 {
-            self.clone()
-        } else if count >= 96 {
-            dest.clone()
-        } else if count >= 32 {
-            let mask = u64::max_value() >> (count - 32);
-            Self {
-                workchain_id: dest.workchain_id,
-                prefix: (dest.prefix & !mask) | (self.prefix & mask)
-            }
-        } else {
-            let mask = -1 >> count;
-            Self {
-                workchain_id: (dest.workchain_id & !mask) | (self.workchain_id & mask),
-                prefix: self.prefix
-            }
-        }
-    }
-
-    /// Returns count of the first bits matched in both addresses
-    pub fn count_matching_bits(&self, other: &Self) -> u8 {
-        if self.workchain_id != other.workchain_id {
-            return (self.workchain_id ^ other.workchain_id).leading_zeros() as u8
-        }
-        32 + if self.prefix == other.prefix {
-            64
-        } else {
-            (self.prefix ^ other.prefix).leading_zeros() as u8
-        }
-    }
-}
-
-impl fmt::Display for AccountIdPrefixFull {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.workchain_id, self.prefix)
-    }
-}
 
 /*
 shard_ident$00 
@@ -334,21 +239,6 @@ impl ShardIdent {
         )
     }
 
-    pub fn contains_full_prefix(&self, prefix: &AccountIdPrefixFull) -> bool {
-        self.contains_prefix(prefix.workchain_id, prefix.prefix)
-    }
-
-    pub fn contains_prefix(&self, workchain_id: i32, prefix_without_tag: u64) -> bool {
-        if self.workchain_id == workchain_id {
-            if self.prefix == SHARD_FULL {
-                return true
-            }
-            let shift = 64 - self.prefix_len();
-            return self.prefix >> shift == prefix_without_tag >> shift
-        }
-        false
-    }
-
     pub fn shard_prefix_as_str_with_tag(&self) -> String {
         format!(
             "{:016x}",
@@ -362,14 +252,6 @@ impl ShardIdent {
 
     pub fn shard_prefix_without_tag(self) -> u64 {
         self.prefix - self.prefix_lower_bits()
-    }
-
-    pub fn ancestor(&self) -> ShardIdent {
-        let prefix = self.prefix ^ ((self.prefix & (!self.prefix + 1)) << 1);
-        Self {
-            workchain_id: self.workchain_id,
-            prefix,
-        }
     }
 
     pub fn merge(&self) -> Result<ShardIdent> {

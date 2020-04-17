@@ -19,7 +19,7 @@ use crate::{
     error::BlockError,
     hashmapaug::HashmapAugE,
     merkle_proof::MerkleProof,
-    messages::{generate_big_msg, CommonMsgInfo, Message},
+    messages::{generate_big_msg, Message},
     shard::ShardStateUnsplit,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
     MaybeSerialize, MaybeDeserialize, Serializable, Deserializable,
@@ -1189,12 +1189,6 @@ impl Deserializable for HashUpdate {
 #[derive(Clone, Default)]
 struct U15(i16);
 
-impl U15 {
-    pub fn from_lt(lt: u64) -> Self {
-        Self(lt as i16)
-    }
-}
-
 impl Serializable for U15 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(self.0 as usize, 15)?;
@@ -1462,19 +1456,6 @@ impl Transaction {
         MerkleProof::create_by_usage_tree(block_root, &usage_tree)
             .and_then(|proof| proof.write_to_new_cell())
             .map(|cell| cell.into())
-    }
-
-    pub fn contains_out_msg(&self, msg: &Message, hash: &UInt256) -> bool {
-        if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
-            if (header.created_lt > self.lt) && (header.created_lt <= self.lt + self.outmsg_cnt as u64) {
-                if let Ok(Some(msg_slice)) = self.out_msgs.get_as_slice(&U15::from_lt(header.created_lt - self.lt - 1)) {
-                    if let Ok(cell) = msg_slice.reference(0) {
-                        return &cell.repr_hash() == hash
-                    }
-                }
-            }
-        }
-        false
     }
 }
 

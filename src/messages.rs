@@ -423,9 +423,6 @@ impl MsgAddressInt {
             MsgAddressInt::AddrVar(addr_var) => addr_var.anycast.clone()
         }
     }
-    pub fn extract_std_address(&self) -> Option<(i32, AccountId)> {
-        unimplemented!("bool MsgAddressInt::extract_std_address(vm::CellSlice& cs, ton::WorkchainId& workchain, ton::StdSmcAddress& addr,")
-    }
 }
 
 impl Serializable for MsgAddressInt {
