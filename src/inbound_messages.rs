@@ -107,18 +107,25 @@ const MSG_DISCARD_TR: u8 = 0b00000111;
 pub enum InMsg {
     None,
     /// Inbound external messages
+    /// msg_import_ext$000 msg:^(Message Any) transaction:^Transaction = InMsg;
     External(InMsgExternal),        
     /// Internal IHR messages with destination addresses in this block
+    /// msg_import_ihr$010 msg:^(Message Any) transaction:^Transaction ihr_fee:Grams proof_created:^Cell = InMsg;
     IHR(InMsgIHR),                  
     /// Internal messages with destinations in this block
+    /// msg_import_imm$011 in_msg:^MsgEnvelope transaction:^Transaction fwd_fee:Grams = InMsg;
     Immediatelly(InMsgFinal),       
     /// Immediately routed internal messages
+    /// msg_import_fin$100 in_msg:^MsgEnvelope transaction:^Transaction fwd_fee:Grams = InMsg;
     Final(InMsgFinal),              
     /// Transit internal messages
+    /// msg_import_tr$101  in_msg:^MsgEnvelope out_msg:^MsgEnvelope transit_fee:Grams = InMsg;
     Transit(InMsgTransit),          
     /// Discarded internal messages with destinations in this block
+    /// msg_discard_fin$110 in_msg:^MsgEnvelope transaction_id:uint64 fwd_fee:Grams = InMsg;
     DiscardedFinal(InMsgDiscardedFinal), 
     /// Discarded transit internal messages
+    /// msg_discard_tr$111 in_msg:^MsgEnvelope transaction_id:uint64 fwd_fee:Grams proof_delivered:^Cell = InMsg;
     DiscardedTransit(InMsgDiscardedTransit), 
 }
 
@@ -130,6 +137,11 @@ impl Default for InMsg {
 
 
 impl InMsg {
+
+    /// Check if is valid message
+    pub fn is_valid(&self) -> bool {
+        self != &InMsg::None
+    }
 
     ///
     /// Get transaction from inbound message

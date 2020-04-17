@@ -292,7 +292,7 @@ impl ShardIdent {
         )
     }
 
-    pub fn contains_prefix_full(&self, prefix: &AccountPrefixFull) -> bool {
+    pub fn contains_full_prefix(&self, prefix: &AccountPrefixFull) -> bool {
         self.contains_prefix(prefix.workchain_id, prefix.prefix)
     }
 

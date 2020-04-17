@@ -18,6 +18,7 @@ use crate::{
     types::{AddSub, ChildCell, Grams},
     Serializable, Deserializable,
 };
+use std::cmp::Ordering;
 use ton_types::{
     error, fail, Result,
     BuilderData, Cell, IBitstring, SliceData,
@@ -54,6 +55,24 @@ impl Default for IntermediateAddress{
             IntermediateAddressRegular{
                 use_src_bits:0
         })
+    }
+}
+
+impl PartialOrd<u8> for IntermediateAddress {
+    fn partial_cmp(&self, other: &u8) -> Option<Ordering> {
+        match self {
+            IntermediateAddress::Regular(ia) => Some(ia.use_src_bits.cmp(other)),
+            _ => None
+        }
+    }
+}
+
+impl PartialEq<u8> for IntermediateAddress {
+    fn eq(&self, other: &u8) -> bool {
+        match self {
+            IntermediateAddress::Regular(ia) => &ia.use_src_bits == other,
+            _ => false
+        }
     }
 }
 
