@@ -15,6 +15,7 @@
 use crate::{
     define_HashmapE,
     accounts::ShardAccount,
+    envelope_message::IntermediateAddress,
     error::BlockError,
     master::{BlkMasterInfo, LibDescr, McStateExtra},
     messages::MsgAddressInt,
@@ -29,7 +30,6 @@ use ton_types::{
     types::AccountId,
     BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData
 };
-use failure::err_msg;
 
 
 pub const MAX_SPLIT_DEPTH: u8 = 60;
@@ -53,75 +53,33 @@ impl Default for AccountIdPrefixFull {
     }
 }
 
+/// https://www.notion.so/tonlabs/Implement-AccountIdPrefixFull-14fa126991074ec3a06a3ab8d36e8223
 impl AccountIdPrefixFull {
-    /// Tests address for validity (workchain_id != 0x80000000)
     pub fn is_valid(&self) -> bool {
         self.workchain_id != INVALID_WORKCHAIN_ID
     }
-
-    /// Constructs AccountIdPrefixFull prefix for specified address.
-    /// Returns Err in a case of insufficient bits (less than 64) in the address slice.
-    pub fn prefix(address: &MsgAddressInt) -> Result<Self> {
-        Ok(Self {
-            workchain_id: address.get_workchain_id(),
-            prefix: address.get_address().get_next_u64()?
-        })
+    pub fn prefix(_address: &MsgAddressInt) -> Result<Self> {
+        unimplemented!("ton::AccountIdPrefixFull MsgAddressInt::get_prefix(vm::CellSlice&& cs)")
     }
-
-    /// Constructs AccountIdPrefixFull prefix for specified address with checking for validity (workchain_id != 0x80000000).
-    /// Returns Err in a case of insufficient bits (less than 64) in the address slice or invalid address.
-    pub fn checked_prefix(address: &MsgAddressInt) -> Result<Self> {
-        Self::prefix(address)
-            .and_then(|result| {
-                if result.is_valid() {
-                    return Ok(result)
-                }
-                Err(err_msg("Address is invalid"))
-            })
+    pub fn cheked_prefix(_address: &MsgAddressInt) -> Result<Self> {
+        unimplemented!("ton::AccountIdPrefixFull MsgAddressInt::get_prefix(vm::CellSlice&& cs)")
     }
-
-    /// Constructs AccountIdPrefixFull prefix for specified address and stores it in the "to" argument.
-    /// Returns true if there are sufficient bits in the address (64 or more) and address is valid
-    /// (workchain_id != 0x80000000); false otherwise.
-    pub fn prefix_to(address: &MsgAddressInt, to: &mut AccountIdPrefixFull) -> bool {
-        if let Ok(result) = Self::prefix(address) {
-            *to = result;
-            return to.is_valid()
-        }
-        false
+    pub fn interpolate_addr(&self, _to: &Self, _ia: &IntermediateAddress) -> Self {
+        unimplemented!()
+        // if (d <= 0) {
+        //     return src;
+        // } else if (d >= 96) {
+        //     return dest;
+        // } else if (d >= 32) {
+        //     unsigned long long mask = (std::numeric_limits<td::uint64>::max() >> (d - 32));
+        //     return ton::AccountIdPrefixFull{dest.workchain, (dest.account_id_prefix & ~mask) | (src.account_id_prefix & mask)};
+        // } else {
+        //     int mask = (-1 >> d);
+        //     return ton::AccountIdPrefixFull{(dest.workchain & ~mask) | (src.workchain & mask), src.account_id_prefix};
+        // }
     }
-
-    /// Combines count bits from dest, remaining 64 - count bits from self
-    pub fn interpolate_addr(&self, dest: &Self, count: isize) -> Self {
-        if count <= 0 {
-            self.clone()
-        } else if count >= 96 {
-            dest.clone()
-        } else if count >= 32 {
-            let mask = u64::max_value() >> (count - 32);
-            Self {
-                workchain_id: dest.workchain_id,
-                prefix: (dest.prefix & !mask) | (self.prefix & mask)
-            }
-        } else {
-            let mask = -1 >> count;
-            Self {
-                workchain_id: (dest.workchain_id & !mask) | (self.workchain_id & mask),
-                prefix: self.prefix
-            }
-        }
-    }
-
-    /// Returns count of the first bits matched in both addresses
-    pub fn count_matching_bits(&self, other: &Self) -> u8 {
-        if self.workchain_id != other.workchain_id {
-            return (self.workchain_id ^ other.workchain_id).leading_zeros() as u8
-        }
-        32 + if self.prefix == other.prefix {
-            64
-        } else {
-            (self.prefix ^ other.prefix).leading_zeros() as u8
-        }
+    pub fn count_matching_bits(&self, _other: &Self) -> u8 {
+        unimplemented!()
     }
 }
 
@@ -364,7 +322,7 @@ impl ShardIdent {
         self.prefix - self.prefix_lower_bits()
     }
 
-    pub fn ancestor(&self) -> ShardIdent {
+    pub fn sibling(&self) -> ShardIdent {
         let prefix = self.prefix ^ ((self.prefix & (!self.prefix + 1)) << 1);
         Self {
             workchain_id: self.workchain_id,

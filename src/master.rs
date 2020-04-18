@@ -62,9 +62,9 @@ impl ShardHashes {
         })
     }
     pub fn has_workchain(&self, workchain_id: i32) -> Result<bool> {
-        self.get(&workchain_id).map(|result| result.is_some())
+        self.get_as_slice(&workchain_id).map(|result| result.is_some())
     }
-    pub fn find_shard(&self, shard: &ShardIdent) -> Result<Option<McShardHash>> {
+    pub fn find_shard(&self, shard: &ShardIdent) -> Result<Option<McShardRecord>> {
         let shard_id = SliceData::from(shard.shard_prefix_without_tag().write_to_new_cell()?);
         if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
             if let Some((key, descr)) = bintree.find(shard_id)? {
@@ -73,27 +73,27 @@ impl ShardHashes {
                 prefix.copy_from_slice(key.data());
                 let prefix = u64::from_le_bytes(prefix);
                 let shard = ShardIdent::with_prefix_len(prefix_len as u8, shard.workchain_id(), prefix)?;
-                return Ok(Some(McShardHash::new(shard, descr)))
+                return Ok(Some(McShardRecord::new(shard, descr)))
             }
         }
         Ok(None)
     }
-    pub fn get_shard(&self, shard: &ShardIdent) -> Result<Option<McShardHash>> {
+    pub fn get_shard(&self, shard: &ShardIdent) -> Result<Option<McShardRecord>> {
         let shard_id = SliceData::from(shard.shard_prefix_without_tag().write_to_new_cell()?);
         if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
             if let Some(descr) = bintree.get(shard_id)? {
-                return Ok(Some(McShardHash::new(shard.clone(), descr)))
+                return Ok(Some(McShardRecord::new(shard.clone(), descr)))
             }
         }
         Ok(None)
     }
-    pub fn get_neighbours(&self, shard: &ShardIdent) -> Result<Vec<McShardHash>> {
+    pub fn get_neighbours(&self, shard: &ShardIdent) -> Result<Vec<McShardRecord>> {
         let mut vec = Vec::new();
         if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
             bintree.iterate(&mut |prefix, shard_descr| {
                 let shard_ident = ShardIdent::with_prefix_slice(shard.workchain_id(), prefix)?;
                 if shard.is_neighbor_for(&shard_ident) {
-                    vec.push(McShardHash::new(shard_ident, shard_descr));
+                    vec.push(McShardRecord::new(shard_ident, shard_descr));
                 }
                 Ok(true)
             })?;
@@ -103,13 +103,13 @@ impl ShardHashes {
 }
 
 #[derive(Default, Debug)]
-pub struct McShardHash {
+pub struct McShardRecord {
     pub shard: ShardIdent,
     pub descr: ShardDescr,
     pub blk_id: BlockIdExt,
 }
 
-impl McShardHash {
+impl McShardRecord {
     pub fn new(shard: ShardIdent, descr: ShardDescr) -> Self {
         let blk_id = BlockIdExt::with_params(shard, descr.seq_no, descr.root_hash.clone(), descr.file_hash.clone());
         Self { shard, descr, blk_id }

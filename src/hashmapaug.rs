@@ -136,7 +136,12 @@ macro_rules! define_HashmapAugE {
             /// returns item from hasmapaug as slice
             pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
                 let key = key.write_to_new_cell()?.into();
-                self.0.get(key).map_err(|e| e.into())
+                self.0.get(key)
+            }
+            /// returns item from hasmapaug as cell
+            pub fn get_as_cell<K: Serializable>(&self, key: &K) -> Result<Option<Cell>> {
+                let key = key.write_to_new_cell()?.into();
+                self.0.get(key)?.map(|slice| slice.reference(0)).transpose()
             }
             /// removes item from hashmapaug
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {

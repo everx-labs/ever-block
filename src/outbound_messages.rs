@@ -126,7 +126,7 @@ impl OutMsgDescr {
                 OutMsg::DequeueShort(_) => None,
                 OutMsg::DequeueImmediately(_) => msg.get_value(),
                 OutMsg::TransitRequired(ref _x) => None,
-                OutMsg::None => unreachable!(),
+                OutMsg::None => fail!("Try to insert uninited OutMsg")
             };
             self.set(&msg.hash()?, &out_msg, value.unwrap_or(&CurrencyCollection::default()))
         } else if let OutMsg::DequeueShort(msg) = out_msg {
@@ -198,6 +198,15 @@ impl OutMsgQueueKey {
 
     pub fn with_account_prefix(prefix: &AccountIdPrefixFull, hash: UInt256) -> Self {
         Self::with_workchain_id_and_prefix(prefix.workchain_id, prefix.prefix, hash)
+    }
+
+    pub fn with_msg_envelope(env: &MsgEnvelope, msg: &Message, hash: UInt256) -> Result<Self> {
+        let src = msg.src().unwrap_or_default();
+        let dst = msg.dst().unwrap_or_default();
+        let src_prefix  = AccountIdPrefixFull::prefix(&src)?;
+        let dest_prefix = AccountIdPrefixFull::prefix(&dst)?;
+        let next_hop = src_prefix.interpolate_addr(&dest_prefix, &env.next_addr);
+        Ok(Self::with_account_prefix(&next_hop, hash))
     }
 
     pub fn first_u64(acc: &AccountId) -> u64 { // TODO: remove to AccountId
@@ -328,12 +337,12 @@ pub enum OutMsg {
     /// External outbound messages, or “messages to nowhere”
     /// msg_export_ext$000 msg:^(Message Any) transaction:^Transaction = OutMsg;
     External(OutMsgExternal),           
-    /// Immediately processed internal outbound messages
-    /// msg_export_imm$010 out_msg:^MsgEnvelope transaction:^Transaction reimport:^InMsg = OutMsg;
-    Immediately(OutMsgImmediately),
     /// Ordinary (internal) outbound messages
     /// msg_export_new$001 out_msg:^MsgEnvelope transaction:^Transaction = OutMsg;
     New(OutMsgNew),
+    /// Immediately processed internal outbound messages
+    /// msg_export_imm$010 out_msg:^MsgEnvelope transaction:^Transaction reimport:^InMsg = OutMsg;
+    Immediately(OutMsgImmediately),
     /// Transit (internal) outbound messages
     /// msg_export_tr$011 out_msg:^MsgEnvelope imported:^InMsg = OutMsg;
     Transit(OutMsgTransit),
@@ -360,6 +369,20 @@ impl OutMsg {
         self != &OutMsg::None
     }
 
+    pub fn tag(&self) -> u8 {
+        match self {
+            OutMsg::External(_)           => OUT_MSG_EXT,
+            OutMsg::Immediately(_)        => OUT_MSG_IMM,
+            OutMsg::New(_)                => OUT_MSG_NEW,
+            OutMsg::Transit(_)            => OUT_MSG_TR,
+            OutMsg::Dequeue(_)            => OUT_MSG_DEQ, // 4 bits
+            OutMsg::DequeueShort(_)       => OUT_MSG_DEQ_SHORT, // 4 bits
+            OutMsg::DequeueImmediately(_) => OUT_MSG_DEQ_IMM,
+            OutMsg::TransitRequired(_)    => OUT_MSG_TRDEQ,
+            OutMsg::None => 16
+        }
+    }
+
     ///
     /// the function returns the message envelop (if exists)
     ///
@@ -374,7 +397,7 @@ impl OutMsg {
                 OutMsg::DequeueShort(_) => None,
                 OutMsg::DequeueImmediately(ref x) => Some(x.read_out_message()?),
                 OutMsg::TransitRequired(ref x) => Some(x.read_out_message()?),
-                OutMsg::None => unreachable!(),
+                OutMsg::None => None
             }
         )
     }
@@ -393,7 +416,7 @@ impl OutMsg {
                 OutMsg::DequeueShort(_) => None,
                 OutMsg::DequeueImmediately(ref x) => Some(x.read_out_message()?.read_message()?),
                 OutMsg::TransitRequired(ref x) => Some(x.read_out_message()?.read_message()?),
-                OutMsg::None => unreachable!(),
+                OutMsg::None => None
             }
         )
     }
@@ -412,7 +435,7 @@ impl OutMsg {
                 OutMsg::DequeueShort(ref x) => x.msg_env_hash.clone(),
                 OutMsg::DequeueImmediately(ref x) => x.read_out_message()?.message_cell().repr_hash(),
                 OutMsg::TransitRequired(ref x) => x.read_out_message()?.message_cell().repr_hash(),
-                OutMsg::None => unreachable!(),
+                OutMsg::None => Default::default()
             }
         )
     }
@@ -431,7 +454,7 @@ impl OutMsg {
                 OutMsg::DequeueShort(_) => None,
                 OutMsg::DequeueImmediately(ref x) => Some(x.read_out_message()?.message_cell().clone()),
                 OutMsg::TransitRequired(ref x) => Some(x.read_out_message()?.message_cell().clone()),
-                OutMsg::None => unreachable!(),
+                OutMsg::None => None
             }
         )
     }
@@ -449,7 +472,7 @@ impl OutMsg {
             OutMsg::DequeueShort(_) => None,
             OutMsg::DequeueImmediately(ref x) => Some(x.out_message_cell().clone()),
             OutMsg::TransitRequired(ref x) => Some(x.out_message_cell().clone()),
-            OutMsg::None => unreachable!(),
+            OutMsg::None => None
         }
     }
 
