@@ -381,6 +381,81 @@ impl Serializable for MsgAddress {
     } 
 }
 
+impl Default for MsgAddressInt {
+    fn default() -> Self {
+        MsgAddressInt::AddrStd(MsgAddrStd::default())
+    }
+}
+
+impl FromStr for MsgAddressInt {
+    type Err = failure::Error;
+    fn from_str(string: &str) -> Result<Self> {
+        match MsgAddress::from_str(string)? {
+            MsgAddress::AddrStd(addr) => Ok(MsgAddressInt::AddrStd(addr)),
+            MsgAddress::AddrVar(addr) => Ok(MsgAddressInt::AddrVar(addr)),
+            _ => fail!(BlockError::Other("Wrong type of address".to_string()))
+        }
+    }
+}
+
+impl MsgAddressInt {
+    pub fn with_variant(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> Result<Self> {
+        Ok(MsgAddressInt::AddrVar(MsgAddrVar::with_address(anycast, workchain_id, address)?))
+    }
+    pub fn with_standart(anycast: Option<AnycastInfo>, workchain_id: i8, address: AccountId) -> Result<Self> {
+        Ok(MsgAddressInt::AddrStd(MsgAddrStd::with_address(anycast, workchain_id, address)))
+    }
+    pub fn get_address(&self) -> SliceData {
+        match self {
+            MsgAddressInt::AddrStd(addr_std) => addr_std.address.write_to_new_cell().unwrap().into(),
+            MsgAddressInt::AddrVar(addr_var) => addr_var.address.clone()
+        }
+    }
+    pub fn get_workchain_id(&self) -> i32 {
+        match self {
+            MsgAddressInt::AddrStd(addr_std) => addr_std.workchain_id as i32,
+            MsgAddressInt::AddrVar(addr_var) => addr_var.workchain_id
+        }
+    }
+    pub fn get_rewrite_pfx(&self) -> Option<AnycastInfo> {
+        match self {
+            MsgAddressInt::AddrStd(addr_std) => addr_std.anycast.clone(),
+            MsgAddressInt::AddrVar(addr_var) => addr_var.anycast.clone()
+        }
+    }
+    pub fn extract_std_address(&self) -> Option<(i32, AccountId)> {
+        unimplemented!("bool MsgAddressInt::extract_std_address(vm::CellSlice& cs, ton::WorkchainId& workchain, ton::StdSmcAddress& addr,")
+    }
+}
+
+impl Serializable for MsgAddressInt {
+
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        match self {
+            MsgAddressInt::AddrStd(std) => {
+                cell.append_raw(&[0x80], 2)?;    // $10 prefix AddrStd
+                std.write_to(cell)?;                                    // MsgAddrStd
+            }
+            MsgAddressInt::AddrVar(var) => {
+                cell.append_raw(&[0xC0], 2)?;    // $11 prefix AddrVar
+                var.write_to(cell)?;                                    // MsgAddressInt
+            }
+        }
+
+        Ok(())
+    } 
+}
+
+impl fmt::Display for MsgAddressInt {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MsgAddressInt::AddrStd(addr) => write!(f, "{}", addr),
+            MsgAddressInt::AddrVar(addr) => write!(f, "{}", addr),
+        }
+    }
+}
+
+
 /*
 This file contains definitions for internal and external message headers
 as defined in Blockchain: 3.1.
@@ -1699,7 +1774,8 @@ impl Deserializable for MsgAddressExt {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+// TODO: default Default is not working for MsgAddrStd
+#[derive(Clone, Debug, /*Default,*/ PartialEq, Eq, Hash)]
 pub struct MsgAddrStd {
     pub anycast: Option<AnycastInfo>,
     pub workchain_id: i8,
@@ -1737,83 +1813,6 @@ impl Deserializable for MsgAddrVar {
 pub enum MsgAddressInt {
     AddrStd(MsgAddrStd),
     AddrVar(MsgAddrVar),
-}
-
-impl Default for MsgAddressInt {
-    fn default() -> Self {
-        MsgAddressInt::AddrStd(MsgAddrStd::default())
-    }
-}
-
-impl FromStr for MsgAddressInt {
-    type Err = failure::Error;
-    fn from_str(string: &str) -> Result<Self> {
-        match MsgAddress::from_str(string)? {
-            MsgAddress::AddrStd(addr) => Ok(MsgAddressInt::AddrStd(addr)),
-            MsgAddress::AddrVar(addr) => Ok(MsgAddressInt::AddrVar(addr)),
-            _ => fail!(BlockError::Other("Wrong type of address".to_string()))
-        }
-    }
-}
-
-impl MsgAddressInt {
-    pub fn with_variant(anycast: Option<AnycastInfo>, workchain_id: i32, address: SliceData) -> Result<Self> {
-        Ok(MsgAddressInt::AddrVar(MsgAddrVar::with_address(anycast, workchain_id, address)?))
-    }
-    pub fn with_standart(anycast: Option<AnycastInfo>, workchain_id: i8, address: AccountId) -> Result<Self> {
-        Ok(MsgAddressInt::AddrStd(MsgAddrStd::with_address(anycast, workchain_id, address)))
-    }
-    pub fn get_address(&self) -> SliceData {
-        match self {
-            MsgAddressInt::AddrStd(addr_std) => addr_std.address.write_to_new_cell().unwrap().into(),
-            MsgAddressInt::AddrVar(addr_var) => addr_var.address.clone()
-        }
-    }
-    pub fn get_workchain_id(&self) -> i32 {
-        match self {
-            MsgAddressInt::AddrStd(addr_std) => addr_std.workchain_id as i32,
-            MsgAddressInt::AddrVar(addr_var) => addr_var.workchain_id
-        }
-    }
-    pub fn get_rewrite_pfx(&self) -> Option<AnycastInfo> {
-        match self {
-            MsgAddressInt::AddrStd(addr_std) => addr_std.anycast.clone(),
-            MsgAddressInt::AddrVar(addr_var) => addr_var.anycast.clone()
-        }
-    }
-    pub fn extract_std_address(&self) -> Option<(i32, AccountId)> {
-        match self {
-            MsgAddressInt::AddrStd(addr_std) => Some((addr_std.workchain_id as i32, addr_std.address.clone())),
-            MsgAddressInt::AddrVar(addr_var) => Some((addr_var.workchain_id, addr_var.address.clone()))
-        }
-    }
-}
-
-impl Serializable for MsgAddressInt {
-
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        match self {
-            MsgAddressInt::AddrStd(std) => {
-                cell.append_raw(&[0x80], 2)?;    // $10 prefix AddrStd
-                std.write_to(cell)?;                                    // MsgAddrStd
-            }
-            MsgAddressInt::AddrVar(var) => {
-                cell.append_raw(&[0xC0], 2)?;    // $11 prefix AddrVar
-                var.write_to(cell)?;                                    // MsgAddressInt
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl fmt::Display for MsgAddressInt {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            MsgAddressInt::AddrStd(addr) => write!(f, "{}", addr),
-            MsgAddressInt::AddrVar(addr) => write!(f, "{}", addr),
-        }
-    }
 }
 
 impl Deserializable for MsgAddressInt {

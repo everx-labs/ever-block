@@ -20,7 +20,7 @@ use crate::{
     inbound_messages::InMsg,
     messages::{CommonMsgInfo, Message},
     miscellaneous::{IhrPendingInfo, ProcessedInfo},
-    shard::AccountPrefixFull,
+    shard::AccountIdPrefixFull,
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
     GetRepresentationHash, Serializable, Deserializable,
@@ -196,7 +196,7 @@ impl OutMsgQueueKey {
         }
     }
 
-    pub fn with_account_prefix(prefix: &AccountPrefixFull, hash: UInt256) -> Self {
+    pub fn with_account_prefix(prefix: &AccountIdPrefixFull, hash: UInt256) -> Self {
         Self::with_workchain_id_and_prefix(prefix.workchain_id, prefix.prefix, hash)
     }
 
