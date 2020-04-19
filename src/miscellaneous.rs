@@ -44,12 +44,6 @@ impl ProcessedInfo {
         })?;
         Ok(!result)
     }
-    pub fn is_reduced(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_simple_update_of(&self, _other: &Self, _ok: &mut bool) -> Option<ProcessedUpto> {
-        unimplemented!()
-    }
 }
 
 /// Struct ProcessedInfoKey describe key for ProcessedInfo
@@ -96,10 +90,8 @@ impl Deserializable for ProcessedInfoKey {
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ProcessedUpto {
-    pub shard: u64,
-    pub mc_seqno: u32,
-    pub last_msg_lt: u64,
-    pub last_msg_hash: UInt256,
+    last_msg_lt: u64,
+    last_msg_hash: UInt256,
 }
 
 impl ProcessedUpto {
@@ -107,8 +99,6 @@ impl ProcessedUpto {
     // New instance ProcessedUpto structure
     pub fn with_params(last_msg_lt: u64, last_msg_hash: UInt256) -> Self {
         ProcessedUpto {
-            shard: 0,
-            mc_seqno: 0,
             last_msg_lt,
             last_msg_hash,
         }   
