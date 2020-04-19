@@ -126,11 +126,11 @@ macro_rules! define_HashmapAugE {
                     .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             }
             /// returns item with aug from hasmapaug
-            pub fn get_with_aug<K: Serializable>(&self, key: &K) -> Result<(Option<$x_type>, Option<$y_type>)> {
+            pub fn get_with_aug<K: Serializable>(&self, key: &K) -> Result<Option<($x_type, $y_type)>> {
                 let key = key.write_to_new_cell()?.into();
                 match self.0.get_with_aug(key, &mut 0)? {
-                    (Some(mut slice), aug) => Ok((Some(<$x_type>::construct_from(&mut slice)?), aug)),
-                    _ => Ok((None, None))
+                    (Some(mut slice), Some(aug)) => Ok(Some((<$x_type>::construct_from(&mut slice)?, aug))),
+                    _ => Ok(None)
                 }
             }
             /// returns item from hasmapaug as slice
@@ -199,9 +199,50 @@ macro_rules! define_HashmapAugE {
                     }
             }
             /// scans differences in two hashmaps
-            pub fn scan_diff<K, F>(&self, _other: &Self, _op: F) -> Result<bool>
+            pub fn scan_diff<K, F>(&self, other: &Self, mut op: F) -> Result<bool>
             where K: Deserializable, F: FnMut(K, Option<($x_type, $y_type)>, Option<($x_type, $y_type)>) -> Result<bool> {
-                unimplemented!()
+                let mut used_key : std::collections::HashSet<SliceData> = std::collections::HashSet::new();
+                if !self.iterate_slices_with_keys_and_aug(&mut |key, mut value, aug| {
+                    used_key.insert(key.clone());
+                    let value2 = other.0.get_with_aug(key.clone(), &mut 0)?;
+                    if Some(&value) != value2.0.as_ref() || Some(&aug) != value2.1.as_ref() {
+                        let key = K::construct_from(&mut key.into())?;
+                        match value2 {
+                            (Some(mut slice), Some(aug2)) => {
+                                if !op(key, Some((<$x_type>::construct_from(&mut value)?, aug.clone())), Some((<$x_type>::construct_from(&mut slice)?, aug2)))? {
+                                    return Ok(false);
+                                }
+                            },
+                            _ => {
+                                if !op(key, Some((<$x_type>::construct_from(&mut value)?, aug.clone())), None)? {
+                                    return Ok(false);
+                                }
+                            },
+                        }
+                    }        
+                    return Ok(true);
+                })? { return Ok(false); }
+                other.iterate_slices_with_keys_and_aug(&mut |key, mut value, aug| {
+                    if !used_key.contains(&key) {
+                        let value2 = self.0.get_with_aug(key.clone(), &mut 0)?;
+                        if Some(&value) != value2.0.as_ref() || Some(&aug) != value2.1.as_ref() {
+                            let key = K::construct_from(&mut key.into())?;
+                            match value2 {
+                                (Some(mut slice), Some(aug2)) => {
+                                    if !op(key, Some((<$x_type>::construct_from(&mut value)?, aug.clone())), Some((<$x_type>::construct_from(&mut slice)?, aug2)))? {
+                                        return Ok(false);
+                                    }
+                                },
+                                _ => {
+                                    if !op(key, Some((<$x_type>::construct_from(&mut value)?, aug.clone())), None)? {
+                                        return Ok(false);
+                                    }
+                                },
+                            }
+                        }   
+                    }     
+                    return Ok(true);
+                }) 
             }
         }
 
