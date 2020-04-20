@@ -55,10 +55,6 @@ impl ShardAccounts {
     pub fn balance(&self, account_id: &AccountId) -> Result<Option<DepthBalanceInfo>> {
         self.0.get_with_aug(account_id.clone(), &mut 0).map(|result| result.1)
     }
-
-    pub fn full_balance(&self) -> &CurrencyCollection {
-        &self.root_extra().balance
-    }
 }
 
 /// depth_balance$_ split_depth:(#<= 30) balance:CurrencyCollection = DepthBalanceInfo;

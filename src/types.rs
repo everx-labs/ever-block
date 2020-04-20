@@ -21,14 +21,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use num::{BigInt, bigint::Sign, One, Zero};
 use ton_types::{error, fail, Result,
-    BuilderData, Cell, CellType, IBitstring, HashmapE, HashmapType, SliceData, ExceptionCode, UInt256
-};
+    BuilderData, Cell, CellType, IBitstring, SliceData, ExceptionCode, UInt256};
 
 use crate::{
-    define_HashmapE,
+    Deserializable,
     error::BlockError,
     hashmapaug::Augmentable,
-    Serializable, Deserializable,
+    HashmapE,
+    HashmapType,
+    Serializable
 };
 
 
@@ -255,13 +256,6 @@ impl Augmentable for Grams {
     }
 }
 
-impl Grams {
-    pub fn shr(mut self, shr: u8) -> Self {
-        *self.value_mut() >>= shr as usize;
-        self
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// munber ## N
@@ -326,8 +320,6 @@ define_NumberN_up32bit!(Number13, 13);
 define_NumberN_up32bit!(Number16, 16);
 define_NumberN_up32bit!(Number32, 32);
 
-define_HashmapE!{ExtraCurrencyCollection, 32, VarUInteger32}
-
 /*
 extra_currencies$_
     dict:(HashMapE 32 (VarUInteger 32))
@@ -338,10 +330,16 @@ currencies$_
     other:ExtraCurrencyCollection
 = CurrencyCollection;
 */
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CurrencyCollection {
     pub grams: Grams,
-    pub other: ExtraCurrencyCollection,
+    pub other: HashmapE
+}
+
+impl Default for CurrencyCollection {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Augmentable for CurrencyCollection {
@@ -355,22 +353,13 @@ impl CurrencyCollection {
         Self::from_grams(Grams::zero())
     }
 
-    pub fn get_other(&self, key: u32) -> Result<Option<VarUInteger32>> {
-        self.other.get(&key)
+    pub fn set_other(&mut self, key: u32, other: u128) {
+        self.set_other_ex(key, &VarUInteger32::from_two_u128(0, other).unwrap())
     }
 
-    pub fn set_other(&mut self, key: u32, other: u128) -> Result<()> {
-        self.set_other_ex(key, &VarUInteger32::from_two_u128(0, other)?)?;
-        Ok(())
-    }
-
-    pub fn set_other_ex(&mut self, key: u32, other: &VarUInteger32) -> Result<()> {
-        self.other.set(&key, &other)?;
-        Ok(())
-    }
-
-    pub fn other_as_hashmap(&self) -> HashmapE {
-        self.other.0.clone()
+    pub fn set_other_ex(&mut self, key: u32, other: &VarUInteger32) {
+        let key = key.write_to_new_cell().unwrap();
+        self.other.set(key.into(), &other.write_to_new_cell().unwrap().into()).unwrap();
     }
 
     pub fn with_grams(grams: u64) -> Self {
@@ -380,7 +369,7 @@ impl CurrencyCollection {
     pub fn from_grams(grams: Grams) -> Self {
         CurrencyCollection {
             grams,
-            other: Default::default()
+            other: HashmapE::with_bit_len(32)
         }
     }
 
@@ -388,7 +377,8 @@ impl CurrencyCollection {
         if !self.grams.is_zero() {
             return Ok(false)
         }
-        self.other.iterate(&mut |value| Ok(value.is_zero()))
+        self.other
+            .iterate(&mut |_, ref mut slice| VarUInteger32::construct_from(slice).map(|value| value.is_zero()))
     }
 }
 
@@ -419,11 +409,13 @@ impl AddSub for CurrencyCollection {
             return Ok(false)
         }
         let mut result = self.other.clone();
-        if other.other.iterate_with_keys(&mut |key: u32, b| -> Result<bool> {
-            if let Some(mut a) = self.other.get(&key)? {
+        if other.other.iterate(&mut |key, ref mut slice| -> Result<bool> {
+            let b = VarUInteger32::construct_from(slice)?;
+            if let Some(ref mut slice) = self.other.get(key.clone())? {
+                let mut a: VarUInteger32 = VarUInteger32::construct_from(slice)?;
                 if a >= b {
                     a.sub(&b)?;
-                    result.set(&key, &a)?;
+                    result.set(key, &a.write_to_new_cell()?.into())?;
                     return Ok(true)
                 }
             }
@@ -438,14 +430,16 @@ impl AddSub for CurrencyCollection {
     fn add(&mut self, other: &Self) -> Result<()> {
         self.grams.add(&other.grams)?;
         let mut result = self.other.clone();
-        other.other.iterate_with_keys(&mut |key: u32, b| -> Result<bool> {
-            match self.other.get(&key)? {
-                Some(mut a) => {
+        other.other.iterate(&mut |key, ref mut slice_b| -> Result<bool> {
+            match self.other.get(key.clone())? {
+                Some(ref mut slice_a) => {
+                    let b = VarUInteger32::construct_from(slice_b)?;
+                    let mut a: VarUInteger32 = VarUInteger32::construct_from(slice_a)?;
                     a.add(&b)?;
-                    result.set(&key, &a)?;
+                    result.set(key, &a.write_to_new_cell()?.into())?;
                 }
                 None => {
-                    result.set(&key, &b)?;
+                    result.set(key, slice_b)?;
                 }
             }
             Ok(true)
@@ -459,8 +453,9 @@ impl fmt::Display for CurrencyCollection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "CurrencyCollection: Grams {}, other curencies:\n", self.grams)?;
         let mut len = 0;
-        self.other.iterate_with_keys(&mut |key: u32, value| {
-            write!(f, "key: {}, value: {}\n", key, value)?;
+        self.other.iterate(&mut |key, ref mut slice| -> Result<bool> {
+            let value = VarUInteger32::construct_from(slice)?;
+            write!(f, "key: {}, value: {}\n", key, value).unwrap();
             len += 1;
             Ok(true)
         }).unwrap();
@@ -713,9 +708,6 @@ macro_rules! define_HashmapE {
                     Ok(true)
                 })?;
                 Ok(vec)
-            }
-            pub fn split(&self, split_key: &SliceData) -> Result<(Self, Self)> {
-                self.0.split(split_key).map(|(left, right)| (Self(left), Self(right)))
             }
             pub fn scan_diff<K, F>(&self, _other: &Self, _op: F) -> Result<bool>
             where K: Deserializable, F: FnMut(K, Option<$x_type>, Option<$x_type>) -> Result<bool> {

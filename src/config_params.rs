@@ -17,7 +17,7 @@ use crate::{
     error::BlockError,
     shard_accounts::ShardAccounts,
     signature::{CryptoSignature, SigPubKey},
-    types::{ChildCell, ExtraCurrencyCollection, Grams, Number8, Number12, Number16, Number13, Number32},
+    types::{ChildCell, Grams, Number8, Number12, Number16, Number13, Number32, VarUInteger32},
     validators::ValidatorSet,
     Serializable, Deserializable,
 };
@@ -532,6 +532,8 @@ impl Serializable for ConfigParam6 {
         Ok(())
     }
 }
+
+define_HashmapE!{ExtraCurrencyCollection, 32, VarUInteger32}
 
 ///
 /// Config Param 7 structure

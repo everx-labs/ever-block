@@ -934,16 +934,8 @@ impl ShardAccount {
         &self.last_trans_hash
     }
 
-    pub fn set_last_trans_hash(&mut self, hash: UInt256) {
-        self.last_trans_hash = hash
-    }
-
     pub fn last_trans_lt(&self) -> u64 {
         self.last_trans_lt
-    }
-
-    pub fn set_last_trans_lt(&mut self, lt: u64) {
-        self.last_trans_lt = lt
     }
 
     pub fn last_trans_hash_mut(&mut self) -> &mut UInt256 {
@@ -1017,13 +1009,13 @@ pub fn generate_test_account() -> Account {
 
     let mut balance = CurrencyCollection::new();
     balance.grams = Grams(100000000000u64.into());
-    balance.set_other(1, 100).unwrap();
-    balance.set_other(2, 200).unwrap();
-    balance.set_other(3, 300).unwrap();
-    balance.set_other(4, 400).unwrap();
-    balance.set_other(5, 500).unwrap();
-    balance.set_other(6, 600).unwrap();
-    balance.set_other(7, 10000100).unwrap();
+    balance.set_other(1, 100);
+    balance.set_other(2, 200);
+    balance.set_other(3, 300);
+    balance.set_other(4, 400);
+    balance.set_other(5, 500);
+    balance.set_other(6, 600);
+    balance.set_other(7, 10000100);
 
     let acc_st = AccountStorage {
         last_trans_lt: 0,
