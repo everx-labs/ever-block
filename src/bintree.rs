@@ -46,7 +46,9 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
             Ok(None)
         }
     }
-
+    fn find(&self, _key: SliceData) -> Result<Option<(BuilderData, X)>> {
+        unimplemented!()
+    }
     /// Iterates over all items
     fn iterate<F: FnMut(SliceData, X) -> Result<bool>>(&self, p: &mut F) -> Result<bool> {
         iterate_internal(&mut self.get_data(), BuilderData::new(), p)

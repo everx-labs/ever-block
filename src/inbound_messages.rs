@@ -107,18 +107,25 @@ const MSG_DISCARD_TR: u8 = 0b00000111;
 pub enum InMsg {
     None,
     /// Inbound external messages
+    /// msg_import_ext$000 msg:^(Message Any) transaction:^Transaction = InMsg;
     External(InMsgExternal),        
     /// Internal IHR messages with destination addresses in this block
+    /// msg_import_ihr$010 msg:^(Message Any) transaction:^Transaction ihr_fee:Grams proof_created:^Cell = InMsg;
     IHR(InMsgIHR),                  
     /// Internal messages with destinations in this block
+    /// msg_import_imm$011 in_msg:^MsgEnvelope transaction:^Transaction fwd_fee:Grams = InMsg;
     Immediatelly(InMsgFinal),       
     /// Immediately routed internal messages
+    /// msg_import_fin$100 in_msg:^MsgEnvelope transaction:^Transaction fwd_fee:Grams = InMsg;
     Final(InMsgFinal),              
     /// Transit internal messages
+    /// msg_import_tr$101  in_msg:^MsgEnvelope out_msg:^MsgEnvelope transit_fee:Grams = InMsg;
     Transit(InMsgTransit),          
     /// Discarded internal messages with destinations in this block
+    /// msg_discard_fin$110 in_msg:^MsgEnvelope transaction_id:uint64 fwd_fee:Grams = InMsg;
     DiscardedFinal(InMsgDiscardedFinal), 
     /// Discarded transit internal messages
+    /// msg_discard_tr$111 in_msg:^MsgEnvelope transaction_id:uint64 fwd_fee:Grams proof_delivered:^Cell = InMsg;
     DiscardedTransit(InMsgDiscardedTransit), 
 }
 
@@ -130,6 +137,24 @@ impl Default for InMsg {
 
 
 impl InMsg {
+
+    /// Check if is valid message
+    pub fn is_valid(&self) -> bool {
+        self != &InMsg::None
+    }
+
+    pub fn tag(&self) -> u8 {
+        match self {
+            InMsg::External(_)         => MSG_IMPORT_EXT,
+            InMsg::IHR(_)              => MSG_IMPORT_IHR,
+            InMsg::Immediatelly(_)     => MSG_IMPORT_IMM,
+            InMsg::Final(_)            => MSG_IMPORT_FIN,
+            InMsg::Transit(_)          => MSG_IMPORT_TR,
+            InMsg::DiscardedFinal(_)   => MSG_DISCARD_FIN,
+            InMsg::DiscardedTransit(_) => MSG_DISCARD_TR,
+            InMsg::None => 8
+        }
+    }
 
     ///
     /// Get transaction from inbound message
@@ -182,7 +207,7 @@ impl InMsg {
                 InMsg::Transit(ref x) => x.read_in_message()?.read_message()?,
                 InMsg::DiscardedFinal(ref x) => x.read_message()?.read_message()?,
                 InMsg::DiscardedTransit(ref x) => x.read_message()?.read_message()?,
-                InMsg::None => unreachable!(),
+                InMsg::None => Default::default()
             }
         )
     }
@@ -200,9 +225,73 @@ impl InMsg {
                 InMsg::Transit(ref x) => x.read_in_message()?.message_cell().clone(),
                 InMsg::DiscardedFinal(ref x) => x.read_message()?.message_cell().clone(),
                 InMsg::DiscardedTransit(ref x) => x.read_message()?.message_cell().clone(),
-                InMsg::None => unreachable!(),
+                InMsg::None => Default::default()
             }
         )
+    }
+
+    ///
+    /// Get in envelope message cell
+    ///
+    pub fn in_msg_envelope_cell(&self) -> Option<&Cell> {
+        match self {
+            InMsg::External(_) => None,
+            InMsg::IHR(_) => None,
+            InMsg::Immediatelly(ref x) => Some(x.message_cell()),
+            InMsg::Final(ref x) => Some(x.message_cell()),
+            InMsg::Transit(ref x) => Some(x.in_message_cell()),
+            InMsg::DiscardedFinal(ref x) => Some(x.message_cell()),
+            InMsg::DiscardedTransit(ref x) => Some(x.message_cell()),
+            InMsg::None => None,
+        }
+    }
+
+    ///
+    /// Get in envelope message
+    ///
+    pub fn read_in_msg_envelope(&self) -> Result<Option<MsgEnvelope>> {
+        match self {
+            InMsg::External(_) => Ok(None),
+            InMsg::IHR(_) => Ok(None),
+            InMsg::Immediatelly(ref x) => Some(x.read_message()).transpose(),
+            InMsg::Final(ref x) => Some(x.read_message()).transpose(),
+            InMsg::Transit(ref x) => Some(x.read_in_message()).transpose(),
+            InMsg::DiscardedFinal(ref x) => Some(x.read_message()).transpose(),
+            InMsg::DiscardedTransit(ref x) => Some(x.read_message()).transpose(),
+            InMsg::None => Ok(None),
+        }
+    }
+
+    ///
+    /// Get out envelope message cell
+    ///
+    pub fn out_msg_envelope_cell(&self) -> Option<&Cell> {
+        match self {
+            InMsg::External(_) => None,
+            InMsg::IHR(_) => None,
+            InMsg::Immediatelly(_) => None,
+            InMsg::Final(_) => None,
+            InMsg::Transit(ref x) => Some(x.out_message_cell()),
+            InMsg::DiscardedFinal(_) => None,
+            InMsg::DiscardedTransit(_) => None,
+            InMsg::None => None,
+        }
+    }
+
+    ///
+    /// Get out envelope message
+    ///
+    pub fn read_out_msg_envelope(&self) -> Result<Option<MsgEnvelope>> {
+        match self {
+            InMsg::External(_) => Ok(None),
+            InMsg::IHR(_) => Ok(None),
+            InMsg::Immediatelly(_) => Ok(None),
+            InMsg::Final(_) => Ok(None),
+            InMsg::Transit(ref x) => Some(x.read_out_message()).transpose(),
+            InMsg::DiscardedFinal(_) => Ok(None),
+            InMsg::DiscardedTransit(_) => Ok(None),
+            InMsg::None => Ok(None)
+        }
     }
 
     pub fn get_fee(&self) -> Result<Option<ImportFees>> {
