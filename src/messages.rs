@@ -424,7 +424,10 @@ impl MsgAddressInt {
         }
     }
     pub fn extract_std_address(&self) -> Option<(i32, AccountId)> {
-        unimplemented!("bool MsgAddressInt::extract_std_address(vm::CellSlice& cs, ton::WorkchainId& workchain, ton::StdSmcAddress& addr,")
+        match self {
+            MsgAddressInt::AddrStd(addr_std) => Some((addr_std.workchain_id as i32, addr_std.address.clone())),
+            MsgAddressInt::AddrVar(addr_var) => Some((addr_var.workchain_id, addr_var.address.clone()))
+        }
     }
 }
 
