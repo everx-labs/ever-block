@@ -1187,7 +1187,7 @@ impl Deserializable for HashUpdate {
 }
 
 #[derive(Clone, Default)]
-struct U15(i16);
+pub struct U15(pub i16);
 
 impl U15 {
     pub fn from_lt(lt: u64) -> Self {
@@ -1235,8 +1235,8 @@ pub struct Transaction {
     pub account_addr: AccountId,
     pub lt: u64,
     pub prev_trans_hash: UInt256,
-	pub prev_trans_lt: u64,
-	pub now: u32,
+    pub prev_trans_lt: u64,
+    pub now: u32,
     pub outmsg_cnt: i16,
     pub orig_status: AccountStatus,
     pub end_status: AccountStatus,
@@ -1599,7 +1599,6 @@ pub struct AccountBlock {
     account_addr: AccountId,
     transactions: Transactions,      // HashmapAug 64 ^Transaction CurrencyCollection
     state_update: ChildCell<HashUpdate>,        // ^(HASH_UPDATE Account)
-    tr_count: isize,                 // for HashMap key - here need Logical Time of transaction
 }
 
 impl PartialEq for AccountBlock {
@@ -1616,7 +1615,6 @@ impl AccountBlock {
             account_addr: address,
             transactions: Transactions::default(),
             state_update: ChildCell::default(),
-            tr_count: 0
         }
     }
 
@@ -1627,15 +1625,11 @@ impl AccountBlock {
 
     /// append serialized transaction to block (use to increase speed)
     pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> Result<()> {
-        if self.tr_count < 0 {
-            self.tr_count = self.transactions.len()? as isize;
-        }
         self.transactions.setref(
             &transaction.logical_time(),
             transaction_cell,
             transaction.total_fees()
         )?;
-        self.tr_count += 1;
         Ok(())
     }
 
@@ -1664,12 +1658,11 @@ impl AccountBlock {
         self.transactions.root_extra()
     }
     /// count of transactions
-    pub fn transaction_count(&self) -> Result<usize> {
-        if self.tr_count < 0 {
-            self.transactions.len()
-        } else {
-            Ok(self.tr_count as usize)
-        }
+    pub fn transaction_count(&self) -> Result<u64> {
+        Ok(match self.transactions.is_empty() {
+            true => 0,
+            false => self.transactions.find_key::<u64>(true, false)? - self.transactions.find_key::<u64>(false, false)?
+        })
     }
     /// update
     pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> Result<()> {
@@ -1738,7 +1731,6 @@ impl Deserializable for AccountBlock {
 
         let mut trs = Transactions::default();
         trs.read_hashmap_root(slice)?;
-        self.tr_count = -1;
         self.transactions = trs;
 
         self.state_update.read_from(&mut slice.checked_drain_reference()?.into())?;   // ^(HASH_UPDATE Account)
@@ -1784,6 +1776,10 @@ impl ShardAccountBlocks {
         // append transaction to AccountBlock
         account_block.add_serialized_transaction(transaction, transaction_cell)?;
         self.set(account_id, &account_block, &transaction.total_fees())
+    }
+
+    pub fn full_transaction_fees(&self) -> &CurrencyCollection {
+        &self.root_extra()
     }
 }
 

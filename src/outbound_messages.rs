@@ -20,7 +20,7 @@ use crate::{
     inbound_messages::InMsg,
     messages::{CommonMsgInfo, Message},
     miscellaneous::{IhrPendingInfo, ProcessedInfo},
-    shard::AccountIdPrefixFull,
+    shard::{AccountIdPrefixFull, ShardIdent},
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
     GetRepresentationHash, Serializable, Deserializable,
@@ -145,12 +145,16 @@ impl OutMsgDescr {
             fail!(BlockError::Other("Error insert serialized message".to_string()))
         }
     }
+
+    pub fn full_exported(&self) -> &CurrencyCollection {
+        &self.root_extra()
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Blockchain: 3.3.6
 // _ (HashmapAugE 352 EnqueuedMsg uint64) = OutMsgQueue;
-// 352 = 32 - workchain_id, 64 - first 64 bit of account address, 256 - message hash
+// 352 = 32 - dest workchain_id, 64 - first 64 bit of dest account address, 256 - message hash
 define_HashmapAugE!(OutMsgQueue, 352, EnqueuedMsg, MsgTime);
 
 type MsgTime = u64;
@@ -172,6 +176,13 @@ impl OutMsgQueue {
         let enq = EnqueuedMsg::with_param(msg_lt, &env)?;
         self.set(&key, &enq, &msg_lt)
     }
+
+    pub fn filter_queue(&mut self, _old_shard: &ShardIdent, _subshard: &ShardIdent) -> Result<()> {
+        self.filter(|_key: OutMsgQueueKey, _enq, _lt| {
+            todo!("need to port code")
+        })
+    }
+
 }
 
 ///
@@ -272,6 +283,10 @@ impl OutMsgQueueInfo {
         &self.out_queue
     }
 
+    pub fn set_out_queue(&mut self, out_queue: OutMsgQueue) {
+        self.out_queue = out_queue;
+    }
+
     pub fn out_queue_mut(&mut self) -> &mut OutMsgQueue {
         &mut self.out_queue
     }
@@ -280,29 +295,42 @@ impl OutMsgQueueInfo {
         &self.proc_info
     }
 
+    pub fn set_proc_info(&mut self, proc_info: ProcessedInfo) {
+        self.proc_info = proc_info;
+    }
+
     pub fn ihr_pending(&self) -> &IhrPendingInfo {
         &self.ihr_pending
     }
 
-    pub fn split(&self, split_key: &SliceData) -> Result<(OutMsgQueueInfo, OutMsgQueueInfo)> {
+    pub fn split(&self, shard: &ShardIdent) -> Result<(OutMsgQueueInfo, OutMsgQueueInfo)> {
         let mut left = self.clone();
         let mut right = self.clone();
-        left.out_queue = OutMsgQueue::default();
-        right.out_queue = OutMsgQueue::default();
-        let prefix_len = split_key.remaining_bits();
-        self.out_queue.iterate_slices_with_keys_and_aug(&mut |key, msg_slice, aug| {
-            let msg = OutMsg::construct_from(&mut msg_slice.clone())?;
-            if let Some(mut account_id) = msg.read_message()?.and_then(|m| m.get_int_src_account_id()) {
-                account_id.move_by(prefix_len)?;
-                if !account_id.get_next_bit()? {
-                    left.out_queue.set_serialized(&key, &msg_slice, &aug)?;
-                } else {
-                    right.out_queue.set_serialized(&key, &msg_slice, &aug)?;
-                }
-            }
-            Ok(true)
-        })?;
+        let split_key = shard.shard_key(true);
+        let (left_queue, right_queue) = self.out_queue.split(&split_key)?;
+        left.out_queue = left_queue;
+        right.out_queue = right_queue;
+
+        let split_key = shard.shard_key(false);
+        let (left_info, right_info) = self.proc_info.split(&split_key)?;
+        left.proc_info = left_info;
+        right.proc_info = right_info;
+        // TODO: check pending
         Ok((left, right))
+    }
+
+    pub fn split_inplace(&mut self, shard: &ShardIdent) -> Result<Self> {
+        let (left, right) = self.split(&shard.merge()?)?;
+        let mut pfx = shard.shard_key(true);
+        let len = pfx.remaining_bits();
+        pfx.move_by(len - 1)?;
+        if pfx.get_next_bit()? {
+            *self = right;
+            Ok(left)
+        } else {
+            *self = left;
+            Ok(right)
+        }
     }
 }
 

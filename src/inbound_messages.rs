@@ -777,4 +777,8 @@ impl InMsgDescr {
             fail!(BlockError::Other("Error insert serialized message".to_string()))
         }
     }
+
+    pub fn full_import_fees(&self) -> &ImportFees {
+        self.root_extra()
+    }
 }

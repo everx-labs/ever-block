@@ -15,6 +15,7 @@
 use crate::{
     define_HashmapE,
     accounts::ShardAccount,
+    blocks::BlockIdExt,
     envelope_message::IntermediateAddress,
     error::BlockError,
     master::{BlkMasterInfo, LibDescr, McStateExtra},
@@ -193,13 +194,15 @@ impl ShardIdent {
     } 
 
     /// Get bitstring-key for BinTree operation for Shard
-    pub fn shard_key(&self) -> SliceData {
+    pub fn shard_key(&self, include_workchain: bool) -> SliceData {
         let mut cell = BuilderData::new();
-        let mut p = self.prefix;
-        debug_assert!(p != 0);
-        while p != 1 << 63 {
-            cell.append_bit_bool(p >> 63 != 0).unwrap(); // unsafe - cell is longer than 64 bit
-            p = p << 1;
+        if include_workchain {
+            cell.append_i32(self.workchain_id).unwrap();
+        }
+        if self.shard_prefix_with_tag() != SHARD_FULL {
+            let prefix_len = self.prefix_len();
+            let prefix = self.shard_prefix_with_tag() >> (64 - prefix_len);
+            cell.append_bits(prefix as usize, prefix_len as usize).unwrap();
         }
         cell.into()
     }
@@ -234,6 +237,14 @@ impl ShardIdent {
             self.prefix == SHARD_FULL ||
             ((descendant.prefix & !((self.prefix_lower_bits() << 1) - 1)) == self.shard_prefix_without_tag())
         )
+    }
+
+    pub fn intersect_with(&self, other: &Self) -> bool {
+        if self.workchain_id != other.workchain_id {
+            return false
+        }
+        let z = std::cmp::max(self.prefix_lower_bits(), other.prefix_lower_bits());
+        return (self.shard_prefix_with_tag() ^ other.shard_prefix_with_tag()) & ((!z + 1) << 1) == 0
     }
 
     /// It is copy from t-node. TODO: investigate, add comment and tests
@@ -584,9 +595,10 @@ define_HashmapE!(Libraries, 256, LibDescr);
 // = ShardStateUnsplit;
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct ShardStateUnsplit {
+    blk_id: BlockIdExt,
     global_id: i32,
-    shard_id: ShardIdent,
-    seq_no: u32,
+    // shard_id: ShardIdent,
+    // seq_no: u32,
     vert_seq_no: u32,
     gen_time: u32,
     gen_lt: u64,
@@ -607,14 +619,30 @@ pub struct ShardStateUnsplit {
 }
 
 impl ShardStateUnsplit {
+    pub fn with_blk_id(blk_id: BlockIdExt) -> Self {
+        let mut shard_state = ShardStateUnsplit::default();
+        shard_state.blk_id = blk_id;
+        shard_state
+    }
+
     pub fn with_ident(shard_id: ShardIdent) -> Self {
         let mut shard_state = ShardStateUnsplit::default();
-        shard_state.shard_id = shard_id;
+        shard_state.blk_id.shard_id = shard_id;
         shard_state
     }
 
     pub fn id(&self) -> String {
-        format!("shard: {}, seq_no: {}", self.shard(), self.seq_no)
+        format!("shard: {}, seq_no: {}", self.shard(), self.blk_id.seq_no)
+    }
+
+    pub fn blk_id(&self) -> &BlockIdExt {
+        debug_assert_ne!(self.blk_id, Default::default());
+        &self.blk_id
+    }
+
+    pub fn set_blk_id(&mut self, blk_id: BlockIdExt) {
+        debug_assert_eq!(self.blk_id, Default::default());
+        self.blk_id = blk_id
     }
 
     pub fn global_id(&self) -> i32 {
@@ -626,20 +654,24 @@ impl ShardStateUnsplit {
     }
 
     pub fn shard(&self) -> &ShardIdent {
-        &self.shard_id
+        &self.blk_id.shard_id
+    }
+
+    pub fn set_shard(&mut self, shard: ShardIdent) {
+        self.blk_id.shard_id = shard;
     }
 
     pub fn shard_mut(&mut self) -> &mut ShardIdent {
-        &mut self.shard_id
+        &mut self.blk_id.shard_id
     }
 
     pub fn seq_no(&self) -> u32 {
-        self.seq_no
+        self.blk_id.seq_no
     }
 
     pub fn set_seq_no(&mut self, seq_no: u32) {
         assert!(seq_no != 0);
-        self.seq_no = seq_no
+        self.blk_id.seq_no = seq_no
     }
 
     pub fn vert_seq_no(&self) -> u32 {
@@ -777,31 +809,31 @@ impl ShardStateUnsplit {
         Ok(())
     }
 
-    pub fn split(&self) -> Result<ShardStateSplit> {
+    pub fn split(&self) -> Result<(ShardStateUnsplit, ShardStateUnsplit)> {
         let mut left = self.clone();
         let mut right = self.clone();
         let (ls, rs) = self.shard().split()?;
-        left.shard_id = ls;
-        right.shard_id = rs;
-        let split_key = self.shard_id.shard_key();
-        let info = self.read_out_msg_queue_info()?;
-        let (li, ri) = info.split(&split_key)?;
-        left.write_out_msg_queue_info(&li)?;
-        right.write_out_msg_queue_info(&ri)?;
+        left.blk_id.shard_id = ls;
+        right.blk_id.shard_id = rs;
+        let split_key = self.blk_id.shard_id.shard_key(false);
         let accounts = self.read_accounts()?;
         let (al, ar) = accounts.split(&split_key)?;
         left.write_accounts(&al)?;
         right.write_accounts(&ar)?;
         left.total_balance = al.root_extra().balance().clone();
         right.total_balance = ar.root_extra().balance().clone();
+        let info = self.read_out_msg_queue_info()?;
+        let (li, ri) = info.split(self.shard())?;
+        left.write_out_msg_queue_info(&li)?;
+        right.write_out_msg_queue_info(&ri)?;
         // debug_assert!(self.master_ref.is_some());
         // TODO: other
-        Ok(ShardStateSplit { left, right })
+        Ok((left, right))
     }
 
     pub fn merge_with(&mut self, other: &ShardStateUnsplit) -> Result<()> {
-        self.shard_id = self.shard_id.merge()?;
-        let merge_key = self.shard_id.shard_key();
+        self.blk_id.shard_id = self.blk_id.shard_id.merge()?;
+        let merge_key = self.blk_id.shard_id.shard_key(false);
         let mut accounts = self.read_accounts()?;
         accounts.merge(&other.read_accounts()?, &merge_key)?;
         self.write_accounts(&accounts)?;
@@ -825,8 +857,8 @@ impl Deserializable for ShardStateUnsplit {
             )
         }
         self.global_id.read_from(cell)?;
-        self.shard_id.read_from(cell)?;
-        self.seq_no.read_from(cell)?;
+        self.blk_id.shard_id.read_from(cell)?;
+        self.blk_id.seq_no.read_from(cell)?;
         self.vert_seq_no.read_from(cell)?;
         self.gen_time.read_from(cell)?;
         self.gen_lt.read_from(cell)?;
@@ -859,8 +891,8 @@ impl Serializable for ShardStateUnsplit {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_u32(SHARD_STATE_UNSPLIT_PFX)?;
         self.global_id.write_to(builder)?;
-        self.shard_id.write_to(builder)?;
-        self.seq_no.write_to(builder)?;
+        self.blk_id.shard_id.write_to(builder)?;
+        self.blk_id.seq_no.write_to(builder)?;
         self.vert_seq_no.write_to(builder)?;
         self.gen_time.write_to(builder)?;
         self.gen_lt.write_to(builder)?;

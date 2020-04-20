@@ -92,9 +92,10 @@ impl BlockIdExt {
             file_hash: UInt256::default(),
         }
     }
-    pub fn shard(&self) -> &ShardIdent {
-        &self.shard_id
-    }
+
+    pub fn shard(&self) -> &ShardIdent { &self.shard_id }
+
+    pub fn seq_no(&self) -> u32 { self.seq_no }
 }
 
 impl Serializable for BlockIdExt {
@@ -242,7 +243,6 @@ impl BlockInfo {
 
     pub fn version(&self) -> u32 { self.version }
     pub fn set_version(&mut self, version: u32) { self.version = version; }
-
 
     pub fn before_split(&self) -> bool { self.before_split }
     pub fn set_before_split(&mut self, before_split: bool) { self.before_split = before_split }
@@ -489,6 +489,7 @@ unsigned_block info:^BlockInfo value_flow:^ValueFlow
 */
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct Block {
+    blk_id: BlockIdExt,
     pub global_id: i32,
     pub info: ChildCell<BlockInfo>,            // reference
     pub value_flow: ChildCell<ValueFlow>,      // reference
@@ -505,12 +506,23 @@ impl Block {
         extra: BlockExtra,
     ) -> Result<Self> {
         Ok(Block {
+            blk_id: Default::default(),
             global_id,
             info: ChildCell::with_struct(&info)?,
             value_flow: ChildCell::with_struct(&value_flow)?,
             extra: ChildCell::with_struct(&extra)?,
             state_update: ChildCell::with_struct(&state_update)?,
         })
+    }
+
+    pub fn blk_id(&self) -> &BlockIdExt {
+        debug_assert_ne!(self.blk_id, Default::default());
+        &self.blk_id
+    }
+
+    pub fn set_blk_id(&mut self, blk_id: BlockIdExt) {
+        debug_assert_eq!(self.blk_id, Default::default());
+        self.blk_id = blk_id
     }
 
     pub fn global_id(&self) -> i32 {
