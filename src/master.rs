@@ -15,7 +15,7 @@
 use crate::{
     define_HashmapE, define_HashmapAugE,
     bintree::{BinTree, BinTreeType},
-    blocks::{BlockIdExt, ExtBlkRef},
+    blocks::ExtBlkRef,
     config_params::ConfigParams,
     error::BlockError,
     hashmapaug::{Augmentable, HashmapAugE},
@@ -52,7 +52,7 @@ define_HashmapE!{CryptoSignatures, 16, CryptoSignaturePair}
 define_HashmapAugE!{ShardFees, 96, ShardFeeCreated, ShardFeeCreated}
 
 impl ShardHashes {
-    pub fn iterate_shards<F>(&self, func: &mut F) -> Result<bool>
+    pub fn iterate_shardes<F>(&self, func: &mut F) -> Result<bool>
     where F: FnMut(ShardIdent, ShardDescr) -> Result<bool> {
         self.iterate_with_keys(&mut |wc_id: i32, InRefValue(shardes_tree)| {
             shardes_tree.iterate(&mut |prefix, shard_descr| {
@@ -61,104 +61,27 @@ impl ShardHashes {
             })
         })
     }
-    pub fn has_workchain(&self, workchain_id: i32) -> Result<bool> {
-        self.get_as_slice(&workchain_id).map(|result| result.is_some())
+    pub fn get_shard_descr(&self, _shard: &ShardIdent) -> Result<Option<(ShardIdent, ShardDescr)>> {
+        unimplemented!()
     }
-    pub fn find_shard(&self, shard: &ShardIdent) -> Result<Option<McShardRecord>> {
-        let shard_id = SliceData::from(shard.shard_prefix_without_tag().write_to_new_cell()?);
-        if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
-            if let Some((key, descr)) = bintree.find(shard_id)? {
-                let prefix_len = key.length_in_bits();
-                let mut prefix = [0; 8];
-                prefix.copy_from_slice(key.data());
-                let prefix = u64::from_le_bytes(prefix);
-                let shard = ShardIdent::with_prefix_len(prefix_len as u8, shard.workchain_id(), prefix)?;
-                return Ok(Some(McShardRecord::new(shard, descr)))
-            }
+    pub fn get_shard_descr_exact(&self, shard: &ShardIdent) -> Result<Option<ShardDescr>> {
+        match self.get(&shard.workchain_id())? {
+            Some(InRefValue(bintree)) => bintree.get(shard.shard_prefix_without_tag().write_to_new_cell()?.into()),
+            None => Ok(None)
         }
-        Ok(None)
     }
-    pub fn get_shard(&self, shard: &ShardIdent) -> Result<Option<McShardRecord>> {
-        let shard_id = SliceData::from(shard.shard_prefix_without_tag().write_to_new_cell()?);
-        if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
-            if let Some(descr) = bintree.get(shard_id)? {
-                return Ok(Some(McShardRecord::new(shard.clone(), descr)))
-            }
-        }
-        Ok(None)
-    }
-    pub fn get_neighbours(&self, shard: &ShardIdent) -> Result<Vec<McShardRecord>> {
+    pub fn get_neighbours(&self, shard: &ShardIdent) -> Result<Vec<(ShardIdent, ShardDescr)>> {
         let mut vec = Vec::new();
         if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
             bintree.iterate(&mut |prefix, shard_descr| {
                 let shard_ident = ShardIdent::with_prefix_slice(shard.workchain_id(), prefix)?;
                 if shard.is_neighbor_for(&shard_ident) {
-                    vec.push(McShardRecord::new(shard_ident, shard_descr));
+                    vec.push((shard_ident, shard_descr));
                 }
                 Ok(true)
             })?;
         }
         Ok(vec)
-    }
-}
-
-#[derive(Default, Debug)]
-pub struct McShardRecord {
-    pub shard: ShardIdent,
-    pub descr: ShardDescr,
-    pub blk_id: BlockIdExt,
-}
-
-impl McShardRecord {
-    pub fn new(shard: ShardIdent, descr: ShardDescr) -> Self {
-        let blk_id = BlockIdExt::with_params(shard, descr.seq_no, descr.root_hash.clone(), descr.file_hash.clone());
-        Self { shard, descr, blk_id }
-    }
-
-    pub fn shard(&self) -> &ShardIdent {
-        &self.shard
-    }
-
-    pub fn descr(&self) -> &ShardDescr {
-        &self.descr
-    }
-
-    pub fn blk_id(&self) -> &BlockIdExt {
-        &self.blk_id
-    }
-
-    pub fn basic_info_equal(&self, other: &Self, compare_fees: bool, compare_reg_seqno: bool) -> bool {
-        self.blk_id == other.blk_id
-            && self.descr.start_lt == other.descr.start_lt
-            && self.descr.end_lt == other.descr.end_lt
-            && (!compare_reg_seqno || self.descr.reg_mc_seqno == other.descr.reg_mc_seqno)
-            && self.descr.gen_utime == other.descr.gen_utime
-            && self.descr.min_ref_mc_seqno == other.descr.min_ref_mc_seqno
-            && self.descr.before_split == other.descr.before_split
-            && self.descr.want_split == other.descr.want_split
-            && self.descr.want_merge == other.descr.want_merge
-            && (!compare_fees
-                || (self.descr.fees_collected == other.descr.fees_collected
-                    && self.descr.funds_created == other.descr.funds_created))
-    }
-
-    pub fn fsm_equal(&self, _other: &Self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_fsm_merge(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_fsm_split(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_fsm_none(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn fsm_utime_end(&self) -> u32 {
-        unimplemented!()
-    }
-    pub fn fsm_utime(&self) -> u32 {
-        unimplemented!()
     }
 }
 
@@ -259,9 +182,6 @@ impl McBlockExtra {
 
     pub fn hashes(&self) -> &ShardHashes { &self.hashes }
     pub fn hashes_mut(&mut self) -> &mut ShardHashes { &mut self.hashes }
-
-    pub fn shards(&self) -> &ShardHashes { &self.hashes }
-    pub fn shards_mut(&mut self) -> &mut ShardHashes { &mut self.hashes }
 
     pub fn fees(&self) -> &ShardFees { &self.fees }
     pub fn fees_mut(&mut self) -> &mut ShardFees { &mut self.fees }
@@ -700,7 +620,7 @@ masterchain_state_extra#cc26
 */
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct McStateExtra {
-    pub hashes: ShardHashes, // TODO: correct name shards
+    pub hashes: ShardHashes,
     pub config: ConfigParams,
     pub validator_info: ValidatorInfo,
     pub prev_blocks: OldMcBlocksInfo,
@@ -763,10 +683,6 @@ impl McStateExtra {
             Some(InRefValue(shards)) => shards.get(ident.shard_key())?.map(|s| s.root_hash),
             None => None
         })
-    }
-
-    pub fn shards(&self) -> &ShardHashes {
-        &self.hashes
     }
 }
 

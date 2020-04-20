@@ -693,10 +693,6 @@ macro_rules! define_HashmapE {
                 self.0.get(key)?
                     .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             }
-            pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
-                let key = key.write_to_new_cell()?.into();
-                self.0.get(key)
-            }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.remove(key).map(|_|()).map_err(|e| e.into())

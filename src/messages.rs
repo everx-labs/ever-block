@@ -423,12 +423,6 @@ impl MsgAddressInt {
             MsgAddressInt::AddrVar(addr_var) => addr_var.anycast.clone()
         }
     }
-    pub fn extract_std_address(&self) -> Option<(i32, AccountId)> {
-        match self {
-            MsgAddressInt::AddrStd(addr_std) => Some((addr_std.workchain_id as i32, addr_std.address.clone())),
-            MsgAddressInt::AddrVar(addr_var) => Some((addr_var.workchain_id, addr_var.address.clone()))
-        }
-    }
 }
 
 impl Serializable for MsgAddressInt {
@@ -832,6 +826,7 @@ pub enum CommonMsgInfo{
 }
 
 impl CommonMsgInfo {
+
     ///
     /// Get destination account address
     ///
@@ -994,27 +989,6 @@ impl Eq for Message {}
 
 impl Message {
     
-    pub fn int_header(&self) -> Option<&InternalMessageHeader> {
-        match self.header() {
-            CommonMsgInfo::IntMsgInfo(header) => Some(header),
-            _ => None
-        }
-    }
-
-    pub fn ext_in_header(&self) -> Option<&ExternalInboundMessageHeader> {
-        match self.header() {
-            CommonMsgInfo::ExtInMsgInfo(header) => Some(header),
-            _ => None
-        }
-    }
-
-    pub fn ext_out_header(&self) -> Option<&ExtOutMessageHeader> {
-        match self.header() {
-            CommonMsgInfo::ExtOutMsgInfo(header) => Some(header),
-            _ => None
-        }
-    }
-
     ///
     /// Create new instance internal Message with internal header
     ///
@@ -1197,18 +1171,6 @@ impl Message {
             },
             CommonMsgInfo::ExtOutMsgInfo(ref header) => {
                 Some((header.created_at.0, header.created_lt))
-            },
-            _ => None
-        }
-    }
-
-    pub fn lt(&self) -> Option<u64> {
-        match self.header {
-            CommonMsgInfo::IntMsgInfo(ref header) => {
-                Some(header.created_lt)
-            },
-            CommonMsgInfo::ExtOutMsgInfo(ref header) => {
-                Some(header.created_lt)
             },
             _ => None
         }
