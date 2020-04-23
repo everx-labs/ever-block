@@ -208,7 +208,7 @@ impl McBlockExtra {
         // TODO fee?
         let shards = match self.hashes.get(&ident.workchain_id())? {
             Some(InRefValue(mut shards)) => {
-                shards.split(ident.shard_key(), descr)?;
+                shards.split(ident.shard_key(false), descr)?;
                 shards
             }
             None => {
@@ -232,7 +232,7 @@ impl McBlockExtra {
     // pub fn set_shard_fee(&mut self, _shard_ident: &ShardIdent, _shard_fee: &CurrencyCollection)
     // -> Option<ExceptionCode> {
     //     unimplemented!()
-    //     // let shard_key = ident.shard_key();
+    //     // let shard_key = ident.shard_key(false);
     //     // if let Some(shards) = self.fees.get(&ident.workchain_id())? {
     //     //     shards.set_extra(shard_key, fee);
     //     // } else if shard_key.is_empty() {
@@ -726,7 +726,7 @@ impl McStateExtra {
     pub fn split_shard(&mut self, ident: &ShardIdent, descr: &ShardDescr) -> Result<()> {
         let shards = match self.hashes.get(&ident.workchain_id())? {
             Some(InRefValue(mut shards)) => {
-                shards.split(ident.shard_key(), descr)?;
+                shards.split(ident.shard_key(false), descr)?;
                 shards
             }
             None => BinTree::with_item(descr)
@@ -740,7 +740,7 @@ impl McStateExtra {
     ///
     pub fn shard_seq_no(&self, ident: &ShardIdent) -> Result<Option<u32>> {
         Ok(match self.hashes.get(&ident.workchain_id())? {
-            Some(InRefValue(shards)) => shards.get(ident.shard_key())?.map(|s| s.seq_no),
+            Some(InRefValue(shards)) => shards.get(ident.shard_key(false))?.map(|s| s.seq_no),
             None => None
         })
     }
@@ -750,7 +750,7 @@ impl McStateExtra {
     /// 
     pub fn shard_lt(&self, ident: &ShardIdent) -> Result<Option<u64>> {
         Ok(match self.hashes.get(&ident.workchain_id())? {
-            Some(InRefValue(shards)) => shards.get(ident.shard_key())?.map(|s| s.start_lt),
+            Some(InRefValue(shards)) => shards.get(ident.shard_key(false))?.map(|s| s.start_lt),
             None => None
         })
     }
@@ -760,7 +760,7 @@ impl McStateExtra {
     /// 
     pub fn shard_hash(&self, ident: &ShardIdent) -> Result<Option<UInt256>> {
         Ok(match self.hashes.get(&ident.workchain_id())? {
-            Some(InRefValue(shards)) => shards.get(ident.shard_key())?.map(|s| s.root_hash),
+            Some(InRefValue(shards)) => shards.get(ident.shard_key(false))?.map(|s| s.root_hash),
             None => None
         })
     }

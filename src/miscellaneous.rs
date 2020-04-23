@@ -14,13 +14,12 @@
 
 use crate::{
     define_HashmapE,
+    config_params::ConfigParams,
     outbound_messages::EnqueuedMsg,
     Serializable, Deserializable,
 };
 use ton_types::{
-    fail, Result,
-    UInt256,
-    BuilderData, Cell, SliceData, HashmapE, HashmapType,
+    Result, BuilderData, Cell, SliceData, HashmapE, HashmapType, UInt256,
 };
 
 
@@ -35,7 +34,7 @@ impl ProcessedInfo {
     pub fn min_seqno(&self) -> Result<u32> {
         match self.0.get_min(false, &mut 0)? {
             (Some(key), _value) => ProcessedInfoKey::construct_from(&mut key.into()).map(|key| key.mc_seqno),
-            _ => fail!("minimal record not found in ProcessedInfo")
+            _ => Ok(0)
         }
     }
     pub fn already_processed(&self, enq: &EnqueuedMsg) -> Result<bool> {
@@ -52,6 +51,57 @@ impl ProcessedInfo {
     }
 }
 
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct ProcessedRec {
+    pub entries: Vec<ProcessedUpto>,
+    pub min_seqno: u32,
+}
+
+impl ProcessedRec {
+    pub fn from_info(&mut self, proc_info: &ProcessedInfo) -> Result<()> {
+        self.min_seqno = proc_info.min_seqno()?;
+        self.entries = proc_info.export_vector()?;
+        Ok(())
+    }
+
+    pub fn min_seqno(&self) -> u32 {
+        self.min_seqno
+    }
+    pub fn already_processed(&self, enq: &EnqueuedMsg) -> Result<bool> {
+        for entry in &self.entries {
+            if !entry.already_processed(enq) {
+                return Ok(true)
+            }
+        }
+        Ok(false)
+    }
+    pub fn is_reduced(&self) -> bool {
+        unimplemented!()
+    }
+    pub fn is_simple_update_of(&self, _other: &Self, _ok: &mut bool) -> Option<ProcessedUpto> {
+        unimplemented!()
+    }
+}
+
+impl Serializable for ProcessedRec {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        let mut proc_info = ProcessedInfo::default();
+        for entry in &self.entries {
+            proc_info.set(&ProcessedInfoKey::from_rec(entry), entry)?;
+        }
+        proc_info.write_to(cell)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for ProcessedRec {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        let proc_info = ProcessedInfo::construct_from(cell)?;
+        self.entries = proc_info.export_vector()?;
+        Ok(())
+    }
+}
+
 /// Struct ProcessedInfoKey describe key for ProcessedInfo
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ProcessedInfoKey {
@@ -59,8 +109,13 @@ pub struct ProcessedInfoKey {
     mc_seqno: u32,
 }
 
-
 impl ProcessedInfoKey {
+    pub fn from_rec(rec: &ProcessedUpto) -> Self {
+        Self {
+            shard: rec.shard,
+            mc_seqno: rec.mc_seqno,
+        }
+    }
 
     // New instance ProcessedInfoKey structure
     pub fn with_params(shard: u64, mc_seqno: u32) -> Self {
@@ -100,6 +155,7 @@ pub struct ProcessedUpto {
     pub mc_seqno: u32,
     pub last_msg_lt: u64,
     pub last_msg_hash: UInt256,
+    pub ref_config: Option<ConfigParams>,
 }
 
 impl ProcessedUpto {
@@ -111,6 +167,7 @@ impl ProcessedUpto {
             mc_seqno: 0,
             last_msg_lt,
             last_msg_hash,
+            ref_config: None,
         }   
     }
     pub fn already_processed(&self, enq: &EnqueuedMsg) -> bool {

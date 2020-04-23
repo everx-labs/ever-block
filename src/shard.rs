@@ -15,14 +15,14 @@
 use crate::{
     define_HashmapE,
     accounts::ShardAccount,
-    envelope_message::IntermediateAddress,
     error::BlockError,
+    envelope_message::FULL_BITS,
     master::{BlkMasterInfo, LibDescr, McStateExtra},
     messages::MsgAddressInt,
     outbound_messages::OutMsgQueueInfo,
     shard_accounts::{DepthBalanceInfo, ShardAccounts},
     types::{ChildCell, CurrencyCollection},
-    Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
+    Serializable, Deserializable, MaybeSerialize, MaybeDeserialize, IntermediateAddress,
 };
 use std::fmt::{self, Display, Formatter};
 use ton_types::{
@@ -53,33 +53,91 @@ impl Default for AccountIdPrefixFull {
     }
 }
 
-/// https://www.notion.so/tonlabs/Implement-AccountIdPrefixFull-14fa126991074ec3a06a3ab8d36e8223
 impl AccountIdPrefixFull {
+    /// Tests address for validity (workchain_id != 0x80000000)
     pub fn is_valid(&self) -> bool {
         self.workchain_id != INVALID_WORKCHAIN_ID
     }
-    pub fn prefix(_address: &MsgAddressInt) -> Result<Self> {
-        unimplemented!("ton::AccountIdPrefixFull MsgAddressInt::get_prefix(vm::CellSlice&& cs)")
+
+    /// Is address belongs to masterchain (workchain_id == MASTERCHAIN_ID)
+    pub fn is_masterchain(&self) -> bool {
+        self.workchain_id == MASTERCHAIN_ID
     }
-    pub fn cheked_prefix(_address: &MsgAddressInt) -> Result<Self> {
-        unimplemented!("ton::AccountIdPrefixFull MsgAddressInt::get_prefix(vm::CellSlice&& cs)")
+
+    /// Constructs AccountIdPrefixFull prefix for specified address.
+    /// Returns Err in a case of insufficient bits (less than 64) in the address slice.
+    pub fn prefix(address: &MsgAddressInt) -> Result<Self> {
+        let (workchain_id, mut account_id) = address.extract_std_address(true)?;
+
+        Ok(Self {
+            workchain_id,
+            prefix: account_id.get_next_u64()?
+        })
     }
-    pub fn interpolate_addr(&self, _to: &Self, _ia: &IntermediateAddress) -> Self {
-        unimplemented!()
-        // if (d <= 0) {
-        //     return src;
-        // } else if (d >= 96) {
-        //     return dest;
-        // } else if (d >= 32) {
-        //     unsigned long long mask = (std::numeric_limits<td::uint64>::max() >> (d - 32));
-        //     return ton::AccountIdPrefixFull{dest.workchain, (dest.account_id_prefix & ~mask) | (src.account_id_prefix & mask)};
-        // } else {
-        //     int mask = (-1 >> d);
-        //     return ton::AccountIdPrefixFull{(dest.workchain & ~mask) | (src.workchain & mask), src.account_id_prefix};
-        // }
+
+    /// Constructs AccountIdPrefixFull prefix for specified address with checking for validity (workchain_id != 0x80000000).
+    /// Returns Err in a case of insufficient bits (less than 64) in the address slice or invalid address.
+    pub fn checked_prefix(address: &MsgAddressInt) -> Result<Self> {
+        Self::prefix(address)
+            .and_then(|result| {
+                if result.is_valid() {
+                    return Ok(result)
+                }
+                fail!("Address is invalid")
+            })
     }
-    pub fn count_matching_bits(&self, _other: &Self) -> u8 {
-        unimplemented!()
+
+    /// Constructs AccountIdPrefixFull prefix for specified address and stores it in the "to" argument.
+    /// Returns true if there are sufficient bits in the address (64 or more) and address is valid
+    /// (workchain_id != 0x80000000); false otherwise.
+    pub fn prefix_to(address: &MsgAddressInt, to: &mut AccountIdPrefixFull) -> bool {
+        if let Ok(result) = Self::prefix(address) {
+            *to = result;
+            return to.is_valid()
+        }
+        false
+    }
+
+    /// Combines dest_bits bits from dest, remaining 64 - dest_bits bits from self
+    pub fn interpolate_addr(&self, dest: &Self, dest_bits: isize) -> Self {
+        if dest_bits <= 0 {
+            self.clone()
+        } else if dest_bits >= FULL_BITS as isize {
+            dest.clone()
+        } else if dest_bits >= 32 {
+            let mask = u64::max_value() >> (dest_bits - 32);
+            Self {
+                workchain_id: dest.workchain_id,
+                prefix: (dest.prefix & !mask) | (self.prefix & mask)
+            }
+        } else {
+            let mask = u32::max_value() >> dest_bits;
+            Self {
+                workchain_id: (dest.workchain_id & (!mask as i32)) | (self.workchain_id & (mask as i32)),
+                prefix: self.prefix
+            }
+        }
+    }
+
+    /// Combines count bits from dest, remaining 64 - count bits from self
+    /// (using count from IntermediateAddress::Regular)
+    pub fn interpolate_addr_intermediate(&self, dest: &Self, ia: &IntermediateAddress) -> Result<Self> {
+        if let IntermediateAddress::Regular(regular) = ia {
+            return Ok(self.interpolate_addr(&dest, regular.use_dest_bits() as isize))
+        }
+        fail!("IntermediateAddress::Regular is expected")
+    }
+
+    /// Returns count of the first bits matched in both addresses
+    pub fn count_matching_bits(&self, other: &Self) -> u8 {
+        if self.workchain_id != other.workchain_id {
+            return (self.workchain_id ^ other.workchain_id).leading_zeros() as u8
+        }
+        32 + if self.prefix == other.prefix {
+            64
+        } else {
+            (self.prefix ^ other.prefix).leading_zeros() as u8
+        }
     }
 }
 
@@ -193,13 +251,15 @@ impl ShardIdent {
     } 
 
     /// Get bitstring-key for BinTree operation for Shard
-    pub fn shard_key(&self) -> SliceData {
+    pub fn shard_key(&self, include_workchain: bool) -> SliceData {
         let mut cell = BuilderData::new();
-        let mut p = self.prefix;
-        debug_assert!(p != 0);
-        while p != 1 << 63 {
-            cell.append_bit_bool(p >> 63 != 0).unwrap(); // unsafe - cell is longer than 64 bit
-            p = p << 1;
+        if include_workchain {
+            cell.append_i32(self.workchain_id).unwrap();
+        }
+        if self.shard_prefix_with_tag() != SHARD_FULL {
+            let prefix_len = self.prefix_len();
+            let prefix = self.shard_prefix_with_tag() >> (64 - prefix_len);
+            cell.append_bits(prefix as usize, prefix_len as usize).unwrap();
         }
         cell.into()
     }
@@ -234,6 +294,14 @@ impl ShardIdent {
             self.prefix == SHARD_FULL ||
             ((descendant.prefix & !((self.prefix_lower_bits() << 1) - 1)) == self.shard_prefix_without_tag())
         )
+    }
+
+    pub fn intersect_with(&self, other: &Self) -> bool {
+        if self.workchain_id != other.workchain_id {
+            return false
+        }
+        let z = std::cmp::max(self.prefix_lower_bits(), other.prefix_lower_bits());
+        return (self.shard_prefix_with_tag() ^ other.shard_prefix_with_tag()) & ((!z + 1) << 1) == 0
     }
 
     /// It is copy from t-node. TODO: investigate, add comment and tests
@@ -629,6 +697,10 @@ impl ShardStateUnsplit {
         &self.shard_id
     }
 
+    pub fn set_shard(&mut self, shard: ShardIdent) {
+        self.shard_id = shard;
+    }
+
     pub fn shard_mut(&mut self) -> &mut ShardIdent {
         &mut self.shard_id
     }
@@ -777,31 +849,31 @@ impl ShardStateUnsplit {
         Ok(())
     }
 
-    pub fn split(&self) -> Result<ShardStateSplit> {
+    pub fn split(&self) -> Result<(ShardStateUnsplit, ShardStateUnsplit)> {
         let mut left = self.clone();
         let mut right = self.clone();
         let (ls, rs) = self.shard().split()?;
         left.shard_id = ls;
         right.shard_id = rs;
-        let split_key = self.shard_id.shard_key();
-        let info = self.read_out_msg_queue_info()?;
-        let (li, ri) = info.split(&split_key)?;
-        left.write_out_msg_queue_info(&li)?;
-        right.write_out_msg_queue_info(&ri)?;
+        let split_key = self.shard_id.shard_key(false);
         let accounts = self.read_accounts()?;
         let (al, ar) = accounts.split(&split_key)?;
         left.write_accounts(&al)?;
         right.write_accounts(&ar)?;
         left.total_balance = al.root_extra().balance().clone();
         right.total_balance = ar.root_extra().balance().clone();
+        let info = self.read_out_msg_queue_info()?;
+        let (li, ri) = info.split(self.shard())?;
+        left.write_out_msg_queue_info(&li)?;
+        right.write_out_msg_queue_info(&ri)?;
         // debug_assert!(self.master_ref.is_some());
         // TODO: other
-        Ok(ShardStateSplit { left, right })
+        Ok((left, right))
     }
 
     pub fn merge_with(&mut self, other: &ShardStateUnsplit) -> Result<()> {
         self.shard_id = self.shard_id.merge()?;
-        let merge_key = self.shard_id.shard_key();
+        let merge_key = self.shard_id.shard_key(false);
         let mut accounts = self.read_accounts()?;
         accounts.merge(&other.read_accounts()?, &merge_key)?;
         self.write_accounts(&accounts)?;

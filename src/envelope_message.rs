@@ -49,12 +49,32 @@ pub enum IntermediateAddress {
     Ext(IntermediateAddressExt),
 }
 
+impl IntermediateAddress {
+    pub fn use_src_bits(use_src_bits: u8) -> Result<Self> {
+        Ok(IntermediateAddress::Regular(
+            IntermediateAddressRegular::with_use_src_bits(use_src_bits)?
+        ))
+    }
+
+    pub fn use_dest_bits(use_dest_bits: u8) -> Result<Self> {
+        Ok(IntermediateAddress::Regular(
+            IntermediateAddressRegular::with_use_dest_bits(use_dest_bits)?
+        ))
+    }
+
+    pub fn full_dest() -> Self {
+        IntermediateAddress::Regular(
+            IntermediateAddressRegular::new()
+        )
+    }
+}
+
 impl Default for IntermediateAddress{
     fn default() -> Self{
         IntermediateAddress::Regular(
             IntermediateAddressRegular{
                 use_src_bits:0
-        })
+            })
     }
 }
 
@@ -93,12 +113,12 @@ impl Serializable for IntermediateAddress{
             }
         };
         Ok(())
-    } 
+    }
 }
 
 impl Deserializable for IntermediateAddress{
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
-        *self = 
+        *self =
             if cell.get_next_bit()? {
                 if cell.get_next_bit()? { // tag = 11
                     let mut addr = IntermediateAddressExt::default();
@@ -116,7 +136,7 @@ impl Deserializable for IntermediateAddress{
             };
 
         Ok(())
-    } 
+    }
 }
 
 /////////////////////////////////////////////////////////////////
@@ -126,7 +146,7 @@ impl Deserializable for IntermediateAddress{
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntermediateAddressRegular {
-    pub use_src_bits: u8,
+    use_src_bits: u8,
 }
 
 impl Default for IntermediateAddressRegular {
@@ -137,31 +157,41 @@ impl Default for IntermediateAddressRegular {
     }
 }
 
+pub static FULL_BITS: u8 = 96;
+
 impl IntermediateAddressRegular {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         IntermediateAddressRegular {
             use_src_bits: 0
         }
     }
 
-    pub fn with_use_src_bits(use_bits: u8) -> Result<Self> {
-        if use_bits > 96 { 
-            fail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+    pub fn with_use_src_bits(use_src_bits: u8) -> Result<Self> {
+        if use_src_bits > FULL_BITS {
+            fail!(BlockError::InvalidArg(format!("use_src_bits must be <= {}", FULL_BITS)))
         }
         Ok(IntermediateAddressRegular {
-            use_src_bits: use_bits
+            use_src_bits
         })
     }
 
-    pub fn get_use_src_bits(&self) -> u8 {
+    pub fn with_use_dest_bits(use_dest_bits: u8) -> Result<Self> {
+        Self::with_use_src_bits(FULL_BITS - use_dest_bits)
+    }
+
+    pub fn use_src_bits(&self) -> u8 {
         self.use_src_bits
     }
 
-    pub fn set_use_src_bits(&mut self, use_bits: u8) -> Result<()>{
-        if use_bits > 96 { 
-            fail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+    pub fn use_dest_bits(&self) -> u8 {
+        FULL_BITS - self.use_src_bits()
+    }
+
+    pub fn set_use_src_bits(&mut self, use_src_bits: u8) -> Result<()>{
+        if use_src_bits > FULL_BITS {
+            fail!(BlockError::InvalidArg(format!("use_src_bits must be <= {}", FULL_BITS)))
         }
-        self.use_src_bits = use_bits;
+        self.use_src_bits = use_src_bits;
         Ok(())
     }
 }
@@ -171,18 +201,18 @@ impl Serializable for IntermediateAddressRegular{
         // write 7-bit from use_src_bits
         cell.append_raw(&[self.use_src_bits << 1], 7)?;
         Ok(())
-    } 
+    }
 }
 
 impl Deserializable for IntermediateAddressRegular{
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
-        let use_bits = cell.get_next_bits(7)?[0] >> 1;    // read 7 bit into use_src_bits
-        if use_bits > 96 { 
-            fail!(BlockError::InvalidArg("use_bits must be <= 96".to_string()))
+        let use_src_bits = cell.get_next_bits(7)?[0] >> 1;    // read 7 bit into use_src_bits
+        if use_src_bits > FULL_BITS {
+            fail!(BlockError::InvalidArg(format!("use_src_bits must be <= {}", FULL_BITS)))
         }
-        self.use_src_bits = use_bits;
+        self.use_src_bits = use_src_bits;
         Ok(())
-    } 
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -231,7 +261,7 @@ impl Serializable for IntermediateAddressSimple{
         self.workchain_id.write_to(cell)?;
         self.addr_pfx.write_to(cell)?;
         Ok(())
-    } 
+    }
 }
 
 impl Deserializable for IntermediateAddressSimple{
@@ -239,7 +269,7 @@ impl Deserializable for IntermediateAddressSimple{
         self.workchain_id.read_from(cell)?;
         self.addr_pfx.read_from(cell)?;
         Ok(())
-    } 
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -288,7 +318,7 @@ impl Serializable for IntermediateAddressExt {
         self.workchain_id.write_to(cell)?;
         self.addr_pfx.write_to(cell)?;
         Ok(())
-    } 
+    }
 }
 
 impl Deserializable for IntermediateAddressExt {
@@ -296,7 +326,7 @@ impl Deserializable for IntermediateAddressExt {
         self.workchain_id.read_from(cell)?;
         self.addr_pfx.read_from(cell)?;
         Ok(())
-    } 
+    }
 }
 
 // msg_envelope#4 
@@ -404,7 +434,7 @@ impl Serializable for MsgEnvelope{
         self.fwd_fee_remaining.write_to(cell)?;
         cell.append_reference(self.msg.write_to_new_cell()?);
         Ok(())
-    } 
+    }
 }
 
 impl Deserializable for MsgEnvelope{
@@ -423,5 +453,5 @@ impl Deserializable for MsgEnvelope{
         self.fwd_fee_remaining.read_from(cell)?;
         self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
-    } 
+    }
 }
