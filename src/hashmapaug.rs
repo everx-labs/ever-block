@@ -176,32 +176,43 @@ macro_rules! define_HashmapAugE {
             }
             /// gets item with minimal key
             pub fn get_min<K: Deserializable>(&self, signed: bool) -> Result<Option<(K, $x_type)>> {
-                match ton_types::dictionary::get_min::<HashmapAugE<$x_type, $y_type>>(
-                    self.0.data().cloned(), self.0.bit_len(), self.0.bit_len(), signed, &mut 0)? {
-                        (Some(key), Some(mut val)) => {
-                            let key = K::construct_from(&mut key.into())?;
-                            let val = <$x_type>::construct_from(&mut val)?;
-                            Ok(Some((key, val)))
-                        },
-                        _ => Ok(None)
-                    }
+                match self.0.find_key(false, signed)? {
+                    Some((key, mut val)) => {
+                        let key = K::construct_from(&mut key.into())?;
+                        let val = <$x_type>::construct_from(&mut val)?;
+                        // let _aug = <$y_type>::construct_from(&mut val)?;
+                        Ok(Some((key, val)))
+                    },
+                    None => Ok(None)
+                }
             }
             /// gets item with maximal key
             pub fn get_max<K: Deserializable>(&self, signed: bool) -> Result<Option<(K, $x_type)>> {
-                match ton_types::dictionary::get_max::<HashmapAugE<$x_type, $y_type>>(
-                    self.0.data().cloned(), self.0.bit_len(), self.0.bit_len(), signed, &mut 0)? {
-                        (Some(key), Some(mut val)) => {
-                            let key = K::construct_from(&mut key.into())?;
-                            let val = <$x_type>::construct_from(&mut val)?;
-                            Ok(Some((key, val)))
-                        },
-                        _ => Ok(None)
-                    }
+                match self.0.find_key(true, signed)? {
+                    Some((key, mut val)) => {
+                        let key = K::construct_from(&mut key.into())?;
+                        let val = <$x_type>::construct_from(&mut val)?;
+                        // let _aug = <$y_type>::construct_from(&mut val)?;
+                        Ok(Some((key, val)))
+                    },
+                    None => Ok(None)
+                }
+            }
+            pub fn find_key<K: Deserializable>(&self, max: bool, signed: bool) -> Result<K> {
+                match self.0.find_key(max, signed)? {
+                    Some((mut key, _)) => K::construct_from(&mut key),
+                    None => Ok(K::default())
+                }
             }
             /// scans differences in two hashmaps
             pub fn scan_diff<K, F>(&self, _other: &Self, _op: F) -> Result<bool>
             where K: Deserializable, F: FnMut(K, Option<($x_type, $y_type)>, Option<($x_type, $y_type)>) -> Result<bool> {
                 unimplemented!()
+            }
+
+            pub fn filter<K, F>(&mut self, _op: F) -> Result<()>
+            where K: Deserializable, F: FnMut(K, $x_type, $y_type) -> Result<bool> {
+                todo!("new task")
             }
         }
 
@@ -294,6 +305,16 @@ impl<X: Default + Deserializable + Serializable, Y: Augmentable> HashmapAugE<X, 
             }
         }
         Ok(())
+    }
+    pub fn find_key(&self, max: bool, signed: bool) -> Result<Option<(SliceData, SliceData)>> {
+        let result = match max {
+            true  => ton_types::get_max::<Self>(self.data().cloned(), self.bit_len(), self.bit_len(), signed, &mut 0)?,
+            false => ton_types::get_min::<Self>(self.data().cloned(), self.bit_len(), self.bit_len(), signed, &mut 0)?
+        };
+        match result {
+            (Some(key), Some(val)) => Ok(Some((key.into(), val))),
+            _ => Ok(None)
+        }
     }
 }
 

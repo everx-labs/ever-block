@@ -423,8 +423,19 @@ impl MsgAddressInt {
             MsgAddressInt::AddrVar(addr_var) => addr_var.anycast.clone()
         }
     }
-    pub fn extract_std_address(&self) -> Option<(i32, AccountId)> {
-        unimplemented!("bool MsgAddressInt::extract_std_address(vm::CellSlice& cs, ton::WorkchainId& workchain, ton::StdSmcAddress& addr,")
+    pub fn extract_std_address(&self, do_rewrite: bool) -> Result<(i32, AccountId)> {
+        let (workchain_id, mut account_id, anycast_opt) = match self {
+            MsgAddressInt::AddrStd(addr_std) => (addr_std.workchain_id as i32, addr_std.address.clone(), &addr_std.anycast),
+            MsgAddressInt::AddrVar(addr_var) => (addr_var.workchain_id, addr_var.address.clone(), &addr_var.anycast)
+        };
+
+        if let Some(ref anycast) = anycast_opt {
+            if do_rewrite {
+                account_id.overwrite_prefix(&anycast.rewrite_pfx)?;
+            }
+        }
+
+        Ok((workchain_id, account_id))
     }
 }
 

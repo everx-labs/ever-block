@@ -92,9 +92,10 @@ impl BlockIdExt {
             file_hash: UInt256::default(),
         }
     }
-    pub fn shard(&self) -> &ShardIdent {
-        &self.shard_id
-    }
+
+    pub fn shard(&self) -> &ShardIdent { &self.shard_id }
+
+    pub fn seq_no(&self) -> u32 { self.seq_no }
 }
 
 impl Serializable for BlockIdExt {
@@ -242,7 +243,6 @@ impl BlockInfo {
 
     pub fn version(&self) -> u32 { self.version }
     pub fn set_version(&mut self, version: u32) { self.version = version; }
-
 
     pub fn before_split(&self) -> bool { self.before_split }
     pub fn set_before_split(&mut self, before_split: bool) { self.before_split = before_split }
