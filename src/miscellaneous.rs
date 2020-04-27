@@ -14,7 +14,7 @@
 
 use crate::{
     define_HashmapE,
-    config_params::ConfigParams,
+    master::McStateExtra,
     outbound_messages::EnqueuedMsg,
     Serializable, Deserializable,
 };
@@ -155,7 +155,7 @@ pub struct ProcessedUpto {
     pub mc_seqno: u32,
     pub last_msg_lt: u64,
     pub last_msg_hash: UInt256,
-    pub ref_config: Option<ConfigParams>,
+    pub ref_extra: Option<McStateExtra>,
 }
 
 impl ProcessedUpto {
@@ -167,7 +167,7 @@ impl ProcessedUpto {
             mc_seqno: 0,
             last_msg_lt,
             last_msg_hash,
-            ref_config: None,
+            ref_extra: None,
         }   
     }
     pub fn already_processed(&self, enq: &EnqueuedMsg) -> bool {

@@ -78,13 +78,10 @@ impl AccountIdPrefixFull {
     /// Constructs AccountIdPrefixFull prefix for specified address with checking for validity (workchain_id != 0x80000000).
     /// Returns Err in a case of insufficient bits (less than 64) in the address slice or invalid address.
     pub fn checked_prefix(address: &MsgAddressInt) -> Result<Self> {
-        Self::prefix(address)
-            .and_then(|result| {
-                if result.is_valid() {
-                    return Ok(result)
-                }
-                fail!("Address is invalid")
-            })
+        Self::prefix(address).and_then(|result| match result.is_valid() {
+            true => Ok(result),
+            false => fail!("Address is invalid")
+        })
     }
 
     /// Constructs AccountIdPrefixFull prefix for specified address and stores it in the "to" argument.
@@ -131,19 +128,62 @@ impl AccountIdPrefixFull {
     /// Returns count of the first bits matched in both addresses
     pub fn count_matching_bits(&self, other: &Self) -> u8 {
         if self.workchain_id != other.workchain_id {
-            return (self.workchain_id ^ other.workchain_id).leading_zeros() as u8
-        }
-        32 + if self.prefix == other.prefix {
-            64
+            (self.workchain_id ^ other.workchain_id).leading_zeros() as u8
+        } else if self.prefix != other.prefix {
+            32 + (self.prefix ^ other.prefix).leading_zeros() as u8
         } else {
-            (self.prefix ^ other.prefix).leading_zeros() as u8
+            96
+        }
+    }
+
+    /// Performs Hypercube Routing from self to dest address.
+    /// Result: (transit_addr_dest_bits, nh_addr_dest_bits)
+    pub fn perform_hypercube_routing(&self, dest: &AccountIdPrefixFull, cur_shard: &ShardIdent, ia: &IntermediateAddress)
+                                     -> Result<Option<(IntermediateAddress, IntermediateAddress)>>
+    {
+        let transit = self.interpolate_addr_intermediate(dest, ia)?;
+        if !cur_shard.contains_full_prefix(&transit) {
+            return Ok(None);
+        }
+
+        if cur_shard.contains_full_prefix(&dest) {
+            // If destination is in this shard, set cur:=next_hop:=dest
+            return Ok(Some((IntermediateAddress::full_dest(), IntermediateAddress::full_dest())));
+        }
+
+        if transit.is_masterchain() || dest.is_masterchain() {
+            // Route messages to/from masterchain directly
+            return Ok(Some((ia.clone(), IntermediateAddress::full_dest())))
+        }
+
+        if transit.workchain_id != dest.workchain_id {
+            return Ok(Some((ia.clone(), IntermediateAddress::use_dest_bits(32)?)));
+        }
+
+        let x = cur_shard.prefix & (cur_shard.prefix - 1);
+        let y = cur_shard.prefix | (cur_shard.prefix - 1);
+        let t = transit.prefix;
+        let q = dest.prefix ^ t;
+        // Top i bits match, next 4 bits differ:
+        let mut i = q.leading_zeros() as u8 & 0xFC;
+        let mut m = u64::max_value() >> i;
+        loop {
+            m >>= 4;
+            let h = t ^ (q & !m);
+            i += 4;
+            if h < x || h > y {
+                return Ok(Some((
+                    IntermediateAddress::use_dest_bits(28 + i)?,
+                    IntermediateAddress::use_dest_bits(32 + i)?
+                )));
+            }
         }
     }
 }
 
 impl fmt::Display for AccountIdPrefixFull {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.workchain_id, self.prefix)
+        write!(f, "{}:{:X}", self.workchain_id, self.prefix)
     }
 }
 
@@ -195,7 +235,7 @@ impl ShardIdent {
         if (shard_prefix_tagged & (!0 >> (MAX_SPLIT_DEPTH + 1))) != 0 {
             fail!(
                 BlockError::InvalidArg(
-                    format!("Shard prefix can't longer than {}", MAX_SPLIT_DEPTH)
+                    format!("Shard prefix {:16X} cannot be longer than {}", shard_prefix_tagged, MAX_SPLIT_DEPTH)
                 )
             )
         }
@@ -296,12 +336,23 @@ impl ShardIdent {
         )
     }
 
+    // 1 =           10010    11000    11100    11100    01100
+    // 2 =           01100    00110    01110    11110    01110
+    // z =           00100    01000    00100    00100    00100
+    // !z =          11011    10111    11011    11011    11011
+    // !z + 1 =      11100    11000    11100    11100    11100
+    // !z + 1 << 1 = 11000    10000    11000    11000    11000
+    // x =           11110    11110    10010    00010    00010
+    // r =           11000    10000    10000    00000    00000
+    /// cheks if one shard fully includes other
     pub fn intersect_with(&self, other: &Self) -> bool {
         if self.workchain_id != other.workchain_id {
             return false
         }
         let z = std::cmp::max(self.prefix_lower_bits(), other.prefix_lower_bits());
-        return (self.shard_prefix_with_tag() ^ other.shard_prefix_with_tag()) & ((!z + 1) << 1) == 0
+        let z = (!z + 1) << 1;
+        let x = self.shard_prefix_with_tag() ^ other.shard_prefix_with_tag();
+        x & z == 0
     }
 
     /// It is copy from t-node. TODO: investigate, add comment and tests
@@ -440,11 +491,12 @@ impl ShardIdent {
     }
 
     pub fn minus_one(&self) -> Result<Self> {
-        Self::with_tagged_prefix(self.workchain_id, self.prefix - 1)
+        Self::with_tagged_prefix(self.workchain_id, (self.prefix - 1) & (!0 << 64 - MAX_SPLIT_DEPTH))
     }
 
+    // it seems not change
     pub fn plus_one(&self) -> Result<Self> {
-        Self::with_tagged_prefix(self.workchain_id, self.prefix + 1)
+        Self::with_tagged_prefix(self.workchain_id, (self.prefix + 1) & (!0 << 64 - MAX_SPLIT_DEPTH))
     }
 
     // returns all 0 and first 1 from right to left
@@ -462,7 +514,7 @@ impl ShardIdent {
 
 impl Display for ShardIdent {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}, {}", self.workchain_id, self.shard_prefix_as_str_with_tag())
+        write!(f, "{}:{}", self.workchain_id, self.shard_prefix_as_str_with_tag())
     }
 }
 
@@ -487,7 +539,7 @@ impl Deserializable for ShardIdent {
         if shard_pfx_bits > MAX_SPLIT_DEPTH {
             fail!(
                 BlockError::InvalidArg(
-                    format!("Shard prefix can't longer than {}", MAX_SPLIT_DEPTH)
+                    format!("Shard prefix bits {} cannot be longer than {}", shard_pfx_bits, MAX_SPLIT_DEPTH)
                 )
             )
         }

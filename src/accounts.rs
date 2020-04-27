@@ -849,7 +849,7 @@ impl Account {
             ss
                 .read_accounts()?
                 .get(&self.get_addr().unwrap().get_address())?
-                .ok_or(
+                .ok_or_else(|| 
                     error!(
                         BlockError::InvalidArg(
                             "Account doesn't belong to given shard state".to_string()

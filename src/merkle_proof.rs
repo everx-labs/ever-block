@@ -218,7 +218,7 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
         )?;
 
     let account_block = account_blocks.get(tr.account_id())?
-        .ok_or(BlockError::WrongMerkleProof("No account block in proof".to_string()))?;
+        .ok_or_else(|| BlockError::WrongMerkleProof("No account block in proof".to_string()))?;
 
     // find transaction
     let tr_parent_slice_opt = account_block.transactions().get_as_slice(&tr.logical_time())

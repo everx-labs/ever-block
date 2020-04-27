@@ -1445,7 +1445,7 @@ impl Transaction {
             .read_extra()?
             .read_account_blocks()?
             .get(self.account_id())?
-            .ok_or(
+            .ok_or_else(|| 
                 BlockError::InvalidArg(
                     "Transaction doesn't belong to given block \
                      (can't find account block)".to_string() 
@@ -1453,7 +1453,7 @@ impl Transaction {
             )?
             .transactions()
             .get(&self.logical_time())?
-            .ok_or(
+            .ok_or_else(|| 
                 BlockError::InvalidArg(
                     "Transaction doesn't belong to given block".to_string()
                 )
@@ -1658,11 +1658,11 @@ impl AccountBlock {
         self.transactions.root_extra()
     }
     /// count of transactions
-    pub fn transaction_count(&self) -> Result<u64> {
-        Ok(match self.transactions.is_empty() {
-            true => 0,
-            false => self.transactions.find_key::<u64>(true, false)? - self.transactions.find_key::<u64>(false, false)?
-        })
+    pub fn transaction_count(&self) -> Result<usize> {
+        match self.transactions.is_empty() {
+            true => Ok(0),
+            false => self.transactions.len()
+        }
     }
     /// update
     pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> Result<()> {
@@ -1680,7 +1680,7 @@ impl AccountBlock {
                 .repr_hash();
             let new_hash = new_state.read_accounts()?
                 .get_as_slice(&self.account_addr)?
-                .ok_or(BlockError::Other("Account should be in new shard state".to_string()))?
+                .ok_or_else(|| BlockError::Other("Account should be in new shard state".to_string()))?
                 .into_cell()
                 .repr_hash();
             self.write_state_update(&HashUpdate::with_hashes(old_hash, new_hash))?;

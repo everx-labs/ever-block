@@ -305,7 +305,7 @@ impl ValidatorSet {
         let mut total_weight = 0;
         for i in 0..list.len() {
             list[i].prev_weight_sum = total_weight;
-            total_weight = total_weight.checked_add(list[i].weight).ok_or(
+            total_weight = total_weight.checked_add(list[i].weight).ok_or_else(|| 
                 BlockError::InvalidData(format!("Validator's total weight is more than 2^64"))
             )?;
         }
@@ -452,7 +452,7 @@ impl ValidatorSet {
         for vd in subset.iter() {
             hasher.write(vd.public_key.key_bytes());
             hasher.write(&vd.weight.to_le_bytes());
-            let addr = vd.adnl_addr.as_ref().ok_or(
+            let addr = vd.adnl_addr.as_ref().ok_or_else(|| 
                 BlockError::InvalidData("At least one validator doesn't have address".to_string())
             )?;
             hasher.write(addr.as_slice());
@@ -507,7 +507,7 @@ impl Deserializable for ValidatorSet {
         self.list.clear();
         let mut total_weight = 0;
         for i in 0..self.total.0 {
-            let mut val = validators.get(&(i as u16))?.ok_or(
+            let mut val = validators.get(&(i as u16))?.ok_or_else(|| 
                 BlockError::InvalidData(format!("Validator's hash map doesn't contain validator with index {}", i))
             )?;
             val.prev_weight_sum = total_weight;

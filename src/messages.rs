@@ -1342,7 +1342,7 @@ impl Message {
                 .read_extra()?
                 .read_in_msg_descr()?
                 .get(&msg_hash)?
-                .ok_or(
+                .ok_or_else(|| 
                     BlockError::InvalidArg(
                         "Message isn't belonged given block's in_msg_descr".to_string()
                     )
@@ -1353,7 +1353,7 @@ impl Message {
                 .read_extra()?
                 .read_out_msg_descr()?
                 .get(&msg_hash)?
-                .ok_or(
+                .ok_or_else(|| 
                     BlockError::InvalidArg(
                         "Message isn't belonged given block's out_msg_descr".to_string()
                     )

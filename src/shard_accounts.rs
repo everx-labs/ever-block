@@ -46,14 +46,17 @@ impl ShardAccounts {
     }
 
     pub fn account(&self, account_id: &AccountId) -> Result<Option<ShardAccount>> {
-        match self.0.get_with_aug(account_id.clone(), &mut 0)? {
-            (Some(mut slice), _aug) => Ok(Some(ShardAccount::construct_from(&mut slice)?)),
-            _ => Ok(None)
+        match self.0.get(account_id.clone())? {
+            Some(ref mut slice) => Ok(Some(ShardAccount::construct_from(slice)?)),
+            None => Ok(None)
         }
     }
 
     pub fn balance(&self, account_id: &AccountId) -> Result<Option<DepthBalanceInfo>> {
-        self.0.get_with_aug(account_id.clone(), &mut 0).map(|result| result.1)
+        match self.0.get_with_aug(account_id.clone())? {
+            Some((_, aug)) => Ok(Some(aug)),
+            None => Ok(None)
+        }
     }
 
     pub fn full_balance(&self) -> &CurrencyCollection {

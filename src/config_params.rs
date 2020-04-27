@@ -971,7 +971,7 @@ impl ConfigParam18 {
 
     /// get value by index
     pub fn get(&self, index: u32) -> Result<StoragePrices> {
-        self.map.get(&index).and_then(|sp| sp.ok_or(error!(BlockError::InvalidIndex(index as usize))))
+        self.map.get(&index).and_then(|sp| sp.ok_or_else(|| error!(BlockError::InvalidIndex(index as usize))))
     }
 
     /// insert value
@@ -2470,7 +2470,10 @@ impl ConfigParam39 {
 
     /// get value by key
     pub fn get(&self, key: &UInt256) -> Result<ValidatorSignedTempKey> {
-        self.validator_keys.get(key).and_then(|vtk| vtk.ok_or(error!(BlockError::InvalidArg(key.to_hex_string()))))
+        self
+            .validator_keys
+            .get(key)
+            .and_then(|vtk| vtk.ok_or_else(|| error!(BlockError::InvalidArg(key.to_hex_string()))))
     }
 
     /// insert value

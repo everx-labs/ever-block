@@ -722,9 +722,14 @@ macro_rules! define_HashmapE {
             pub fn split(&self, split_key: &SliceData) -> Result<(Self, Self)> {
                 self.0.split(split_key).map(|(left, right)| (Self(left), Self(right)))
             }
-            pub fn scan_diff<K, F>(&self, _other: &Self, _op: F) -> Result<bool>
+            pub fn scan_diff<K, F>(&self, other: &Self, mut op: F) -> Result<bool>
             where K: Deserializable, F: FnMut(K, Option<$x_type>, Option<$x_type>) -> Result<bool> {
-                unimplemented!()
+                self.0.scan_diff(&other.0, |mut key, value1, value2| {
+                    let key = K::construct_from(&mut key)?;
+                    let value1 = value1.map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()?;
+                    let value2 = value2.map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()?;
+                    op(key, value1, value2)
+                })
             }
         }
 
