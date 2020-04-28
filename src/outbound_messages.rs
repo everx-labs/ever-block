@@ -179,7 +179,7 @@ impl OutMsgQueue {
 
     pub fn filter_queue(&mut self, _old_shard: &ShardIdent, _subshard: &ShardIdent) -> Result<()> {
         self.filter(|_key: OutMsgQueueKey, _enq, _lt| {
-            todo!("need to port code")
+            Ok(false)
         })
     }
 
@@ -216,7 +216,7 @@ impl OutMsgQueueKey {
         let dst = msg.dst().unwrap_or_default();
         let src_prefix  = AccountIdPrefixFull::prefix(&src)?;
         let dest_prefix = AccountIdPrefixFull::prefix(&dst)?;
-        let next_hop = src_prefix.interpolate_addr_intermediate(&dest_prefix, &env.next_addr)?;
+        let next_hop = src_prefix.interpolate_addr_intermediate(&dest_prefix, &env.next_addr())?;
         Ok(Self::with_account_prefix(&next_hop, hash))
     }
 

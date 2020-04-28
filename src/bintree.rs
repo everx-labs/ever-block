@@ -46,8 +46,22 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
             Ok(None)
         }
     }
-    fn find(&self, _key: SliceData) -> Result<Option<(BuilderData, X)>> {
-        unimplemented!()
+
+    fn find(&self, mut key: SliceData) -> Result<Option<(SliceData, X)>> {
+        let mut key_original = key.clone();
+        let mut cursor = self.get_data();
+        while cursor.get_next_bit()? {
+            if cursor.remaining_references() < 2 {
+                // fork doesn't have two refs - bad data
+                fail!(BlockError::InvalidData("Fork doesn't have two refs".to_string()))
+            }
+            match key.get_next_bit_int() {
+                Ok(x) => cursor = cursor.reference(x).expect("There must be at least two links").into(),
+                _ => return Ok(None) // key is shorter nothing to return
+            }
+        }
+        key_original.shrink_by_remainder(&key);
+        X::construct_from(&mut cursor).map(|x| Some((key_original, x)))
     }
     /// Iterates over all items
     fn iterate<F: FnMut(SliceData, X) -> Result<bool>>(&self, p: &mut F) -> Result<bool> {

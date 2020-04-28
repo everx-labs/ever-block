@@ -96,10 +96,10 @@ impl AccountIdPrefixFull {
     }
 
     /// Combines dest_bits bits from dest, remaining 64 - dest_bits bits from self
-    pub fn interpolate_addr(&self, dest: &Self, dest_bits: isize) -> Self {
-        if dest_bits <= 0 {
+    pub fn interpolate_addr(&self, dest: &Self, dest_bits: u8) -> Self {
+        if dest_bits == 0 {
             self.clone()
-        } else if dest_bits >= FULL_BITS as isize {
+        } else if dest_bits >= FULL_BITS {
             dest.clone()
         } else if dest_bits >= 32 {
             let mask = u64::max_value() >> (dest_bits - 32);
@@ -120,7 +120,7 @@ impl AccountIdPrefixFull {
     /// (using count from IntermediateAddress::Regular)
     pub fn interpolate_addr_intermediate(&self, dest: &Self, ia: &IntermediateAddress) -> Result<Self> {
         if let IntermediateAddress::Regular(regular) = ia {
-            return Ok(self.interpolate_addr(&dest, regular.use_dest_bits() as isize))
+            return Ok(self.interpolate_addr(&dest, regular.use_dest_bits()))
         }
         fail!("IntermediateAddress::Regular is expected")
     }
@@ -183,7 +183,7 @@ impl AccountIdPrefixFull {
 
 impl fmt::Display for AccountIdPrefixFull {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{:X}", self.workchain_id, self.prefix)
+        write!(f, "{}:{:016X}", self.workchain_id, self.prefix)
     }
 }
 
@@ -336,6 +336,32 @@ impl ShardIdent {
         )
     }
 
+    // returns all 0 and first 1 from right to left
+    // i.e. 1010000 -> 10000
+    pub fn lower_bits(prefix: u64) -> u64 {
+        prefix & Self::negate_bits(prefix)
+    }
+
+    pub fn negate_bits(prefix: u64) -> u64 {
+        !prefix + 1
+    }
+
+    // pub fn is_ancestor_prefix(prefix: u64, descendant: u64) -> bool {
+    //     prefix == SHARD_FULL ||
+    //         ((descendant & !((Self::lower_bits(prefix) << 1) - 1)) == prefix - Self::lower_bits(prefix))
+    // }
+
+    pub fn contains(parent: u64, child: u64) -> bool {
+        let x = Self::lower_bits(parent);
+        ((parent ^ child) & (Self::negate_bits(x) << 1)) == 0
+    }
+    
+    pub fn is_ancestor(parent: u64, child: u64) -> bool {
+        let x = Self::lower_bits(parent);
+        let y = Self::lower_bits(child);
+        x >= y && ((parent ^ child) & (Self::negate_bits(x) << 1)) == 0
+    }
+    
     // 1 =           10010    11000    11100    11100    01100
     // 2 =           01100    00110    01110    11110    01110
     // z =           00100    01000    00100    00100    00100
@@ -350,7 +376,7 @@ impl ShardIdent {
             return false
         }
         let z = std::cmp::max(self.prefix_lower_bits(), other.prefix_lower_bits());
-        let z = (!z + 1) << 1;
+        let z = Self::negate_bits(z) << 1;
         let x = self.shard_prefix_with_tag() ^ other.shard_prefix_with_tag();
         x & z == 0
     }
@@ -364,7 +390,7 @@ impl ShardIdent {
         let ys = other.shard_prefix_with_tag();
         let xl = self.prefix_lower_bits();
         let yl = other.prefix_lower_bits();
-        let z = (xs ^ ys) & (!(std::cmp::max(xl, yl) << 1) + 1);
+        let z = (xs ^ ys) & Self::negate_bits(std::cmp::max(xl, yl) << 1);
         if z == 0 {
             return true
         }
@@ -442,7 +468,7 @@ impl ShardIdent {
     }
 
     pub fn sibling(&self) -> ShardIdent {
-        let prefix = self.prefix ^ ((self.prefix & (!self.prefix + 1)) << 1);
+        let prefix = self.prefix ^ ((self.prefix & Self::negate_bits(self.prefix)) << 1);
         Self {
             workchain_id: self.workchain_id,
             prefix,
@@ -490,19 +516,20 @@ impl ShardIdent {
         }
     }
 
-    pub fn minus_one(&self) -> Result<Self> {
-        Self::with_tagged_prefix(self.workchain_id, (self.prefix - 1) & (!0 << 64 - MAX_SPLIT_DEPTH))
+    // TODO: need to check max split first
+    pub fn left_ancestor_mask(&self) -> Result<Self> {
+        Self::with_tagged_prefix(self.workchain_id, (self.prefix - 1) & (!0 << (64 - MAX_SPLIT_DEPTH)))
     }
 
-    // it seems not change
-    pub fn plus_one(&self) -> Result<Self> {
-        Self::with_tagged_prefix(self.workchain_id, (self.prefix + 1) & (!0 << 64 - MAX_SPLIT_DEPTH))
+    // TODO: need to check max split first
+    pub fn right_ancestor_mask(&self) -> Result<Self> {
+        Self::with_tagged_prefix(self.workchain_id, self.prefix + (1 << 64 - MAX_SPLIT_DEPTH))
     }
 
     // returns all 0 and first 1 from right to left
     // i.e. 1010000 -> 10000
     fn prefix_lower_bits(&self) -> u64 {
-        self.prefix & (!self.prefix + 1)
+        Self::lower_bits(self.prefix)
     }
 
     fn add_tag(prefix: u64, len: u8) -> u64 { prefix | (1 << (63 - len)) }

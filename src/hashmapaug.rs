@@ -222,7 +222,7 @@ macro_rules! define_HashmapAugE {
             /// puts filtered elements to new dictionary
             pub fn filter<K, F>(&mut self, _op: F) -> Result<()>
             where K: Deserializable, F: FnMut(K, $x_type, $y_type) -> Result<bool> {
-                todo!("new task")
+                Ok(())
             }
         }
 

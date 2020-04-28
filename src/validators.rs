@@ -343,6 +343,10 @@ impl ValidatorSet {
         &self.list
     }
 
+    pub fn catchain_seqno(&self) -> u32 {
+        unimplemented!()
+    }
+
     pub fn at_weight(&self, weight_pos: u64) -> &ValidatorDescr {
         debug_assert!(weight_pos < self.total_weight);
         debug_assert!(self.list.len() > 0);

@@ -16,10 +16,11 @@ use crate::{
     define_HashmapE,
     master::McStateExtra,
     outbound_messages::EnqueuedMsg,
+    shard::{AccountIdPrefixFull, ShardIdent},
     Serializable, Deserializable,
 };
 use ton_types::{
-    Result, BuilderData, Cell, SliceData, HashmapE, HashmapType, UInt256,
+    error, Result, BuilderData, Cell, SliceData, HashmapE, HashmapType, UInt256,
 };
 
 
@@ -36,69 +37,6 @@ impl ProcessedInfo {
             (Some(key), _value) => ProcessedInfoKey::construct_from(&mut key.into()).map(|key| key.mc_seqno),
             _ => Ok(0)
         }
-    }
-    pub fn already_processed(&self, enq: &EnqueuedMsg) -> Result<bool> {
-        let result = self.iterate(&mut |rec| {
-            Ok(!rec.already_processed(enq))
-        })?;
-        Ok(!result)
-    }
-    pub fn is_reduced(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_simple_update_of(&self, _other: &Self, _ok: &mut bool) -> Option<ProcessedUpto> {
-        unimplemented!()
-    }
-}
-
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
-pub struct ProcessedRec {
-    pub entries: Vec<ProcessedUpto>,
-    pub min_seqno: u32,
-}
-
-impl ProcessedRec {
-    pub fn from_info(&mut self, proc_info: &ProcessedInfo) -> Result<()> {
-        self.min_seqno = proc_info.min_seqno()?;
-        self.entries = proc_info.export_vector()?;
-        Ok(())
-    }
-
-    pub fn min_seqno(&self) -> u32 {
-        self.min_seqno
-    }
-    pub fn already_processed(&self, enq: &EnqueuedMsg) -> Result<bool> {
-        for entry in &self.entries {
-            if !entry.already_processed(enq) {
-                return Ok(true)
-            }
-        }
-        Ok(false)
-    }
-    pub fn is_reduced(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_simple_update_of(&self, _other: &Self, _ok: &mut bool) -> Option<ProcessedUpto> {
-        unimplemented!()
-    }
-}
-
-impl Serializable for ProcessedRec {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        let mut proc_info = ProcessedInfo::default();
-        for entry in &self.entries {
-            proc_info.set(&ProcessedInfoKey::from_rec(entry), entry)?;
-        }
-        proc_info.write_to(cell)?;
-        Ok(())
-    }
-}
-
-impl Deserializable for ProcessedRec {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let proc_info = ProcessedInfo::construct_from(cell)?;
-        self.entries = proc_info.export_vector()?;
-        Ok(())
     }
 }
 
@@ -170,8 +108,46 @@ impl ProcessedUpto {
             ref_extra: None,
         }   
     }
-    pub fn already_processed(&self, enq: &EnqueuedMsg) -> bool {
-        enq.enqueued_lt > self.last_msg_lt
+    pub fn already_processed(&self, enq: &EnqueuedMsg) -> Result<bool> {
+        if enq.enqueued_lt() > self.last_msg_lt {
+            return Ok(false)
+        }
+
+        let env = enq.read_out_msg()?;
+        if !ShardIdent::contains(self.shard, env.next_addr().prefix()?) {
+            return Ok(false)
+        }
+        if enq.enqueued_lt == self.last_msg_lt && self.last_msg_hash < env.message_cell().repr_hash() {
+            return Ok(false)
+        }
+        if env.cur_addr().workchain_id()? == env.next_addr().workchain_id()?
+            && ShardIdent::contains(self.shard, env.cur_addr().prefix()?)
+        {
+            // this branch is needed only for messages generated in the same shard
+            // (such messages could have been processed without a reference from the masterchain)
+            // enable this branch only if an extra boolean parameter is set
+            return Ok(true)
+        }
+        let mut acc = AccountIdPrefixFull::default();
+        acc.prefix = env.cur_addr().prefix()?;
+        let shard_end_lt = self.compute_shard_end_lt(&acc)?;
+
+        Ok(enq.enqueued_lt() < shard_end_lt)
+    }
+    pub fn contains(&self, other: &Self) -> bool {
+        ShardIdent::with_tagged_prefix(0, self.shard).unwrap().is_ancestor_for(&ShardIdent::with_tagged_prefix(0, other.shard).unwrap())
+            && self.mc_seqno >= other.mc_seqno
+            && (self.last_msg_lt > other.last_msg_lt
+            || (self.last_msg_lt == other.last_msg_lt && self.last_msg_hash >= other.last_msg_hash)
+        )
+    }
+    pub fn compute_shard_end_lt(&self, acc: &AccountIdPrefixFull) -> Result<u64> {
+        match self.ref_extra {
+            Some(ref mc) if acc.is_valid() => mc.hashes.get_shard(
+                &ShardIdent::with_tagged_prefix(acc.workchain_id, acc.prefix)?
+            )?.map(|shard| shard.descr().end_lt).ok_or_else(|| error!("Shard not found")),
+            _ => Ok(0)
+        }
     }
 }
 

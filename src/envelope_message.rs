@@ -62,10 +62,37 @@ impl IntermediateAddress {
         ))
     }
 
+    pub fn full_src() -> Self {
+        IntermediateAddress::Regular(
+            IntermediateAddressRegular::with_use_dest_bits(0).unwrap()
+        )
+    }
+
     pub fn full_dest() -> Self {
         IntermediateAddress::Regular(
-            IntermediateAddressRegular::new()
+            IntermediateAddressRegular::with_use_src_bits(0).unwrap()
         )
+    }
+    ///
+    /// Get workchain_id
+    ///
+    pub fn workchain_id(&self) -> Result<i32> {
+        match self {
+            IntermediateAddress::Simple(simple) => Ok(simple.workchain_id() as i32),
+            IntermediateAddress::Ext(ext) => Ok(ext.workchain_id()),
+            _ => fail!("Unsupported address type")
+        }
+    }
+
+    ///
+    /// Get prefix
+    ///
+    pub fn prefix(&self) -> Result<u64> {
+        match self {
+            IntermediateAddress::Simple(simple) => Ok(simple.addr_pfx()),
+            IntermediateAddress::Ext(ext) => Ok(ext.addr_pfx()),
+            _ => fail!("Unsupported address type")
+        }
     }
 }
 
@@ -73,7 +100,7 @@ impl Default for IntermediateAddress{
     fn default() -> Self{
         IntermediateAddress::Regular(
             IntermediateAddressRegular{
-                use_src_bits:0
+                use_dest_bits:0
             })
     }
 }
@@ -81,7 +108,7 @@ impl Default for IntermediateAddress{
 impl PartialOrd<u8> for IntermediateAddress {
     fn partial_cmp(&self, other: &u8) -> Option<Ordering> {
         match self {
-            IntermediateAddress::Regular(ia) => Some(ia.use_src_bits.cmp(other)),
+            IntermediateAddress::Regular(ia) => Some(ia.use_dest_bits.cmp(other)),
             _ => None
         }
     }
@@ -90,7 +117,7 @@ impl PartialOrd<u8> for IntermediateAddress {
 impl PartialEq<u8> for IntermediateAddress {
     fn eq(&self, other: &u8) -> bool {
         match self {
-            IntermediateAddress::Regular(ia) => &ia.use_src_bits == other,
+            IntermediateAddress::Regular(ia) => &ia.use_dest_bits == other,
             _ => false
         }
     }
@@ -141,18 +168,18 @@ impl Deserializable for IntermediateAddress{
 
 /////////////////////////////////////////////////////////////////
 /// 
-/// interm_addr_regular$0 use_src_bits:(#<= 96) = IntermediateAddress;
+/// interm_addr_regular$0 use_dest_bits:(#<= 96) = IntermediateAddress;
 /// 
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntermediateAddressRegular {
-    use_src_bits: u8,
+    use_dest_bits: u8,
 }
 
 impl Default for IntermediateAddressRegular {
     fn default() -> Self {
         IntermediateAddressRegular {
-            use_src_bits: 0
+            use_dest_bits: 0
         }
     }
 }
@@ -160,57 +187,55 @@ impl Default for IntermediateAddressRegular {
 pub static FULL_BITS: u8 = 96;
 
 impl IntermediateAddressRegular {
-    pub fn new() -> Self {
-        IntermediateAddressRegular {
-            use_src_bits: 0
-        }
-    }
-
     pub fn with_use_src_bits(use_src_bits: u8) -> Result<Self> {
         if use_src_bits > FULL_BITS {
             fail!(BlockError::InvalidArg(format!("use_src_bits must be <= {}", FULL_BITS)))
         }
         Ok(IntermediateAddressRegular {
-            use_src_bits
+            use_dest_bits: FULL_BITS - use_src_bits
         })
     }
 
     pub fn with_use_dest_bits(use_dest_bits: u8) -> Result<Self> {
-        Self::with_use_src_bits(FULL_BITS - use_dest_bits)
+        if use_dest_bits > FULL_BITS {
+            fail!(BlockError::InvalidArg(format!("use_dest_bits must be <= {}", FULL_BITS)))
+        }
+        Ok(IntermediateAddressRegular {
+            use_dest_bits
+        })
     }
 
     pub fn use_src_bits(&self) -> u8 {
-        self.use_src_bits
+        FULL_BITS - self.use_dest_bits
     }
 
     pub fn use_dest_bits(&self) -> u8 {
-        FULL_BITS - self.use_src_bits()
+        self.use_dest_bits
     }
 
     pub fn set_use_src_bits(&mut self, use_src_bits: u8) -> Result<()>{
         if use_src_bits > FULL_BITS {
             fail!(BlockError::InvalidArg(format!("use_src_bits must be <= {}", FULL_BITS)))
         }
-        self.use_src_bits = use_src_bits;
+        self.use_dest_bits = FULL_BITS - use_src_bits;
         Ok(())
     }
 }
 
 impl Serializable for IntermediateAddressRegular{
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        // write 7-bit from use_src_bits
-        cell.append_raw(&[self.use_src_bits << 1], 7)?;
+        // write 7-bit from use_dest_bits
+        cell.append_raw(&[self.use_dest_bits << 1], 7)?;
         Ok(())
     }
 }
 
 impl Deserializable for IntermediateAddressRegular{
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
-        let use_src_bits = cell.get_next_bits(7)?[0] >> 1;    // read 7 bit into use_src_bits
-        if use_src_bits > FULL_BITS {
-            fail!(BlockError::InvalidArg(format!("use_src_bits must be <= {}", FULL_BITS)))
+        self.use_dest_bits = cell.get_next_bits(7)?[0] >> 1;    // read 7 bit into use_dest_bits
+        if self.use_dest_bits > FULL_BITS {
+            fail!(BlockError::InvalidArg(format!("use_dest_bits must be <= {}", FULL_BITS)))
         }
-        self.use_src_bits = use_src_bits;
         Ok(())
     }
 }
@@ -337,9 +362,9 @@ impl Deserializable for IntermediateAddressExt {
 // = MsgEnvelope; 
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct MsgEnvelope {
-    pub cur_addr: IntermediateAddress,
-    pub next_addr: IntermediateAddress,
-    pub fwd_fee_remaining: Grams,
+    cur_addr: IntermediateAddress,
+    next_addr: IntermediateAddress,
+    fwd_fee_remaining: Grams,
     msg: ChildCell<Message>,
 }
 
@@ -412,15 +437,15 @@ impl MsgEnvelope {
     ///
     /// Get current address
     ///
-    pub fn get_cur_addr(&self) -> IntermediateAddress{
-        self.cur_addr.clone()
+    pub fn cur_addr(&self) -> &IntermediateAddress{
+        &self.cur_addr
     }
 
     ///
     /// Get next address
     ///
-    pub fn get_next_addr(&self) -> IntermediateAddress{
-        self.next_addr.clone()
+    pub fn next_addr(&self) -> &IntermediateAddress{
+        &self.next_addr
     }
 }
 

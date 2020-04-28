@@ -325,6 +325,9 @@ impl BlockInfo {
     }
 
     pub fn after_merge(&self) -> bool { self.after_merge }
+    pub fn prev_ref_cell(&self) -> &Cell {
+        self.prev_ref.cell()
+    }
     pub fn read_prev_ref(&self) -> Result<BlkPrevInfo> {
         let mut prev_ref = if self.after_merge {
             BlkPrevInfo::default_blocks() 
@@ -1095,8 +1098,8 @@ impl TopBlockDescr {
     pub fn append_proof(&mut self, cell: Cell) {
         self.chain.push(cell);
     }
-    pub fn proof_for(&self) -> BlockIdExt {
-        self.proof_for.clone()
+    pub fn proof_for(&self) -> &BlockIdExt {
+        &self.proof_for
     }
 }
 
@@ -1166,10 +1169,15 @@ pub struct TopBlockDescrSet {
 
 impl TopBlockDescrSet {
     pub fn get_top_block_descr(&self, shard: &ShardIdent) -> Result<Option<TopBlockDescr>> {
-        match self.collection.get(&shard.full_key()?)? {
-            Some(InRefValue(descr)) => Ok(Some(descr)),
+        match self.collection.0.get(shard.full_key()?)? {
+            Some(slice) => TopBlockDescr::construct_from(&mut slice.reference(0)?.into()).map(|r| Some(r)),
             None => Ok(None)
         }
+    }
+    pub fn insert(&mut self, shard: &ShardIdent, descr: &TopBlockDescr) -> Result<()> {
+        let key = shard.full_key()?;
+        let value = descr.write_to_new_cell()?;
+        self.collection.0.setref(key, &value.into()).map(|_|())
     }
     pub fn is_empty(&self) -> bool {
         self.collection.is_empty()

@@ -65,22 +65,18 @@ impl ShardHashes {
         self.get_as_slice(&workchain_id).map(|result| result.is_some())
     }
     pub fn find_shard(&self, shard: &ShardIdent) -> Result<Option<McShardRecord>> {
-        let shard_id = SliceData::from(shard.shard_prefix_without_tag().write_to_new_cell()?);
         if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
+            let shard_id = shard.shard_key(false);
             if let Some((key, descr)) = bintree.find(shard_id)? {
-                let prefix_len = key.length_in_bits();
-                let mut prefix = [0; 8];
-                prefix.copy_from_slice(key.data());
-                let prefix = u64::from_le_bytes(prefix);
-                let shard = ShardIdent::with_prefix_len(prefix_len as u8, shard.workchain_id(), prefix)?;
+                let shard = ShardIdent::with_prefix_slice(shard.workchain_id(), key)?;
                 return Ok(Some(McShardRecord::new(shard, descr)))
             }
         }
         Ok(None)
     }
     pub fn get_shard(&self, shard: &ShardIdent) -> Result<Option<McShardRecord>> {
-        let shard_id = SliceData::from(shard.shard_prefix_without_tag().write_to_new_cell()?);
         if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
+            let shard_id = shard.shard_key(false);
             if let Some(descr) = bintree.get(shard_id)? {
                 return Ok(Some(McShardRecord::new(shard.clone(), descr)))
             }
@@ -99,6 +95,22 @@ impl ShardHashes {
             })?;
         }
         Ok(vec)
+    }
+}
+
+impl ShardHashes {
+    pub fn dump(&self, heading: &str) {
+        println!("dumping shard records for: {}", heading);
+        self.iterate_with_keys(&mut |workchain_id: i32, InRefValue(bintree)| {
+            println!("workchain: {}", workchain_id);
+            bintree.iterate(&mut |prefix, descr| {
+                let shard = ShardIdent::with_prefix_slice(workchain_id, prefix.clone().into())?;
+                println!("shard: {}", shard);
+                println!("seq_no: {}", descr.seq_no);
+                println!("prefix: {}", prefix);
+                Ok(true)
+            })
+        }).unwrap();
     }
 }
 
@@ -140,25 +152,6 @@ impl McShardRecord {
             && (!compare_fees
                 || (self.descr.fees_collected == other.descr.fees_collected
                     && self.descr.funds_created == other.descr.funds_created))
-    }
-
-    pub fn fsm_equal(&self, _other: &Self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_fsm_merge(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_fsm_split(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn is_fsm_none(&self) -> bool {
-        unimplemented!()
-    }
-    pub fn fsm_utime_end(&self) -> u32 {
-        unimplemented!()
-    }
-    pub fn fsm_utime(&self) -> u32 {
-        unimplemented!()
     }
 }
 
@@ -254,8 +247,7 @@ impl McBlockExtra {
         })
     }
 
-    pub fn is_key_block(&self) -> bool { self.key_block }
-    pub fn set_is_key_block(&mut self, is_key_block: bool) { self.key_block = is_key_block }
+    pub fn is_key_block(&self) -> bool { self.config.is_some() }
 
     pub fn hashes(&self) -> &ShardHashes { &self.hashes }
     pub fn hashes_mut(&mut self) -> &mut ShardHashes { &mut self.hashes }
@@ -308,7 +300,7 @@ impl Deserializable for McBlockExtra {
                 }
             )
         }
-        self.key_block = cell.get_next_bit()?;
+        let key_block = cell.get_next_bit()?;
         self.hashes.read_from(cell)?;
         self.fees.read_from(cell)?;
 
@@ -327,7 +319,7 @@ impl Deserializable for McBlockExtra {
             None
         };
 
-        self.config = if self.key_block {
+        self.config = if key_block {
             Some(ConfigParams::construct_from(cell)?)
         } else {
             None
@@ -870,7 +862,6 @@ impl Default for FutureSplitMerge {
 
 impl Deserializable for FutureSplitMerge {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        
         if !slice.get_next_bit()? {
             *self = FutureSplitMerge::None;
         } else if !slice.get_next_bit()? {
@@ -975,6 +966,43 @@ impl ShardDescr {
             split_merge_at,
             fees_collected: CurrencyCollection::default(),
             funds_created: CurrencyCollection::default(),
+        }
+    }
+    pub fn fsm_equal(&self, other: &Self) -> bool {
+        self.is_fsm_none() == other.is_fsm_none()
+            && self.is_fsm_split() == other.is_fsm_split()
+            && self.is_fsm_merge() == other.is_fsm_merge()
+    }
+    pub fn is_fsm_merge(&self) -> bool {
+        match self.split_merge_at {
+            FutureSplitMerge::Merge{merge_utime: _, interval: _} => true,
+            _ => false
+        }
+    }
+    pub fn is_fsm_split(&self) -> bool {
+        match self.split_merge_at {
+            FutureSplitMerge::Split{split_utime: _, interval: _} => true,
+            _ => false
+        }
+    }
+    pub fn is_fsm_none(&self) -> bool {
+        match self.split_merge_at {
+            FutureSplitMerge::None => true,
+            _ => false
+        }
+    }
+    pub fn fsm_utime(&self) -> u32 {
+        match self.split_merge_at {
+            FutureSplitMerge::Split{split_utime, interval: _} => split_utime,
+            FutureSplitMerge::Merge{merge_utime, interval: _} => merge_utime,
+            _ => 0
+        }
+    }
+    pub fn fsm_utime_end(&self) -> u32 {
+        match self.split_merge_at {
+            FutureSplitMerge::Split{split_utime, interval} => split_utime + interval,
+            FutureSplitMerge::Merge{merge_utime, interval} => merge_utime + interval,
+            _ => 0
         }
     }
 }
