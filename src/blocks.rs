@@ -48,7 +48,7 @@ block_id_ext$_
 ///
 /// BlockIdExt
 ///
-#[derive(Clone, Debug, PartialEq, Eq, Default, Hash, Ord, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct BlockIdExt {
     pub shard_id: ShardIdent,
     pub seq_no: u32,
