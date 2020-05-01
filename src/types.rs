@@ -819,7 +819,7 @@ macro_rules! define_HashmapE_empty_val {
     }
 }
 
-#[derive(PartialEq, Copy, Clone, Debug, Eq, Default)]
+#[derive(PartialEq, Copy, Clone, Debug, Eq, Default, Hash)]
 pub struct UnixTime32(pub u32);
 
 impl UnixTime32 {

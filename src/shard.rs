@@ -38,7 +38,7 @@ pub const BASE_WORKCHAIN_ID: i32 = 0;
 pub const INVALID_WORKCHAIN_ID: i32 = 0x8000_0000u32 as i32;
 pub const SHARD_FULL: u64 = 0x8000_0000_0000_0000u64;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct AccountIdPrefixFull {
     pub workchain_id: i32,
     pub prefix: u64,
