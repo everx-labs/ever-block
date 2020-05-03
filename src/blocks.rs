@@ -96,6 +96,14 @@ impl BlockIdExt {
     pub fn shard(&self) -> &ShardIdent { &self.shard_id }
 
     pub fn seq_no(&self) -> u32 { self.seq_no }
+
+    pub fn root_hash(&self) -> &UInt256 {
+        &self.root_hash
+    }
+
+    pub fn file_hash(&self) -> &UInt256 {
+        &self.file_hash
+    }
 }
 
 impl Serializable for BlockIdExt {

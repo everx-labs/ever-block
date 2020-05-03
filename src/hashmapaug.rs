@@ -220,8 +220,17 @@ macro_rules! define_HashmapAugE {
                 })
             }
             /// puts filtered elements to new dictionary
-            pub fn filter<K, F>(&mut self, _op: F) -> Result<()>
-            where K: Deserializable, F: FnMut(K, $x_type, $y_type) -> Result<bool> {
+            pub fn filter<K, F>(&mut self, mut op: F) -> Result<()>
+            where K: Deserializable, K : Serializable, F: FnMut(&K, &$x_type, &$y_type) -> Result<bool> {
+                let mut other_tree = $varname(HashmapAugE::with_bit_len($bit_len));
+                self.iterate_with_keys_and_aug(&mut |key, value, aug| {
+                    let key_k = K::construct_from(&mut key.into())?;
+                    if op(&key_k, &value, &aug)? {
+                        other_tree.set(&key_k, &value, &aug).unwrap();
+                    };
+                    return Ok(true);
+                })?;
+                *self = other_tree;
                 Ok(())
             }
         }

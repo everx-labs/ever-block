@@ -178,7 +178,7 @@ impl OutMsgQueue {
     }
 
     pub fn filter_queue(&mut self, _old_shard: &ShardIdent, _subshard: &ShardIdent) -> Result<()> {
-        self.filter(|_key: OutMsgQueueKey, _enq, _lt| {
+        self.filter(|_key: &OutMsgQueueKey, _enq, _lt| {
             Ok(false)
         })
     }

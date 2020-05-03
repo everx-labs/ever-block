@@ -168,7 +168,7 @@ impl MerkleUpdate {
             Ok(old_root.clone())
         } else {
             let new_root: Cell =
-                self.traverse_on_apply(&self.new, &old_cells).into();
+                self.traverse_on_apply(&self.new, &old_cells, 0).into();
 
             // constructed tree's hash have to coinside with self.new_hash
             debug_assert_eq!(new_root.repr_hash(), self.new_hash);
@@ -207,31 +207,55 @@ impl MerkleUpdate {
     /// `old_cells` cells from old bag of cells;
     fn traverse_on_apply(&self,
         update_cell: &Cell,
-        old_cells: &HashMap<UInt256, Cell>) -> BuilderData {
+        old_cells: &HashMap<UInt256, Cell>,
+        merkle_depth: u8
+    ) -> BuilderData {
 
         // We will recursively construct new skeleton for new cells 
         // and connect unchanged branches to it
 
         let mut new_cell = BuilderData::new();
+        new_cell.set_type(update_cell.cell_type());
+
+        let child_merkle_depth = if update_cell.is_merkle() { 
+            merkle_depth + 1 
+        } else { 
+            merkle_depth 
+        };
 
         // traverse references
+        let mut child_mask = LevelMask::with_mask(0);
         for update_child in update_cell.clone_references().iter() {
             let new_child = match update_child.cell_type() {
-                CellType::Ordinary => {
-                    self.traverse_on_apply(update_child, old_cells)
+                CellType::Ordinary | CellType::MerkleProof | CellType::MerkleUpdate => {
+                    self.traverse_on_apply(update_child, old_cells, child_merkle_depth)
                 },
                 CellType::PrunedBranch => {
-                    // connect branch from old bag instead pruned.
-                    let new_child_hash = Cell::hash(&update_child, update_child.level() as usize - 1);
-                    BuilderData::from(old_cells.get(&new_child_hash).unwrap())
+                    // if this pruned branch is related to current update
+                    let mask = update_child.level_mask().mask();
+                    if mask & (1 << child_merkle_depth) != 0 {
+                        // connect branch from old bag instead pruned
+                        let new_child_hash = Cell::hash(&update_child, update_child.level() as usize - 1);
+                        BuilderData::from(old_cells.get(&new_child_hash).unwrap())
+                    } else {
+                        // else - just copy this cell (like an ordinary)
+                        BuilderData::from(update_child)
+                    }
                 },
-                CellType::LibraryReference | CellType::MerkleProof | CellType::MerkleUpdate => {
+                CellType::LibraryReference => {
                     unimplemented!() // TODO
                 },
                 _ => panic!("Unknown cell type!")
-            };            
+            };
+            child_mask |= new_child.level_mask();
             new_cell.append_reference(new_child);
         }
+
+        new_cell.set_level_mask(if update_cell.is_merkle() {
+            LevelMask::for_merkle_cell(child_mask)
+        } else {
+            child_mask
+        });
 
         // Copy data from update to constructed cell
         new_cell.append_bytestring(&SliceData::from(update_cell)).unwrap();
