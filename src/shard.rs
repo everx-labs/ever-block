@@ -15,6 +15,7 @@
 use crate::{
     define_HashmapE,
     accounts::ShardAccount,
+    config_params::CatchainConfig,
     error::BlockError,
     envelope_message::FULL_BITS,
     master::{BlkMasterInfo, LibDescr, McStateExtra},
@@ -23,6 +24,7 @@ use crate::{
     shard_accounts::{DepthBalanceInfo, ShardAccounts},
     types::{ChildCell, CurrencyCollection},
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize, IntermediateAddress,
+    validators::ValidatorSet,
 };
 use std::fmt::{self, Display, Formatter};
 use ton_types::{
@@ -82,6 +84,10 @@ impl AccountIdPrefixFull {
             true => Ok(result),
             false => fail!("Address is invalid")
         })
+    }
+
+    pub fn any_masterchain() -> Self {
+        Self{ workchain_id: MASTERCHAIN_ID, prefix: SHARD_FULL}
     }
 
     /// Constructs AccountIdPrefixFull prefix for specified address and stores it in the "to" argument.
@@ -960,6 +966,20 @@ impl ShardStateUnsplit {
         // debug_assert!(self.master_ref.is_some());
         // TODO: merge other
         Ok(())
+    }
+
+    pub fn read_cur_validator_set_and_cc_conf(&self) -> Result<(ValidatorSet, CatchainConfig)> {
+        let config = &self
+            .read_custom()?
+            .ok_or_else(|| error!(BlockError::InvalidArg(
+                "State doesn't contain `custom` field".to_string()
+            )))?
+            .config;
+
+        Ok((
+            config.validator_set()?,
+            config.catchain_config()?
+        ))
     }
 }
 

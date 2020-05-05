@@ -14,7 +14,7 @@
 
 use crate::{
     define_HashmapE,
-    config_params::GlobalVersion,
+    config_params::{GlobalVersion, CatchainConfig},
     error::BlockError,
     inbound_messages::InMsgDescr,
     master::{BlkMasterInfo, McBlockExtra},
@@ -25,6 +25,7 @@ use crate::{
     transactions::ShardAccountBlocks,
     types::{ChildCell, CurrencyCollection, InRefValue, UnixTime32},
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
+    validators::ValidatorSet,
 };
 use std::{
     cmp::Ordering,
@@ -592,6 +593,25 @@ impl Block {
             cur.write(file_hash.as_slice()).unwrap();
         }
         data
+    }
+
+    pub fn read_cur_validator_set_and_cc_conf(&self) -> Result<(ValidatorSet, CatchainConfig)> {
+        let custom = self
+            .read_extra()?
+            .read_custom()?
+            .ok_or_else(|| error!(BlockError::InvalidArg(
+                "Block doesn't contain `extra->custom` field".to_string()
+            )))?;
+        let config = custom
+            .config()
+            .ok_or_else(|| error!(BlockError::InvalidArg(
+                "Block doesn't contain `extra->custom->config` field, maybe no key block is used? ".to_string()
+            )))?;
+
+        Ok((
+            config.validator_set()?,
+            config.catchain_config()?
+        ))
     }
 }
 
