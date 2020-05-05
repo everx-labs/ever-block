@@ -558,6 +558,15 @@ impl Counters {
     pub fn total(&self) -> u64 {
         self.total
     }
+    pub fn last_updated(&self) -> u32 {
+        self.last_updated
+    }
+    pub fn cnt2048(&self) -> u64 {
+        self.cnt2048
+    }
+    pub fn cnt65536(&self) -> u64 {
+        self.cnt65536
+    }
 }
 
 impl Deserializable for Counters {

@@ -193,6 +193,10 @@ impl IhrPendingSince {
             import_lt,
         }   
     }
+
+    pub fn import_lt(&self) -> u64 {
+        self.import_lt
+    }
 }
 
 impl Serializable for IhrPendingSince {
