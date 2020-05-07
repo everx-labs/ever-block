@@ -456,10 +456,11 @@ impl ValidatorSet {
         for vd in subset.iter() {
             hasher.write(vd.public_key.key_bytes());
             hasher.write(&vd.weight.to_le_bytes());
-            let addr = vd.adnl_addr.as_ref().ok_or_else(|| 
-                BlockError::InvalidData("At least one validator doesn't have address".to_string())
-            )?;
-            hasher.write(addr.as_slice());
+            if let Some(addr) = vd.adnl_addr.as_ref() {
+                hasher.write(addr.as_slice());
+            } else {
+                hasher.write(UInt256::default().as_slice());
+            }
         }
         Ok(hasher.sum32())
     }
