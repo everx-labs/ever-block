@@ -18,6 +18,7 @@ use crate::{
     config_params::CatchainConfig,
     error::BlockError,
     envelope_message::FULL_BITS,
+    hashmapaug::HashmapAugType,
     master::{BlkMasterInfo, LibDescr, McStateExtra},
     messages::MsgAddressInt,
     outbound_messages::OutMsgQueueInfo,
@@ -29,7 +30,7 @@ use crate::{
 use std::fmt::{self, Display, Formatter};
 use ton_types::{
     error, fail, Result,
-    types::AccountId,
+    AccountId, UInt256,
     BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData
 };
 
@@ -855,7 +856,7 @@ impl ShardStateUnsplit {
         self.accounts.write_struct(value)
     }
     
-    pub fn insert_account(&mut self, account_id: &AccountId, acc: &ShardAccount) -> Result<()> {
+    pub fn insert_account(&mut self, account_id: &UInt256, acc: &ShardAccount) -> Result<()> {
         // TODO: split depth
         let depth_balance_info = DepthBalanceInfo::new(0, acc.read_account()?.get_balance().unwrap())?;
         let mut accounts = self.read_accounts()?;

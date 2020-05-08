@@ -15,6 +15,7 @@
 use crate::{
     define_HashmapE, define_HashmapE_empty_val,
     error::BlockError,
+    hashmapaug::HashmapAugType,
     shard_accounts::ShardAccounts,
     signature::{CryptoSignature, SigPubKey},
     types::{ChildCell, ExtraCurrencyCollection, Grams, Number8, Number12, Number16, Number13, Number32},
@@ -152,7 +153,7 @@ impl ConfigParams {
     }
     pub fn special_ticktock_smartcontracts(&self, tick_tock: usize, accounts: &ShardAccounts) -> Result<Vec<(UInt256, usize)>> {
         let mut vec = Vec::new();
-        self.fundamental_smc_addr()?.iterate_keys(&mut |key: UInt256| {
+        self.fundamental_smc_addr()?.iterate_keys(|key: UInt256| {
             let tt = self.get_smc_tick_tock(&key, accounts)?;
             if (tick_tock & tt) != 0 {
                 vec.push((key, tt))

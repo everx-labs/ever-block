@@ -16,7 +16,7 @@ use crate::{
     define_HashmapAugE,
     error::BlockError,
     envelope_message::MsgEnvelope,
-    hashmapaug::{Augmentable, HashmapAugE},
+    hashmapaug::{Augmentable, HashmapAugType},
     inbound_messages::InMsg,
     messages::{CommonMsgInfo, Message},
     miscellaneous::{IhrPendingInfo, ProcessedInfo},
@@ -25,11 +25,11 @@ use crate::{
     transactions::Transaction,
     GetRepresentationHash, Serializable, Deserializable,
 };
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
-    BuilderData, Cell, IBitstring, HashmapType, SliceData
+    BuilderData, Cell, IBitstring, HashmapType, SliceData, hm_label,
 };
 
 
@@ -111,7 +111,7 @@ impl Deserializable for EnqueuedMsg {
 // Blockchain: 3.3.5
 // _ (HashmapAugE 256 OutMsg CurrencyCollection) = OutMsgDescr;
 //
-define_HashmapAugE!(OutMsgDescr, 256, OutMsg, CurrencyCollection);
+define_HashmapAugE!(OutMsgDescr, 256, UInt256, OutMsg, CurrencyCollection);
 
 impl OutMsgDescr {
     /// insert new or replace existing
@@ -139,7 +139,7 @@ impl OutMsgDescr {
     /// insert or replace existion record
     /// use to improve speed
     pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, exported: &CurrencyCollection ) -> Result<()> {
-        if self.0.set(key.clone(), msg_slice, exported).is_ok() {
+        if self.set_serialized(key.clone(), msg_slice, exported).is_ok() {
             Ok(())
         } else {
             fail!(BlockError::Other("Error insert serialized message".to_string()))
@@ -155,7 +155,7 @@ impl OutMsgDescr {
 // Blockchain: 3.3.6
 // _ (HashmapAugE 352 EnqueuedMsg uint64) = OutMsgQueue;
 // 352 = 32 - dest workchain_id, 64 - first 64 bit of dest account address, 256 - message hash
-define_HashmapAugE!(OutMsgQueue, 352, EnqueuedMsg, MsgTime);
+define_HashmapAugE!(OutMsgQueue, 352, OutMsgQueueKey, EnqueuedMsg, MsgTime);
 
 type MsgTime = u64;
 

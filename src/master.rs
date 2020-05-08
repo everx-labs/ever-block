@@ -18,7 +18,7 @@ use crate::{
     blocks::{BlockIdExt, ExtBlkRef},
     config_params::ConfigParams,
     error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugE},
+    hashmapaug::{Augmentable, HashmapAugType},
     inbound_messages::InMsg,
     shard::{ShardIdent},
     signature::CryptoSignaturePair,
@@ -26,10 +26,11 @@ use crate::{
     validators::ValidatorInfo,
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
+use std::fmt;
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
-    Cell, IBitstring, SliceData, BuilderData, HashmapE, HashmapType,
+    Cell, IBitstring, SliceData, BuilderData, HashmapE, HashmapType, hm_label,
 };
 
 
@@ -49,13 +50,35 @@ masterchain_block_extra#cca5
 */
 define_HashmapE!{ShardHashes, 32, InRefValue<BinTree<ShardDescr>>}
 define_HashmapE!{CryptoSignatures, 16, CryptoSignaturePair}
-define_HashmapAugE!{ShardFees, 96, ShardFeeCreated, ShardFeeCreated}
+define_HashmapAugE!{ShardFees, 96, ShardIdentFull, ShardFeeCreated, ShardFeeCreated}
+
+#[derive(Debug, Default)]
+pub struct ShardIdentFull {
+    pub workchain_id: i32,
+    pub prefix: u64, // with terminated bit!
+}
+
+impl Serializable for ShardIdentFull {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.workchain_id.write_to(cell)?;
+        self.prefix.write_to(cell)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for ShardIdentFull {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        self.workchain_id.read_from(cell)?;
+        self.prefix.read_from(cell)?;
+        Ok(())
+    }
+}
 
 impl ShardHashes {
-    pub fn iterate_shards<F>(&self, func: &mut F) -> Result<bool>
+    pub fn iterate_shards<F>(&self, mut func: F) -> Result<bool>
     where F: FnMut(ShardIdent, ShardDescr) -> Result<bool> {
-        self.iterate_with_keys(&mut |wc_id: i32, InRefValue(shardes_tree)| {
-            shardes_tree.iterate(&mut |prefix, shard_descr| {
+        self.iterate_with_keys(|wc_id: i32, InRefValue(shardes_tree)| {
+            shardes_tree.iterate(|prefix, shard_descr| {
                 let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
                 func(shard_ident, shard_descr)
             })
@@ -86,7 +109,7 @@ impl ShardHashes {
     pub fn get_neighbours(&self, shard: &ShardIdent) -> Result<Vec<McShardRecord>> {
         let mut vec = Vec::new();
         if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
-            bintree.iterate(&mut |prefix, shard_descr| {
+            bintree.iterate(|prefix, shard_descr| {
                 let shard_ident = ShardIdent::with_prefix_slice(shard.workchain_id(), prefix)?;
                 if shard.is_neighbor_for(&shard_ident) {
                     vec.push(McShardRecord::new(shard_ident, shard_descr));
@@ -101,9 +124,9 @@ impl ShardHashes {
 impl ShardHashes {
     pub fn dump(&self, heading: &str) {
         println!("dumping shard records for: {}", heading);
-        self.iterate_with_keys(&mut |workchain_id: i32, InRefValue(bintree)| {
+        self.iterate_with_keys(|workchain_id: i32, InRefValue(bintree)| {
             println!("workchain: {}", workchain_id);
-            bintree.iterate(&mut |prefix, descr| {
+            bintree.iterate(|prefix, descr| {
                 let shard = ShardIdent::with_prefix_slice(workchain_id, prefix.clone().into())?;
                 println!("shard: {}", shard);
                 println!("seq_no: {}", descr.seq_no);
@@ -193,7 +216,7 @@ impl McBlockExtra {
         let ident = ShardIdent::with_workchain_id(workchain_id)?;
 
         let fee = ShardFeeCreated::with_fee(fee.clone());
-        self.fees.0.set(ident.full_key()?, &fee.write_to_new_cell()?.into(), &fee)?;
+        self.fees.set_serialized(ident.full_key()?, &fee.write_to_new_cell()?.into(), &fee)?;
         Ok(ident)
     }
     /// Split Shard
@@ -241,7 +264,7 @@ impl McBlockExtra {
     /// Get total fees for shard
     /// 
     pub fn fee(&self, ident: &ShardIdent) -> Result<Option<CurrencyCollection>> {
-        Ok(match self.fees.get(&ident.workchain_id())? {
+        Ok(match self.fees.get_serialized(ident.full_key()?)? {
             Some(shards) => Some(shards.fees),
             None => None
         })
@@ -431,7 +454,7 @@ impl Serializable for KeyExtBlkRef {
 
 // _ (HashmapAugE 32 KeyExtBlkRef KeyMaxLt) = OldMcBlocksInfo;
 // key - seq_no
-define_HashmapAugE!(OldMcBlocksInfo, 32, KeyExtBlkRef, KeyMaxLt);
+define_HashmapAugE!(OldMcBlocksInfo, 32, u32, KeyExtBlkRef, KeyMaxLt);
 
 // _ fees:CurrencyCollection create:CurrencyCollection = ShardFeeCreated;
 #[derive(Default, Clone, Debug, Eq, PartialEq)]

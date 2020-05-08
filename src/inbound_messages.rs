@@ -21,15 +21,16 @@ use crate::{
     define_HashmapAugE,
     envelope_message::MsgEnvelope,
     error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugE},
+    hashmapaug::{Augmentable, HashmapAugType},
     messages::{CommonMsgInfo, Message},
     transactions::Transaction,
     types::{AddSub, ChildCell, CurrencyCollection, Grams},
     Serializable, Deserializable,
 };
+use std::fmt;
 use ton_types::{
     error, fail, Result,
-    BuilderData, Cell, IBitstring, SliceData, HashmapType
+    BuilderData, Cell, IBitstring, SliceData, HashmapType, UInt256, hm_label,
 };
 
 
@@ -759,7 +760,7 @@ impl Deserializable for InMsgDiscardedTransit {
 
 //3.2.8. Structure of InMsgDescr
 //_ (HashmapAugE 256 InMsg ImportFees) = InMsgDescr
-define_HashmapAugE!(InMsgDescr, 256, InMsg, ImportFees);
+define_HashmapAugE!(InMsgDescr, 256, UInt256, InMsg, ImportFees);
 
 impl InMsgDescr {
     /// insert new or replace existing
@@ -771,7 +772,7 @@ impl InMsgDescr {
     /// insert or replace existion record
     /// use to improve speed
     pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, fees: &ImportFees ) -> Result<()> {
-        if self.0.set(key.clone(), msg_slice, fees).is_ok() {
+        if self.set_serialized(key.clone(), msg_slice, fees).is_ok() {
             Ok(())
         } else {
             fail!(BlockError::Other("Error insert serialized message".to_string()))

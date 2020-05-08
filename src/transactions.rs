@@ -17,18 +17,18 @@ use crate::{
     accounts::{Account, AccountStatus, StorageUsedShort},
     blocks::Block,
     error::BlockError,
-    hashmapaug::HashmapAugE,
+    hashmapaug::{Augmentable, HashmapAugType},
     merkle_proof::MerkleProof,
     messages::{generate_big_msg, CommonMsgInfo, Message},
     shard::ShardStateUnsplit,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
     MaybeSerialize, MaybeDeserialize, Serializable, Deserializable,
 };
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
-    BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType, UsageTree,
+    BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType, UsageTree, hm_label,
 };
 
 
@@ -1373,9 +1373,9 @@ impl Transaction {
     }
 
     /// iterate output messages
-    pub fn iterate_out_msgs<F>(&self, f: &mut F) -> Result<()>
+    pub fn iterate_out_msgs<F>(&self, mut f: F) -> Result<()>
     where F: FnMut(Message) -> Result<bool> {
-        self.out_msgs.iterate(&mut |msg| f(msg.0)).map(|_|())
+        self.out_msgs.iterate(|msg| f(msg.0)).map(|_|())
     }
 
     /// add output message to Hashmap
@@ -1444,7 +1444,7 @@ impl Transaction {
         block
             .read_extra()?
             .read_account_blocks()?
-            .get(self.account_id())?
+            .get_serialized(self.account_id().clone())?
             .ok_or_else(|| 
                 BlockError::InvalidArg(
                     "Transaction doesn't belong to given block \
@@ -1586,7 +1586,7 @@ impl Deserializable for Transaction {
     }
 }
 
-define_HashmapAugE!(Transactions, 64, InRefValue<Transaction>, CurrencyCollection);
+define_HashmapAugE!(Transactions, 64, u64, InRefValue<Transaction>, CurrencyCollection);
 
 /// 4.2.15. Collection of all transactions of an account.
 /// From Lite Client v11:
@@ -1668,35 +1668,33 @@ impl AccountBlock {
     pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> Result<()> {
         if self.transactions.is_empty() {
             fail!(BlockError::InvalidData("No transactions in account block".to_string()))
-        } else if let Some(transaction) = self.transactions.single()? {
+        } else if let Some(transaction) = self.transactions.single_value()? {
             // if block has only one transaction for account just copy state update from transaction
             self.write_state_update(&transaction.0.read_state_update()?)?;
         } else {
             // otherwice it is need to calculate Hash update
             let old_hash = old_state.read_accounts()?
-                .get_as_slice(&self.account_addr)?
-                .unwrap_or_default()
-                .into_cell()
-                .repr_hash();
+                .get_serialized(self.account_addr.clone())?
+                .ok_or_else(|| BlockError::Other(format!("Account should be in old shard state {}", self.account_addr.to_hex_string())))?
+                .account_cell().repr_hash();
             let new_hash = new_state.read_accounts()?
-                .get_as_slice(&self.account_addr)?
-                .ok_or_else(|| BlockError::Other("Account should be in new shard state".to_string()))?
-                .into_cell()
-                .repr_hash();
+                .get_serialized(self.account_addr.clone())?
+                .ok_or_else(|| BlockError::Other(format!("Account should be in new shard state {}", self.account_addr.to_hex_string())))?
+                .account_cell().repr_hash();
             self.write_state_update(&HashUpdate::with_hashes(old_hash, new_hash))?;
         }
         Ok(())
     }
 
-    pub fn transaction_iterate<F> (&self, p: &mut F) -> Result<bool>
+    pub fn transaction_iterate<F> (&self, mut p: F) -> Result<bool>
     where F: FnMut(Transaction) -> Result<bool> {
-        self.transactions.iterate(&mut |transaction| p(transaction.0))
+        self.transactions.iterate_objects(|InRefValue(transaction)| p(transaction))
     }
 
-    pub fn transaction_iterate_full<F> (&self, p: &mut F) -> Result<bool>
+    pub fn transaction_iterate_full<F> (&self, mut p: F) -> Result<bool>
     where F: FnMut(u64, Cell, CurrencyCollection) -> Result<bool> {
-        self.transactions.iterate_slices_with_keys_and_aug(&mut |ref mut key, transaction, aug|
-            p(key.get_next_u64()?, transaction.reference(0)?, aug))
+        self.transactions.iterate_slices_with_keys_and_aug(|key, transaction, aug|
+            p(key, transaction.reference(0)?, aug))
     }
 
     pub fn transactions(&self) -> &Transactions {
@@ -1741,7 +1739,7 @@ impl Deserializable for AccountBlock {
 /////////////////////////////////////////////////////////////////////////////////////////
 // 4.2.17. Collection of all transactions in a block.
 // _ (HashmapAugE 256 AccountBlock CurrencyCollection) = ShardAccountBlocks;
-define_HashmapAugE!(ShardAccountBlocks, 256, AccountBlock, CurrencyCollection);
+define_HashmapAugE!(ShardAccountBlocks, 256, UInt256, AccountBlock, CurrencyCollection);
 
 /// external interface for ShardAccountBlock
 impl ShardAccountBlocks {
@@ -1749,9 +1747,9 @@ impl ShardAccountBlocks {
     /// insert new AccountBlock or replace existing
     // TODO: will be removed when acc_id as slice and set as type
     pub fn insert(&mut self, account_block: &AccountBlock) -> Result<()> {
-        self.set(
-            &account_block.account_addr,
-            &account_block,
+        self.set_serialized(
+            account_block.account_addr.clone(),
+            &account_block.write_to_new_cell()?.into(),
             &account_block.total_fee()
         ).map(|_|())
     }
@@ -1770,12 +1768,13 @@ impl ShardAccountBlocks {
     pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> Result<()> {
         let account_id = transaction.account_id();
         // get AccountBlock for accountId, if not exist, create it
-        let mut account_block = self.get(account_id)?.unwrap_or(
+        let mut account_block = self.get_serialized(account_id.clone())?.unwrap_or(
             AccountBlock::with_address(account_id.clone())
         );
         // append transaction to AccountBlock
         account_block.add_serialized_transaction(transaction, transaction_cell)?;
-        self.set(account_id, &account_block, &transaction.total_fees())
+        self.set_serialized(account_id.clone(), &account_block.write_to_new_cell()?.into(), &transaction.total_fees())?;
+        Ok(())
     }
 
     pub fn full_transaction_fees(&self) -> &CurrencyCollection {

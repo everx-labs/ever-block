@@ -393,7 +393,7 @@ impl CurrencyCollection {
         if !self.grams.is_zero() {
             return Ok(false)
         }
-        self.other.iterate(&mut |value| Ok(value.is_zero()))
+        self.other.iterate(|value| Ok(value.is_zero()))
     }
 }
 
@@ -420,30 +420,24 @@ pub trait AddSub {
 
 impl AddSub for CurrencyCollection {
     fn sub(&mut self, other: &Self) -> Result<bool> {
-        if self.grams < other.grams {
+        if !self.grams.sub(&other.grams)? {
             return Ok(false)
         }
-        let mut result = self.other.clone();
-        if other.other.iterate_with_keys(&mut |key: u32, b| -> Result<bool> {
+        other.other.iterate_with_keys(|key: u32, b| -> Result<bool> {
             if let Some(mut a) = self.other.get(&key)? {
                 if a >= b {
                     a.sub(&b)?;
-                    result.set(&key, &a)?;
+                    self.other.set(&key, &a)?;
                     return Ok(true)
                 }
             }
             Ok(false) // coin not found in mine or amount is smaller - cannot subtract
-        })? {
-            self.other = result;
-            self.grams.sub(&other.grams)
-        } else {
-            Ok(false)
-        }
+        })
     }
     fn add(&mut self, other: &Self) -> Result<()> {
         self.grams.add(&other.grams)?;
         let mut result = self.other.clone();
-        other.other.iterate_with_keys(&mut |key: u32, b| -> Result<bool> {
+        other.other.iterate_with_keys(|key: u32, b| -> Result<bool> {
             match self.other.get(&key)? {
                 Some(mut a) => {
                     a.add(&b)?;
@@ -464,7 +458,7 @@ impl fmt::Display for CurrencyCollection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "CurrencyCollection: Grams {}, other curencies:\n", self.grams)?;
         let mut len = 0;
-        self.other.iterate_with_keys(&mut |key: u32, value| {
+        self.other.iterate_with_keys(|key: u32, value| {
             write!(f, "key: {}, value: {}\n", key, value)?;
             len += 1;
             Ok(true)
@@ -659,34 +653,34 @@ macro_rules! define_HashmapE {
                 self.0.len().map_err(|e| e.into())
             }
             /// iterates items
-            pub fn iterate<F>(&self, p: &mut F) -> Result<bool>
+            pub fn iterate<F>(&self, mut p: F) -> Result<bool>
             where F: FnMut($x_type) -> Result<bool> {
-                self.0.iterate(&mut |_, ref mut slice| p(<$x_type>::construct_from(slice)?))
+                self.0.iterate_slices(|_, ref mut slice| p(<$x_type>::construct_from(slice)?))
             }
             /// iterates items as raw slices
-            pub fn iterate_slices<F>(&self, p: &mut F) -> Result<bool>
+            pub fn iterate_slices<F>(&self, mut p: F) -> Result<bool>
             where F: FnMut(SliceData) -> Result<bool> {
-                self.0.iterate(&mut |_, slice| p(slice))
+                self.0.iterate_slices(|_, slice| p(slice))
             }
             /// iterates keys
-            pub fn iterate_keys<K, F>(&self, p: &mut F) -> Result<bool>
+            pub fn iterate_keys<K, F>(&self, mut p: F) -> Result<bool>
             where K: Default + Deserializable, F: FnMut(K) -> Result<bool> {
-                self.0.iterate(&mut |mut key, _| p(
+                self.0.iterate_slices(|mut key, _| p(
                     K::construct_from(&mut key)?
                 ))
             }
             /// iterates items with keys
-            pub fn iterate_with_keys<K, F>(&self, p: &mut F) -> Result<bool>
+            pub fn iterate_with_keys<K, F>(&self, mut p: F) -> Result<bool>
             where K: Default + Deserializable, F: FnMut(K, $x_type) -> Result<bool> {
-                self.0.iterate(&mut |ref mut key, ref mut slice| p(
+                self.0.iterate_slices(|ref mut key, ref mut slice| p(
                     K::construct_from(key)?,
                     <$x_type>::construct_from(slice)?
                 ))
             }
             /// iterates items as slices with keys
-            pub fn iterate_slices_with_keys<F>(&self, p: &mut F) -> Result<bool>
+            pub fn iterate_slices_with_keys<F>(&self, mut p: F) -> Result<bool>
             where F: FnMut(SliceData, SliceData) -> Result<bool> {
-                self.0.iterate(&mut |key, slice| p(key, slice))
+                self.0.iterate_slices(|key, slice| p(key, slice))
             }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
@@ -713,7 +707,7 @@ macro_rules! define_HashmapE {
             }
             pub fn export_vector(&self) -> Result<Vec<$x_type>> {
                 let mut vec = Vec::new();
-                self.0.iterate(&mut |_, ref mut slice| {
+                self.0.iterate_slices(|_, ref mut slice| {
                     vec.push(<$x_type>::construct_from(slice)?);
                     Ok(true)
                 })?;
@@ -778,9 +772,9 @@ macro_rules! define_HashmapE_empty_val {
                 self.0.len().map_err(|e| e.into())
             }
             /// iterates keys
-            pub fn iterate_keys<K, F>(&self, p: &mut F) -> Result<bool>
+            pub fn iterate_keys<K, F>(&self, mut p: F) -> Result<bool>
             where K: Default + Deserializable, F: FnMut(K) -> Result<bool> {
-                self.0.iterate(&mut |mut key, _| p(
+                self.0.iterate_slices(|mut key, _| p(
                     K::construct_from(&mut key)?
                 ))
             }
