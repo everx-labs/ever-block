@@ -20,8 +20,8 @@ pub use self::error::*;
 pub mod types;
 pub use self::types::*;
 
-pub mod hashmapaug;
-pub use self::hashmapaug::*;
+mod hashmapaug;
+pub use self::hashmapaug::HashmapAugE;
 
 pub mod blocks;
 pub use self::blocks::*;
@@ -113,7 +113,7 @@ where
         let bit_len = K::default().write_to_new_cell()?.length_in_bits();
         let mut dictionary = HashmapE::with_bit_len(bit_len);
         dictionary.read_hashmap_data(slice)?;
-        dictionary.iterate_slices(|ref mut key, ref mut value| {
+        dictionary.iterate(&mut |ref mut key, ref mut value| {
             let key = K::construct_from(key)?;
             let value = V::construct_from(value)?;
             self.insert(key, value);

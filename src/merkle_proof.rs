@@ -13,7 +13,6 @@
 */
 
 use crate::{
-    hashmapaug::HashmapAugType,
     merkle_update::MerkleUpdate,
     Serializable, Deserializable, GetRepresentationHash,
     accounts::Account,
@@ -218,7 +217,7 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
             )
         )?;
 
-    let account_block = account_blocks.get_serialized(tr.account_id().clone())?
+    let account_block = account_blocks.get(tr.account_id())?
         .ok_or_else(|| BlockError::WrongMerkleProof("No account block in proof".to_string()))?;
 
     // find transaction
@@ -366,7 +365,7 @@ pub fn check_account_proof(proof: &MerkleProof, acc: &Account) -> Result<BlockSe
             )
         )?;
 
-    let shard_acc = accounts.get_serialized(acc.get_addr().unwrap().get_address());
+    let shard_acc = accounts.get(&acc.get_addr().unwrap().get_address());
     if let Ok(Some(shard_acc)) = shard_acc {
         let acc_root = shard_acc.account_cell();
         let acc_hash = Cell::hash(&acc_root, (max(acc_root.level(), 1) - 1) as usize);

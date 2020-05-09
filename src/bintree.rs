@@ -64,8 +64,8 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
         X::construct_from(&mut cursor).map(|x| Some((key_original, x)))
     }
     /// Iterates over all items
-    fn iterate<F: FnMut(SliceData, X) -> Result<bool>>(&self, mut p: F) -> Result<bool> {
-        iterate_internal(&mut self.get_data(), BuilderData::new(), &mut p)
+    fn iterate<F: FnMut(SliceData, X) -> Result<bool>>(&self, p: &mut F) -> Result<bool> {
+        iterate_internal(&mut self.get_data(), BuilderData::new(), p)
     }
 }
 

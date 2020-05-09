@@ -16,7 +16,6 @@ use crate::GetRepresentationHash;
 use crate::{
     blocks::Block,
     error::BlockError,
-    hashmapaug::HashmapAugType,
     merkle_proof::MerkleProof,
     types::{AddSub, CurrencyCollection, Grams, Number5, Number9, UnixTime32},
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,

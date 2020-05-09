@@ -323,7 +323,7 @@ impl BlockSignaturesPure {
 
         // Check signatures
         let mut weight = 0;
-        self.signatures().iterate_slices(|ref mut _key, ref mut slice| {
+        self.signatures().iterate(&mut |ref mut _key, ref mut slice| {
             let sign = CryptoSignaturePair::construct_from(slice)?;
             let vd = &validators_map[&sign.node_id_short];
             if !vd.public_key.verify_signature(data, &sign.sign) {

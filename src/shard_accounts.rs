@@ -13,18 +13,16 @@
 */
 
 use crate::{
-    error::BlockError,
     define_HashmapAugE,
     accounts::{Account, ShardAccount},
-    hashmapaug::{Augmentable, HashmapAugType},
+    hashmapaug::{Augmentable, HashmapAugE},
     types::{CurrencyCollection, Number5},
     Serializable, Deserializable,
 };
-use std::fmt;
 use ton_types::{
-    error, fail, Result,
+    Result,
     AccountId, UInt256,
-    BuilderData, Cell, IBitstring, HashmapType, SliceData, hm_label,
+    BuilderData, Cell, IBitstring, HashmapType, SliceData,
 };
 
 
@@ -32,7 +30,7 @@ use ton_types::{
 // 4.1.9. The combined state of all accounts in a shard. The split part
 // of the shardchain state (cf. 1.2.1 and 1.2.2) is given by (upd from Lite Client v11):
 // _ (HashmapAugE 256 ShardAccount DepthBalanceInfo) = ShardAccounts;
-define_HashmapAugE!(ShardAccounts, 256, UInt256, ShardAccount, DepthBalanceInfo);
+define_HashmapAugE!(ShardAccounts, 256, ShardAccount, DepthBalanceInfo);
 
 impl ShardAccounts {
     pub fn insert(&mut self, split_depth: u8, account: Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Option<AccountId>> {
@@ -40,7 +38,7 @@ impl ShardAccounts {
             Some(acc_id) => {
                 let depth_balance_info = DepthBalanceInfo::new(split_depth, account.get_balance().unwrap())?;
                 let sh_account = ShardAccount::with_params(account, last_trans_hash, last_trans_lt)?;
-                self.set_serialized(acc_id.clone(), &sh_account.write_to_new_cell()?.into(), &depth_balance_info).unwrap();
+                self.set(&acc_id, &sh_account, &depth_balance_info).unwrap();
                 Ok(Some(acc_id))
             }
             _ => Ok(None)
@@ -48,12 +46,15 @@ impl ShardAccounts {
     }
 
     pub fn account(&self, account_id: &AccountId) -> Result<Option<ShardAccount>> {
-        self.get_serialized(account_id.clone())
+        match self.0.get(account_id.clone())? {
+            Some(ref mut slice) => Ok(Some(ShardAccount::construct_from(slice)?)),
+            None => Ok(None)
+        }
     }
 
     pub fn balance(&self, account_id: &AccountId) -> Result<Option<DepthBalanceInfo>> {
-        match self.get_serialized_raw(account_id.clone())? {
-            Some(mut slice) => Ok(Some(DepthBalanceInfo::construct_from(&mut slice)?)),
+        match self.0.get_with_aug(account_id.clone())? {
+            Some((_, aug)) => Ok(Some(aug)),
             None => Ok(None)
         }
     }
