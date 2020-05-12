@@ -14,6 +14,7 @@
 
 use crate::{
     error::BlockError,
+    hashmapaug::HashmapAugType,
     merkle_proof::MerkleProof,
     messages::{AnycastInfo, CommonMsgInfo, Message, MsgAddressInt, StateInit, TickTock},
     types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
@@ -848,7 +849,7 @@ impl Account {
 
             ss
                 .read_accounts()?
-                .get(&self.get_addr().unwrap().get_address())?
+                .get_serialized(self.get_addr().unwrap().get_address())?
                 .ok_or_else(|| 
                     error!(
                         BlockError::InvalidArg(

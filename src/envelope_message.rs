@@ -37,7 +37,7 @@ by a cell reference.
 
 /////////////////////////////////////////////////////////////////////
 /// 
-/// interm_addr_regular$0 use_src_bits:(#<= 96) = IntermediateAddress;
+/// interm_addr_regular$0 use_dest_bits:(#<= 96) = IntermediateAddress;
 /// interm_addr_simple$10 workchain_id:int8 addr_pfx:(64 * Bit) = IntermediateAddress;
 /// interm_addr_ext$11 workchain_id:int32 addr_pfx:(64 * Bit) = IntermediateAddress;
 /// 
@@ -98,10 +98,7 @@ impl IntermediateAddress {
 
 impl Default for IntermediateAddress{
     fn default() -> Self{
-        IntermediateAddress::Regular(
-            IntermediateAddressRegular{
-                use_dest_bits:0
-            })
+        IntermediateAddress::Regular(IntermediateAddressRegular::default())
     }
 }
 
@@ -178,9 +175,7 @@ pub struct IntermediateAddressRegular {
 
 impl Default for IntermediateAddressRegular {
     fn default() -> Self {
-        IntermediateAddressRegular {
-            use_dest_bits: 0
-        }
+        IntermediateAddressRegular::with_use_src_bits(0).unwrap()
     }
 }
 

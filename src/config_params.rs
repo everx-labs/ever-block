@@ -15,6 +15,7 @@
 use crate::{
     define_HashmapE, define_HashmapE_empty_val,
     error::BlockError,
+    hashmapaug::HashmapAugType,
     shard_accounts::ShardAccounts,
     signature::{CryptoSignature, SigPubKey},
     types::{ChildCell, ExtraCurrencyCollection, Grams, Number8, Number12, Number16, Number13, Number32},
@@ -127,6 +128,16 @@ impl ConfigParams {
         };
         Ok(addr)
     }
+    pub fn block_create_fees(&self, masterchain: bool) -> Result<Grams> {
+        match self.config(14)? {
+            Some(ConfigParamEnum::ConfigParam14(param)) => if masterchain {
+                Ok(param.block_create_fees.masterchain_block_fee)
+            } else {
+                Ok(param.block_create_fees.basechain_block_fee)
+            }
+            _ => fail!("no block create fee parameter")
+        }
+    }
     pub fn validator_set(&self) -> Result<ValidatorSet> {
         let vset = match self.config(35)? {
             Some(ConfigParamEnum::ConfigParam35(param)) => param.cur_temp_validators,
@@ -152,7 +163,7 @@ impl ConfigParams {
     }
     pub fn special_ticktock_smartcontracts(&self, tick_tock: usize, accounts: &ShardAccounts) -> Result<Vec<(UInt256, usize)>> {
         let mut vec = Vec::new();
-        self.fundamental_smc_addr()?.iterate_keys(&mut |key: UInt256| {
+        self.fundamental_smc_addr()?.iterate_keys(|key: UInt256| {
             let tt = self.get_smc_tick_tock(&key, accounts)?;
             if (tick_tock & tt) != 0 {
                 vec.push((key, tt))
