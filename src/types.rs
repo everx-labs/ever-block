@@ -725,6 +725,19 @@ macro_rules! define_HashmapE {
                     op(key, value1, value2)
                 })
             }
+
+            pub fn filter<K, F>(&mut self, mut op: F) -> Result<()>
+            where K: Deserializable, K : Serializable, F: FnMut(&K, &$x_type) -> Result<bool> {
+                let mut other_tree = $varname(HashmapE::with_bit_len($bit_len));
+                self.iterate_with_keys(&mut |key : K, value| {
+                    if op(&key, &value)? {
+                        other_tree.set(&key, &value).unwrap();
+                    };
+                    return Ok(true);
+                })?;
+                *self = other_tree;
+                Ok(())
+            }
         }
 
         impl Default for $varname {
