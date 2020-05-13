@@ -778,6 +778,10 @@ macro_rules! define_HashmapE_empty_val {
                     K::construct_from(&mut key)?
                 ))
             }
+            pub fn iterate_slices<F>(&self, mut p: F) -> Result<bool>
+            where F: FnMut(SliceData) -> Result<bool> {
+                self.0.iterate_slices(|key, _| p(key))
+            }
             pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
                 let value = SliceData::new_empty();

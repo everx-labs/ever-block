@@ -1271,7 +1271,7 @@ impl Transaction {
     pub fn with_account_and_message(account: &Account, msg: &Message, lt: u64) -> Result<Self> {
         Ok(
             Transaction {
-                account_addr: account.get_id().unwrap_or(msg.int_dst_account_id().unwrap()),
+                account_addr: account.get_id().unwrap_or_else(|| msg.int_dst_account_id().unwrap()),
                 lt: lt,
                 prev_trans_hash: UInt256::from([0;32]),
                 prev_trans_lt: 0,
@@ -1308,9 +1308,17 @@ impl Transaction {
         self.prev_trans_hash.clone()
     }
 
+    pub fn set_prev_trans_hash(&mut self, hash: UInt256) {
+        self.prev_trans_hash = hash
+    }
+
     /// get logical time of previous transaction
     pub fn prev_trans_lt(&self) -> u64 {
         self.prev_trans_lt
+    }
+
+    pub fn set_prev_trans_lt(&mut self, lt: u64) {
+        self.prev_trans_lt = lt
     }
 
     /// set end status accaunt
@@ -1610,12 +1618,26 @@ impl PartialEq for AccountBlock {
 }
 
 impl AccountBlock {
-    pub fn with_address(address: AccountId) -> AccountBlock {
+    pub fn with_address(account_addr: AccountId) -> AccountBlock {
         AccountBlock {
-            account_addr: address,
+            account_addr,
             transactions: Transactions::default(),
             state_update: ChildCell::default(),
         }
+    }
+
+    pub fn with_transaction(account_addr: AccountId, transaction: &Transaction) -> Result<AccountBlock> {
+        let mut transactions = Transactions::default();
+        transactions.setref(
+            &transaction.logical_time(),
+            &transaction.write_to_new_cell()?.into(),
+            transaction.total_fees()
+        )?;
+        Ok(AccountBlock {
+            account_addr,
+            transactions,
+            state_update: transaction.state_update.clone(),
+        })
     }
 
     /// add transaction to block
@@ -1768,9 +1790,22 @@ impl ShardAccountBlocks {
     pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> Result<()> {
         let account_id = transaction.account_id();
         // get AccountBlock for accountId, if not exist, create it
-        let mut account_block = self.get_serialized(account_id.clone())?.unwrap_or(
-            AccountBlock::with_address(account_id.clone())
-        );
+        let mut account_block;
+        match self.get_serialized(account_id.clone())? {
+            Some(acc) => {
+                account_block = acc;
+                let mut account_state_update = account_block.read_state_update()?;
+                let state_update = transaction.read_state_update()?;
+                if account_state_update.new_hash != state_update.old_hash {
+                    fail!("hash {} is not {} of next transaction {}",
+                        state_update.old_hash.to_hex_string(), account_state_update.new_hash.to_hex_string(),
+                        transaction.logical_time())
+                }
+                account_state_update.new_hash = state_update.new_hash;
+                account_block.write_state_update(&account_state_update)?;
+            }
+            None => account_block = AccountBlock::with_transaction(account_id.clone(), transaction)?
+        };
         // append transaction to AccountBlock
         account_block.add_serialized_transaction(transaction, transaction_cell)?;
         self.set_serialized(account_id.clone(), &account_block.write_to_new_cell()?.into(), &transaction.total_fees())?;
