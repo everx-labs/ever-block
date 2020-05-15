@@ -1193,6 +1193,17 @@ impl Message {
             _ => ()
         };
     }
+    pub fn set_src(&mut self, address: MsgAddressIntOrNone) {
+        match self.header {
+            CommonMsgInfo::IntMsgInfo(ref mut header) => {
+                header.src = address;
+            }
+            CommonMsgInfo::ExtOutMsgInfo(ref mut header) => {
+                header.src = address;
+            }
+            _ => ()
+        };
+    }
 
     ///
     /// Get message's Unix time and logical time
