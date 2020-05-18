@@ -16,7 +16,7 @@ use crate::{
     Serializable, Deserializable
 };
 use ton_types::{
-    error, fail, Result, IBitstring,
+    error, fail, Result,
     ExceptionCode, BuilderData, Cell, SliceData, HashmapType, Leaf,
 };
 
@@ -27,26 +27,12 @@ pub trait Augmentable: Clone + Default + Serializable + Deserializable {
     fn calc(&mut self, other: &Self) -> Result<()>;
 }
 
-/// How to continue hashmap's traverse operation
-pub enum TraverseNextStep<R> {
-    /// Continue traverse to the "0", "1" or both branches 
-    VisitZero,
-    VisitOne,
-    VisitZeroOne,
-    VisitOneZero,
-    /// Stop traverse current branch
-    Stop,
-    /// End traverse and return given result from traverse function
-    End(R)
-}
-
 ///////////////////////////////////////////////
 /// Length of key should not exceed bit_len
 ///
 #[macro_export]
 macro_rules! define_HashmapAugE {
     ( $varname:ident, $bit_len:expr, $k_type:ty, $x_type:ty, $y_type:ty ) => {
-
         #[derive(Clone, Debug, Eq, PartialEq)] // cannot Default
         pub struct $varname {
             extra: $y_type,
@@ -674,78 +660,6 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
             slice.shrink_references(2..);
         }
         Y::construct_from(slice)
-    }
-    //
-    fn traverse<F, R>(&self, mut p: F) -> Result<Option<R>>
-    where F: FnMut(&[u8], usize, Y, Option<X>) -> Result<TraverseNextStep<R>> {
-        self.traverse_slices(|key_prefix, prefix_len, mut label| {
-            let aug = Y::construct_from(&mut label)?;
-            if prefix_len == self.bit_len() {
-                let val = X::construct_from(&mut label)?;
-                p(key_prefix, prefix_len, aug, Some(val))
-            } else {
-                p(key_prefix, prefix_len, aug, None)
-            }
-        })
-    }
-    // 
-    fn traverse_slices<F, R>(&self, mut p: F) -> Result<Option<R>>
-    where F: FnMut(&[u8], usize, SliceData) -> Result<TraverseNextStep<R>> {
-        if let Some(root) = self.data() {
-            Self::traverse_internal(
-                &mut SliceData::from(root),
-                BuilderData::default(),
-                self.bit_len(),
-                &mut |k, l, n| p(k, l, n))
-        } else {
-            Ok(None)
-        }
-    }
-    /// recursive traverse tree and call callback function
-    fn traverse_internal<F, R>(
-        cursor: &mut SliceData, 
-        mut key: BuilderData, 
-        mut bit_len: usize, 
-        callback: &mut F
-    ) -> Result<Option<R>>
-    where F: FnMut(&[u8], usize, SliceData) -> Result<crate::hashmapaug::TraverseNextStep<R>> {
-        let label = cursor.get_label(bit_len)?;
-        let label_length = label.remaining_bits();
-        if label_length < bit_len {
-            bit_len -= label_length + 1;
-
-            let mut aug = cursor.clone();
-            aug.checked_drain_reference()?;
-            aug.checked_drain_reference()?;
-            key.checked_append_references_and_data(&label)?;
-            let to_visit = match callback(key.data(), key.length_in_bits(), aug)? {
-                TraverseNextStep::Stop => return Ok(None),
-                TraverseNextStep::End(r) => return Ok(Some(r)),
-                TraverseNextStep::VisitZero => [Some(0), None],
-                TraverseNextStep::VisitOne => [Some(1), None],
-                TraverseNextStep::VisitZeroOne => [Some(0), Some(1)],
-                TraverseNextStep::VisitOneZero => [Some(1), Some(0)],
-            };
-            for i in to_visit.iter() {
-                if let Some(i) = i {
-                    let mut key = key.clone();
-                    key.append_bit_bool(*i != 0)?;
-                    let ref mut child = SliceData::from(cursor.reference(*i)?);
-                    if let Some(r) = Self::traverse_internal(child, key, bit_len, callback)? {
-                        return Ok(Some(r))
-                    }
-                }
-            }
-        } else if label_length == bit_len {
-            key.checked_append_references_and_data(&label)?;
-            return match callback(key.data(), key.length_in_bits(), cursor.clone())? {
-               TraverseNextStep::End(r) => Ok(Some(r)),
-                _ => Ok(None),
-            }
-        } else {
-            fail!(BlockError::InvalidData("label_length > bit_len".to_string()))
-        }
-        Ok(None)
     }
 }
 
