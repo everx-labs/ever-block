@@ -18,11 +18,9 @@ use crate::{
     Serializable, Deserializable,
 };
 use std::collections::LinkedList;
-use std::sync::Arc;
 use ton_types::{
     error, fail, Result,
-    UInt256,
-    BuilderData, Cell, IBitstring, SliceData,
+    UInt256, BuilderData, Cell, IBitstring, SliceData,
 };
 
 pub const ACTION_SEND_MSG: u32 = 0x0ec3c86d;
@@ -102,7 +100,7 @@ pub enum OutAction {
     /// 
     SendMsg {
         mode: u8,
-        out_msg: Arc<Message>,
+        out_msg: Message,
     },
 
     ///
@@ -182,7 +180,7 @@ impl OutAction {
     ///
     /// Create new instance OutAction::ActionSend
     /// 
-    pub fn new_send(mode: u8, out_msg: Arc<Message>) -> Self {
+    pub fn new_send(mode: u8, out_msg: Message) -> Self {
         OutAction::SendMsg { mode, out_msg }
     }
 
@@ -260,11 +258,9 @@ impl Deserializable for OutAction {
         let tag = cell.get_next_u32()?;
         match tag {
             ACTION_SEND_MSG => {
-                let mut mode = 0u8;
-                let mut msg = Message::default();
-                mode.read_from(cell)?;
-                msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-                *self = OutAction::new_send(mode, Arc::new(msg));
+                let mode = cell.get_next_byte()?;
+                let msg = Message::construct_from(&mut cell.checked_drain_reference()?.into())?;
+                *self = OutAction::new_send(mode, msg);
             }
             ACTION_SET_CODE => {
                 *self = OutAction::new_set(cell.checked_drain_reference()?.clone())

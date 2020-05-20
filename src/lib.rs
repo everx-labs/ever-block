@@ -143,6 +143,10 @@ pub trait Serializable {
         self.write_to(&mut cell)?;
         Ok(cell)
     }
+
+    fn serialize(&self) -> Result<Cell> {
+        Ok(self.write_to_new_cell()?.into())
+    }
 }
 
 pub trait Deserializable: Default {

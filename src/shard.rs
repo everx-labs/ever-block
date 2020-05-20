@@ -926,9 +926,9 @@ impl ShardStateUnsplit {
         }
     }
 
-    pub fn write_custom(&mut self, value: Option<McStateExtra>) -> Result<()> {
+    pub fn write_custom(&mut self, value: Option<&McStateExtra>) -> Result<()> {
         self.custom = match value {
-            Some(custom) => Some(ChildCell::with_struct(&custom)?),
+            Some(custom) => Some(ChildCell::with_struct(custom)?),
             None => None
         };
         Ok(())

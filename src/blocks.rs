@@ -719,9 +719,9 @@ impl BlockExtra {
         )
     }
 
-    pub fn write_custom(&mut self, value: Option<McBlockExtra>) -> Result<()> {
+    pub fn write_custom(&mut self, value: Option<&McBlockExtra>) -> Result<()> {
         self.custom = match value {
-                Some(v) => Some(ChildCell::with_struct(&v)?),
+                Some(v) => Some(ChildCell::with_struct(v)?),
                 None => None
             };
         Ok(())

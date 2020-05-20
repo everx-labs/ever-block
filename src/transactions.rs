@@ -979,6 +979,16 @@ impl TransactionDescr {
         }
     }
 
+    pub fn action_phase_ref(&self) -> Option<&TrActionPhase> {
+        match self {
+            TransactionDescr::Ordinary(ref desc) => desc.action.as_ref(),
+            TransactionDescr::TickTock(ref desc) => desc.action.as_ref(),
+            TransactionDescr::SplitPrepare(ref desc) => desc.action.as_ref(),
+            TransactionDescr::MergeInstall(ref desc) => desc.action.as_ref(),
+            _ => None,
+        }
+    }
+
     pub fn is_credit_first(&self) -> Option<bool> {
         match self {
             TransactionDescr::Ordinary(ref tr) => Some(tr.credit_first),

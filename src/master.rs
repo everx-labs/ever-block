@@ -17,7 +17,7 @@ use crate::{
     blocks::{BlockIdExt, ExtBlkRef},
     config_params::ConfigParams,
     error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugType},
+    hashmapaug::{Augmentable, HashmapAugType, TraverseNextStep},
     inbound_messages::InMsg,
     shard::{ShardIdent},
     signature::CryptoSignaturePair,
@@ -393,8 +393,8 @@ impl Serializable for McBlockExtra {
 // _ key:Bool max_end_lt:uint64 = KeyMaxLt;
 #[derive(Default, Clone, Debug, Eq, PartialEq)]
 pub struct KeyMaxLt {
-    key: bool,
-    max_end_lt: u64
+    pub key: bool,
+    pub max_end_lt: u64
 }
 
 impl Deserializable for KeyMaxLt {
@@ -460,6 +460,102 @@ impl Serializable for KeyExtBlkRef {
 // _ (HashmapAugE 32 KeyExtBlkRef KeyMaxLt) = OldMcBlocksInfo;
 // key - seq_no
 define_HashmapAugE!(OldMcBlocksInfo, 32, u32, KeyExtBlkRef, KeyMaxLt);
+
+impl OldMcBlocksInfo {
+
+    // returns key block with max block.seqno and block.seqno <= req_seqno
+    pub fn get_prev_key_block(&self, req_seqno: u32) -> Result<Option<ExtBlkRef>> {
+        let found = self.traverse(|key_prefix, key_prefix_len, aug, value_opt| {
+            if !aug.key {
+                // no key blocks in subtree, skip
+                return Ok(TraverseNextStep::Stop);
+            }
+
+            let x = Self::build_key_part(key_prefix, key_prefix_len)?;
+            let d = 32 - key_prefix_len;
+            if d == 0 {
+                return if x <= req_seqno {
+                    let value = value_opt.ok_or_else(|| error!(BlockError::InvalidData(
+                        "OldMcBlocksInfo's node with max key length doesn't have value".to_string()
+                    )))?;
+                    Ok(TraverseNextStep::End(value))
+                } else {
+                    Ok(TraverseNextStep::Stop)
+                }
+            }
+            let y = req_seqno >> (d - 1);
+            if y < 2 * x {
+                // (x << d) > req_seqno <=> x > (req_seqno >> d) = (y >> 1) <=> 2 * x > y
+                return Ok(TraverseNextStep::Stop);  // all nodes in subtree have block.seqno > req_seqno => skip
+            }
+            return if y == 2 * x {
+                Ok(TraverseNextStep::VisitZero) // visit only left ("0")
+            } else {
+                Ok(TraverseNextStep::VisitOneZero) // visit right, then left ("1" then "0")
+            }
+        })?;
+
+        if let Some(id) = found {
+            debug_assert!(id.blk_ref.seq_no <= req_seqno);
+            debug_assert!(id.key);
+            Ok(Some(id.blk_ref))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // returns key block with min block.seqno and block.seqno >= req_seqno
+    pub fn get_next_key_block(&self, req_seqno: u32) -> Result<Option<ExtBlkRef>> {
+        let found = self.traverse(|key_prefix, key_prefix_len, aug, value_opt| {
+            if !aug.key {
+                // no key blocks in subtree, skip
+                return Ok(TraverseNextStep::Stop);
+            }
+
+            let x = Self::build_key_part(key_prefix, key_prefix_len)?;
+            let d = 32 - key_prefix_len;
+            if d == 0 {
+                return if x >= req_seqno {
+                    let value = value_opt.ok_or_else(|| error!(BlockError::InvalidData(
+                        "OldMcBlocksInfo's node with max key length doesn't have value".to_string()
+                    )))?;
+                    Ok(TraverseNextStep::End(value))
+                } else {
+                    Ok(TraverseNextStep::Stop)
+                }
+            }
+            let y = req_seqno >> (d - 1);
+            if y > 2 * x + 1 {
+                // ((x + 1) << d) <= req_seqno <=> (x+1) <= (req_seqno >> d) = (y >> 1) <=> 2*x+2 <= y <=> y > 2*x+1
+                return Ok(TraverseNextStep::Stop);  // all nodes in subtree have block.seqno < req_seqno => skip
+            }
+            return if y == 2 * x + 1 {
+                Ok(TraverseNextStep::VisitOne) // visit only right ("1")
+            } else {
+                Ok(TraverseNextStep::VisitZeroOne) // visit left, then right ("0" then "1")
+            }
+        })?;
+
+        if let Some(id) = found {
+            debug_assert!(id.blk_ref.seq_no >= req_seqno);
+            debug_assert!(id.key);
+            Ok(Some(id.blk_ref))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn build_key_part(key_prefix: &[u8], key_prefix_len: usize) -> Result<u32> {
+        if key_prefix_len > 32 {
+            error!(BlockError::InvalidData("key_prefix_len > 32".to_string()));
+        }
+        let mut key_buf = [0_u8; 4];
+        key_buf[..key_prefix.len()].copy_from_slice(key_prefix);
+        Ok(
+            u32::from_be_bytes(key_buf) >> (32 - key_prefix_len)
+        )
+    }
+}
 
 // _ fees:CurrencyCollection create:CurrencyCollection = ShardFeeCreated;
 #[derive(Default, Clone, Debug, Eq, PartialEq)]
