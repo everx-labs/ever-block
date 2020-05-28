@@ -1731,6 +1731,10 @@ impl AccountBlock {
     pub fn transactions(&self) -> &Transactions {
         &self.transactions
     }
+
+    pub fn transaction(&self, lt: u64) -> Result<Option<Transaction>> {
+        Ok(self.transactions.get(&lt)?.map(|InRefValue(tr)| tr))
+    }
 }
 
 const ACCOUNT_BLOCK_TAG : usize = 0x5;

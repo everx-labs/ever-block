@@ -1581,7 +1581,7 @@ impl fmt::Display for TickTock {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "TickTick[Tick {}, Tock {}]", self.tick, self.tock
+            "TickTock[Tick {}, Tock {}]", self.tick, self.tock
         )
     }
 }

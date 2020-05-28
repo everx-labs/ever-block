@@ -149,6 +149,16 @@ impl ConfigParams {
         };
         Ok(vset)
     }
+    pub fn next_validator_set(&self) -> Result<ValidatorSet> {
+        let vset = match self.config(37)? {
+            Some(ConfigParamEnum::ConfigParam37(param)) => param.next_temp_validators,
+            _ => match self.config(36)? {
+                Some(ConfigParamEnum::ConfigParam36(param)) => param.next_validators,
+                _ => ValidatorSet::default()
+            }
+        };
+        Ok(vset)
+    }
     pub fn fundamental_smc_addr(&self) -> Result<FundamentalSmcAddresses> {
         match self.config(31)? {
             Some(ConfigParamEnum::ConfigParam31(param)) => Ok(param.fundamental_smc_addr.clone()),
