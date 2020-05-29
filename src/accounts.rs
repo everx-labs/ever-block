@@ -17,7 +17,7 @@ use crate::{
     merkle_proof::MerkleProof,
     messages::{AnycastInfo, CommonMsgInfo, Message, MsgAddressInt, StateInit, TickTock},
     types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
-    shard::{ShardIdent, ShardStateUnsplit},
+    shard::{Libraries, ShardIdent, ShardStateUnsplit},
     GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
 use std::fmt;
@@ -781,15 +781,15 @@ impl Account {
     }
 
     /// getting to the root of the cell with library
-    pub fn get_library(&self) -> Option<Cell> {
+    pub fn get_library(&self) -> Libraries {
         if let Some(stuff) = self.stuff() {
             if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
                 if let Some(ref library) = (*state_init).library {
-                    return Some(library.clone());
+                    return Libraries::with_hashmap(Some(library.clone()))
                 }
             }
         }
-        None
+        Libraries::default()
     }
 
     /// Get enum variant indicating current state of account

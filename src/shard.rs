@@ -538,7 +538,10 @@ impl ShardIdent {
         Self::lower_bits(self.prefix)
     }
 
-    fn add_tag(prefix: u64, len: u8) -> u64 { prefix | (1 << (63 - len)) }
+    fn add_tag(prefix: u64, len: u8) -> u64 {
+        let tag = 1 << (63 - len);
+        (prefix & (!tag + 1)) | tag
+    }
 
     pub fn prefix_len(&self) -> u8 {
         63 - self.prefix.trailing_zeros() as u8
@@ -752,7 +755,7 @@ pub struct ShardStateUnsplit {
     underload_history: u64,
     total_balance: CurrencyCollection,
     total_validator_fees: CurrencyCollection,
-    libraries: Libraries, // <AccountId, LibDescr>, // currently can be present only in masterchain blocks.
+    libraries: Libraries, // currently can be present only in masterchain blocks.
     master_ref: Option<BlkMasterInfo>,
 
     custom: Option<ChildCell<McStateExtra>>, // The field custom is usually present only

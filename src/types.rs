@@ -635,6 +635,13 @@ macro_rules! define_HashmapE {
 
         #[allow(dead_code)]
         impl $varname {
+            /// constructor with HashmapE root
+            pub fn with_hashmap(data: Option<Cell>) -> Self {
+                Self(HashmapE::with_hashmap($bit_len, data))
+            }
+            pub fn root(&self) -> Option<&Cell> {
+                self.0.data()
+            }
             /// Used for not empty Hashmaps
             pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
                 self.0.read_hashmap_root(slice).map_err(|e| e.into())
