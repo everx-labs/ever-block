@@ -538,7 +538,10 @@ impl ShardIdent {
         Self::lower_bits(self.prefix)
     }
 
-    fn add_tag(prefix: u64, len: u8) -> u64 { prefix | (1 << (63 - len)) }
+    fn add_tag(prefix: u64, len: u8) -> u64 {
+        let tag = 1 << (63 - len);
+        (prefix & Self::negate_bits(tag)) | tag
+    }
 
     pub fn prefix_len(&self) -> u8 {
         63 - self.prefix.trailing_zeros() as u8
