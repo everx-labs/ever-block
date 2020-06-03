@@ -380,19 +380,25 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         Ok(())
     }
 
-    fn find_key(&self, max: bool, signed: bool) -> Result<Option<(SliceData, SliceData)>> {
-        let result = match max {
-            true  => ton_types::get_max::<Self>(self.data().cloned(), self.bit_len(), self.bit_len(), signed, &mut 0)?,
-            false => ton_types::get_min::<Self>(self.data().cloned(), self.bit_len(), self.bit_len(), signed, &mut 0)?
-        };
-        match result {
-            (Some(key), Some(val)) => Ok(Some((key.into(), val))),
-            _ => Ok(None)
+    fn find_key(&self, min: bool, signed: bool) -> Result<Option<(SliceData, SliceData)>> {
+        match self.data() {
+            Some(root) => {
+                let mut path = BuilderData::new();
+                let (next_index, index) = match (min, signed) {
+                    (true, true) => (0, 1),
+                    (true, false) => (0, 0),
+                    (false, true) => (1, 0),
+                    (false, false) => (1, 1),
+                };
+                let result = ton_types::get_min_max::<Self>(root.clone(), &mut path, self.bit_len(), next_index, index, &mut 0)?;
+                Ok(result.map(|value| (path.into(), value)))
+            }
+            None => Ok(None)
         }
     }
     /// gets item with minimal key
     fn get_min(&self, signed: bool) -> Result<Option<(K, X)>> {
-        match self.find_key(false, signed)? {
+        match self.find_key(true, signed)? {
             Some((key, mut val)) => {
                 let key = K::construct_from(&mut key.into())?;
                 let val = <X>::construct_from(&mut val)?;
@@ -404,7 +410,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
     }
     /// gets item with maximal key
     fn get_max(&self, signed: bool) -> Result<Option<(K, X)>> {
-        match self.find_key(true, signed)? {
+        match self.find_key(false, signed)? {
             Some((key, mut val)) => {
                 let key = K::construct_from(&mut key.into())?;
                 let val = <X>::construct_from(&mut val)?;

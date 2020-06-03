@@ -33,8 +33,8 @@ define_HashmapE!(ProcessedInfo, 96, ProcessedUpto);
 impl ProcessedInfo {
     pub fn min_seqno(&self) -> Result<u32> {
         match self.0.get_min(false, &mut 0)? {
-            (Some(key), _value) => ProcessedInfoKey::construct_from(&mut key.into()).map(|key| key.mc_seqno),
-            _ => Ok(0)
+            Some((key, _value)) => ProcessedInfoKey::construct_from(&mut key.into()).map(|key| key.mc_seqno),
+            None => Ok(0)
         }
     }
 }

@@ -998,9 +998,9 @@ impl ConfigParam18 {
 
     /// insert value
     pub fn insert(&mut self, sp: &StoragePrices) -> Result<()> {
-        let index = match self.map.0.get_max(false, &mut 0)?.0 {
-            Some(key) => SliceData::from(key).get_next_u32()? + 1,
-            _ => 1
+        let index = match self.map.0.get_max(false, &mut 0)? {
+            Some((key, _value)) => SliceData::from(key).get_next_u32()? + 1,
+            None => 1
         };
         self.map.set(&index, sp)
     }
