@@ -439,9 +439,6 @@ impl KeyExtBlkRef {
     pub fn blk_ref(&self) -> &ExtBlkRef {
         &self.blk_ref
     }
-    pub fn master_block_id(self) -> (u64, BlockIdExt, bool) {
-        (self.blk_ref.end_lt, BlockIdExt::from_ext_blk(self.blk_ref), self.key)
-    }
 }
 
 impl Deserializable for KeyExtBlkRef {

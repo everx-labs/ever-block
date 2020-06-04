@@ -21,7 +21,7 @@ use ton_types::{
 };
 
 use crate::{
-    define_HashmapE,
+    define_HashmapE, define_HashmapE_empty_val,
     error::BlockError,
     hashmapaug::HashmapAugType,
     shard_accounts::ShardAccounts,
@@ -218,93 +218,6 @@ impl ConfigParams {
             Some(ConfigParamEnum::ConfigParam12(param)) => Ok(param.workchains),
             _ => fail!("Workchains not found in config")
         }
-    }
-}
-
-impl ConfigParams {
-    pub fn get_lt_align(&self) -> u64 {
-        1_000_000
-    }
-    pub fn get_max_lt_growth(&self) -> u64 {
-        10 * self.get_lt_align() - 1
-    }
-    pub fn get_next_block_lt(&self, prev_block_lt: u64) -> u64 {
-        (prev_block_lt / self.get_lt_align() + 1) * self.get_lt_align()
-    }
-    pub fn has_capabilities(&self) -> bool {
-        match self.get_global_version() {
-            Ok(gb) => gb.capabilities != 0,
-            Err(_) => false
-        }
-    }
-    pub fn capabilities(&self) -> u64 {
-        match self.get_global_version() {
-            Ok(gb) => gb.capabilities,
-            Err(_) => 0
-        }
-    }
-    pub fn global_version(&self) -> u32 {
-        match self.get_global_version() {
-            Ok(gb) => gb.version,
-            Err(_) => 0
-        }
-    }
-}
-
-const MANDATORY_CONFIG_PARAMS: [u32; 9] = [18, 20, 21, 22, 23, 24, 25, 28, 34];
-
-impl ConfigParams {
-    pub fn valid_config_data(&self, relax_par0: bool, mparams: Option<MandatoryParams>) -> Result<bool> {
-        if !relax_par0 {
-            match self.config(0) {
-                Ok(Some(ConfigParamEnum::ConfigParam0(param))) if param.config_addr == self.config_addr => (),
-                _ => return Ok(false)
-            }
-        }
-        // porting from Durov's code
-        // previously was not 9 parameter in config params
-        for index in &MANDATORY_CONFIG_PARAMS {
-            if self.config(*index)?.is_none() {
-                log::error!(target: "block", "configuration parameter #{} \
-                    (hardcoded as mandatory) is missing)", index);
-                return Ok(false)
-            }
-        }
-        let result = match self.config(9) {
-            Ok(Some(ConfigParamEnum::ConfigParam9(param))) => self.config_params_present(Some(param.mandatory_params))?,
-            _ => {
-                log::error!(target: "block", "invalid mandatory parameters dictionary while checking \
-                    existence of all mandatory configuration parameters");
-                false
-            }
-        };
-        Ok(result && self.config_params_present(mparams)?)
-    }
-    fn config_params_present(&self, params: Option<MandatoryParams>) -> Result<bool> {
-        match params {
-            Some(params) => params.iterate_keys(|index: u32| match self.config(index) {
-                Ok(Some(_)) => Ok(true),
-                _ => {
-                    log::error!(target: "block", "configuration parameter #{} \
-                        (declared as mandatory in configuration parameter #9) is missing)", index);
-                    Ok(false)
-                }
-            }),
-            None => Ok(true)
-        }
-    }
-    // when these parameters change, the block must be marked as a key block
-    pub fn important_config_parameters_changed(&self, other: &ConfigParams, coarse: bool) -> Result<bool> {
-        if self.config_params == other.config_params {
-            return Ok(false)
-        }
-        if coarse {
-            return Ok(true)
-        }
-        // for now, all parameters are "important"
-        // at least the parameters affecting the computations of validator sets must be considered important
-        // ...
-        Ok(true)
     }
 }
 
@@ -743,7 +656,7 @@ impl Serializable for ConfigParam8 {
 
 // _ mandatory_params:(Hashmap 32 True) = ConfigParam 9;
 
-define_HashmapE!{MandatoryParams, 32, ()}
+define_HashmapE_empty_val!{MandatoryParams, 32}
 
 ///
 /// Config Param 9 structure
@@ -1615,7 +1528,7 @@ impl Serializable for ConfigParam29 {
 _ fundamental_smc_addr:(HashmapE 256 True) = ConfigParam 31;
 */
 
-define_HashmapE!{FundamentalSmcAddresses, 256, ()}
+define_HashmapE_empty_val!{FundamentalSmcAddresses, 256}
 
 ///
 /// ConfigParam 31;
@@ -1631,7 +1544,7 @@ impl ConfigParam31 {
     }
 
     pub fn add_address(&mut self, address: UInt256) {
-        self.fundamental_smc_addr.set(&address, &()).unwrap();
+        self.fundamental_smc_addr.add_key(&address).unwrap();
     }
 }
 

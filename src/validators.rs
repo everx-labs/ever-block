@@ -271,7 +271,6 @@ pub struct ValidatorSet {
     total: Number16, 
     main: Number16,
     total_weight: u64,
-    cc_seqno: u32,
     list: Vec<ValidatorDescr>, //ValidatorDescriptions,
 }
 
@@ -315,21 +314,8 @@ impl ValidatorSet {
             total: Number16(list.len() as u32), 
             main: Number16(main as u32), 
             total_weight,
-            cc_seqno: 0,
             list: list, 
         })
-    }
-
-    pub fn with_cc_seqno(
-        utime_since: u32,
-        utime_until: u32, 
-        main: u16,
-        cc_seqno: u32,
-        list: Vec<ValidatorDescr>
-    ) -> Result<Self> {
-        let mut res = Self::new(utime_since, utime_until, main, list)?;
-        res.cc_seqno = cc_seqno;
-        Ok(res)
     }
 
     pub fn utime_since(&self) -> u32 {
@@ -357,11 +343,7 @@ impl ValidatorSet {
     }
 
     pub fn catchain_seqno(&self) -> u32 {
-        self.cc_seqno
-    }
-
-    pub fn set_catchain_seqno(&mut self, cc_seqno: u32) {
-        self.cc_seqno = cc_seqno;
+        unimplemented!()
     }
 
     pub fn at_weight(&self, weight_pos: u64) -> &ValidatorDescr {
