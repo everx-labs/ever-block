@@ -918,7 +918,7 @@ impl ShardStateUnsplit {
         self.custom.as_ref().map(|c| c.cell())
     }
 
-    pub fn is_key_state(&self) -> bool {
+    pub fn is_master_state(&self) -> bool {
         self.custom.is_some()
     }
 
