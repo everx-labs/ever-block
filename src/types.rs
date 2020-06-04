@@ -691,11 +691,18 @@ macro_rules! define_HashmapE {
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
                 let value = value.write_to_new_cell()?.into();
-                self.0.set(key, &value).map(|_|()).map_err(|e| e.into())
+                self.0.set(key, &value)?;
+                Ok(())
             }
             pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
                 self.0.setref(key, value)?;
+                Ok(())
+            }
+            pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
+                let key = key.write_to_new_cell()?.into();
+                let value = SliceData::new_empty();
+                self.0.set(key, &value)?;
                 Ok(())
             }
             pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {
@@ -709,7 +716,12 @@ macro_rules! define_HashmapE {
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
-                self.0.remove(key).map(|_|()).map_err(|e| e.into())
+                self.0.remove(key)?;
+                Ok(())
+            }
+            pub fn check_key<K: Serializable>(&self, key: &K) -> Result<bool> {
+                let key = key.write_to_new_cell()?.into();
+                self.0.get(key).map(|value| value.is_some())
             }
             pub fn export_vector(&self) -> Result<Vec<$x_type>> {
                 let mut vec = Vec::new();
@@ -744,75 +756,14 @@ macro_rules! define_HashmapE {
                 *self = other_tree;
                 Ok(())
             }
-        }
 
-        impl Default for $varname {
-            fn default() -> Self {
-                $varname(HashmapE::with_bit_len($bit_len))
-            }
-        }
-
-        impl Serializable for $varname {
-            fn write_to(&self, cell: &mut BuilderData) -> Result<()>{
-                self.0.write_to(cell)
-            }
-        }
-
-        impl Deserializable for $varname {
-            fn read_from(&mut self, slice: &mut SliceData) -> Result<()>{
-                self.0.read_from(slice)
-            }
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! define_HashmapE_empty_val {
-    ( $varname:ident, $bit_len:expr ) => {
-        #[derive(PartialEq, Clone, Debug, Eq)]
-        pub struct $varname(HashmapE);
-
-        #[allow(dead_code)]
-        impl $varname {
-            /// Used for not empty Hashmaps
-            pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
-                self.0.read_hashmap_root(slice).map_err(|e| e.into())
-            }
-            /// Used for not empty Hashmaps
-            pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> Result<()> {
-                self.0.write_hashmap_root(cell).map_err(|e| e.into())
-            }
-            /// checks if hashmap is empty
-            pub fn is_empty(&self) -> bool {
-                self.0.is_empty()
-            }
-            /// calculates length
-            pub fn len(&self) -> Result<usize> {
-                self.0.len().map_err(|e| e.into())
-            }
-            /// iterates keys
-            pub fn iterate_keys<K, F>(&self, mut p: F) -> Result<bool>
-            where K: Default + Deserializable, F: FnMut(K) -> Result<bool> {
-                self.0.iterate_slices(|mut key, _| p(
-                    K::construct_from(&mut key)?
-                ))
-            }
-            pub fn iterate_slices<F>(&self, mut p: F) -> Result<bool>
-            where F: FnMut(SliceData) -> Result<bool> {
-                self.0.iterate_slices(|key, _| p(key))
-            }
-            pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
-                let key = key.write_to_new_cell()?.into();
-                let value = SliceData::new_empty();
-                self.0.set(key, &value).map(|_|()).map_err(|e| e.into())
-            }
-            pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<()> {
-                let key = key.write_to_new_cell()?.into();
-                self.0.remove(key).map(|_|()).map_err(|e| e.into())
-            }
-            pub fn check_key<K: Serializable>(&self, key: &K) -> Result<bool> {
-                let key = key.write_to_new_cell()?.into();
-                self.0.get(key).map(|value| value.is_some()).map_err(|e| e.into())
+            pub fn export_keys<K: Deserializable>(&self) -> Result<Vec<K>> {
+                let mut keys = Vec::new();
+                self.iterate_keys(|key: K| {
+                    keys.push(key);
+                    Ok(true)
+                })?;
+                Ok(keys)
             }
         }
 

@@ -829,6 +829,12 @@ pub struct ExtBlkRef {
     pub file_hash: UInt256,
 }
 
+impl ExtBlkRef {
+    pub fn master_block_id(self) -> (u64, BlockIdExt) {
+        (self.end_lt, BlockIdExt::from_ext_blk(self))
+    }
+}
+
 impl Deserializable for ExtBlkRef {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.end_lt = cell.get_next_u64()?;
