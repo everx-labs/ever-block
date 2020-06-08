@@ -644,11 +644,11 @@ macro_rules! define_HashmapE {
             }
             /// Used for not empty Hashmaps
             pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
-                self.0.read_hashmap_root(slice).map_err(|e| e.into())
+                self.0.read_hashmap_root(slice)
             }
             /// Used for not empty Hashmaps
             pub fn write_hashmap_root(&self, cell: &mut BuilderData) -> Result<()> {
-                self.0.write_hashmap_root(cell).map_err(|e| e.into())
+                self.0.write_hashmap_root(cell)
             }
             /// Return true if no items
             pub fn is_empty(&self) -> bool {
@@ -656,7 +656,10 @@ macro_rules! define_HashmapE {
             }
             /// Calculates length
             pub fn len(&self) -> Result<usize> {
-                self.0.len().map_err(|e| e.into())
+                self.0.len()
+            }
+            pub fn count(&self, max: usize) -> Result<usize> {
+                self.0.count(max)
             }
             /// iterates items
             pub fn iterate<F>(&self, mut p: F) -> Result<bool>

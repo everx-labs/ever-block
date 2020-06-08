@@ -1113,18 +1113,18 @@ top_block_descr#d5
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct TopBlockDescr {
     proof_for: BlockIdExt,
-    signatures: Option<BlockSignatures>,
+    signatures: Option<InRefValue<BlockSignatures>>,
     chain: Vec<Cell>,
 }
 
 impl TopBlockDescr {
     pub fn with_id_and_signatures(
         proof_for: BlockIdExt,
-        signatures: Option<BlockSignatures>,
+        signatures: BlockSignatures,
     ) -> Self {
         Self {
             proof_for,
-            signatures,
+            signatures: Some(InRefValue(signatures)),
             chain: vec![],
         }
     }
@@ -1202,7 +1202,7 @@ pub struct TopBlockDescrSet {
 
 impl TopBlockDescrSet {
     pub fn get_top_block_descr(&self, shard: &ShardIdent) -> Result<Option<TopBlockDescr>> {
-        match self.collection.0.get(shard.full_key()?)? {
+        match self.collection.0.get(shard.full_key_with_tag()?)? {
             Some(slice) => TopBlockDescr::construct_from(&mut slice.reference(0)?.into()).map(|r| Some(r)),
             None => Ok(None)
         }
@@ -1215,8 +1215,8 @@ impl TopBlockDescrSet {
     pub fn is_empty(&self) -> bool {
         self.collection.is_empty()
     }
-    pub fn count(&self, _max: usize) -> Result<usize> {
-        self.collection.len()
+    pub fn count(&self, max: usize) -> Result<usize> {
+        self.collection.count(max)
     }
 }
 

@@ -318,6 +318,13 @@ impl ShardIdent {
         Ok(cell.into())
     }
 
+    pub fn full_key_with_tag(&self) -> Result<SliceData> {
+        let mut cell = BuilderData::new();
+        cell.append_i32(self.workchain_id)?
+            .append_u64(self.shard_prefix_with_tag())?;
+        Ok(cell.into())
+    }
+
     pub fn workchain_id(&self) -> i32 {
         self.workchain_id
     }

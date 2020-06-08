@@ -598,18 +598,28 @@ impl Serializable for ShardFeeCreated {
         Ok(())
     }
 }
-fn umulnexps32(_x: u64, _k: u32, _trunc: bool) -> u64 {
-    unimplemented!("https://www.notion.so/tonlabs/Port-NegExpInt64Table-from-TNode-75664c4ccf794ee9b2485f3ce7945b5d")
+
+pub fn umulnexps32(x : u64, k : u32, _trunc : bool) -> u64 {
+    (x as f64 * (k as f64 / -65536f64).exp()) as u64
 }
 
 /// counters#_ last_updated:uint32 total:uint64 cnt2048:uint64 cnt65536:uint64 = Counters;
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq)]
 pub struct Counters {
     valid: bool,
     last_updated: u32,
     total: u64,
     cnt2048: u64,
     cnt65536: u64,
+}
+
+impl PartialEq for Counters {
+    fn eq(&self, other: &Self) -> bool {
+        self.last_updated == other.last_updated
+        && self.total == other.total
+        && self.cnt2048 == other.cnt2048
+        && self.cnt65536 == other.cnt65536
+    }
 }
 
 impl Counters {
@@ -702,6 +712,7 @@ impl Deserializable for Counters {
         self.total.read_from(slice)?;
         self.cnt2048.read_from(slice)?;
         self.cnt65536.read_from(slice)?;
+        self.valid = true;
         Ok(())
     }
 }

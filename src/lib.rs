@@ -209,11 +209,7 @@ impl<T: Serializable> MaybeSerialize for Option<T> {
 pub trait MaybeDeserialize {
     fn read_maybe_from<T: Deserializable + Default> (slice: &mut SliceData) -> Result<Option<T>> {
         match slice.get_next_bit_int() {
-            Ok(1) => {
-                let mut res = T::default();
-                res.read_from(slice)?;
-                Ok(Some(res))
-            }
+            Ok(1) => Ok(Some(T::construct_from(slice)?)),
             Ok(0) => Ok(None),
             _ => fail!(ExceptionCode::CellUnderflow)
         }
