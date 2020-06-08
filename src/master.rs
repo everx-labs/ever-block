@@ -14,7 +14,7 @@
 use crate::{
     define_HashmapE, define_HashmapAugE,
     bintree::{BinTree, BinTreeType},
-    blocks::{BlockIdExt, ExtBlkRef},
+    blocks::{BlockIdExt, ExtBlkRef, Block},
     config_params::ConfigParams,
     error::BlockError,
     hashmapaug::{Augmentable, HashmapAugType, TraverseNextStep},
@@ -97,7 +97,7 @@ impl ShardHashes {
             let shard_id = shard.shard_key(false);
             if let Some((key, descr)) = bintree.find(shard_id)? {
                 let shard = ShardIdent::with_prefix_slice(shard.workchain_id(), key)?;
-                return Ok(Some(McShardRecord::new(shard, descr)))
+                return Ok(Some(McShardRecord::from_shard_descr(shard, descr)))
             }
         }
         Ok(None)
@@ -106,7 +106,7 @@ impl ShardHashes {
         if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
             let shard_id = shard.shard_key(false);
             if let Some(descr) = bintree.get(shard_id)? {
-                return Ok(Some(McShardRecord::new(shard.clone(), descr)))
+                return Ok(Some(McShardRecord::from_shard_descr(shard.clone(), descr)))
             }
         }
         Ok(None)
@@ -117,7 +117,7 @@ impl ShardHashes {
             bintree.iterate(|prefix, shard_descr| {
                 let shard_ident = ShardIdent::with_prefix_slice(shard.workchain_id(), prefix)?;
                 if shard.is_neighbor_for(&shard_ident) {
-                    vec.push(McShardRecord::new(shard_ident, shard_descr));
+                    vec.push(McShardRecord::from_shard_descr(shard_ident, shard_descr));
                 }
                 Ok(true)
             })?;
@@ -142,7 +142,7 @@ impl ShardHashes {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct McShardRecord {
     pub shard: ShardIdent,
     pub descr: ShardDescr,
@@ -150,9 +150,41 @@ pub struct McShardRecord {
 }
 
 impl McShardRecord {
-    pub fn new(shard: ShardIdent, descr: ShardDescr) -> Self {
+    pub fn from_shard_descr(shard: ShardIdent, descr: ShardDescr) -> Self {
         let blk_id = BlockIdExt::with_params(shard, descr.seq_no, descr.root_hash.clone(), descr.file_hash.clone());
         Self { shard, descr, blk_id }
+    }
+
+    pub fn from_block(block: &Block, blk_id: BlockIdExt) -> Result<Self> {
+        let info = block.read_info()?;
+        let value_flow = block.read_value_flow()?;
+        Ok(
+            McShardRecord {
+                shard: info.shard().clone(),
+                descr: ShardDescr {
+                    seq_no: info.seq_no(),
+                    reg_mc_seqno: 0xffff_ffff, // by t-node
+                    start_lt: info.start_lt(),
+                    end_lt: info.end_lt(),
+                    root_hash: blk_id.root_hash().clone(),
+                    file_hash: blk_id.file_hash().clone(),
+                    before_split: info.before_split(),
+                    before_merge: false, // by t-node
+                    want_split: info.want_split(),
+                    want_merge: info.want_merge(),
+                    nx_cc_updated: false, // by t-node
+                    flags: info.flags(),
+                    next_catchain_seqno: 0xffff_ffff, // is not used in McShardRecord
+                    next_validator_shard: 0xffff_ffff_ffff_ffff, // is not used in McShardRecord
+                    min_ref_mc_seqno: info.min_ref_mc_seqno(),
+                    gen_utime: info.gen_utime().0,
+                    split_merge_at: FutureSplitMerge::None, // is not used in McShardRecord
+                    fees_collected: value_flow.fees_collected.clone(),
+                    funds_created: value_flow.created.clone(),
+                },
+                blk_id,
+            }
+        )
     }
 
     pub fn shard(&self) -> &ShardIdent {

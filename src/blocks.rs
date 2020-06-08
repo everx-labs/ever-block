@@ -1128,11 +1128,21 @@ impl TopBlockDescr {
             chain: vec![],
         }
     }
+
     pub fn append_proof(&mut self, cell: Cell) {
         self.chain.push(cell);
     }
+
     pub fn proof_for(&self) -> &BlockIdExt {
         &self.proof_for
+    }
+
+    pub fn signatures(&self) -> Option<&BlockSignatures> {
+        self.signatures.as_ref().map(|irf| &irf.0)
+    }
+
+    pub fn chain(&self) -> &Vec<Cell> {
+        &self.chain
     }
 }
 
