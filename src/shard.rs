@@ -344,8 +344,7 @@ impl ShardIdent {
         descendant.prefix != SHARD_FULL &&
         self.workchain_id() == descendant.workchain_id() &&
         (
-            self.prefix == SHARD_FULL ||
-            ((descendant.prefix & !((self.prefix_lower_bits() << 1) - 1)) == self.shard_prefix_without_tag())
+            Self::is_ancestor(self.prefix, descendant.prefix)
         )
     }
 
