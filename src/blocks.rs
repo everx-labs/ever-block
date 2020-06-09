@@ -1162,7 +1162,7 @@ impl Serializable for TopBlockDescr {
             }
             prev = builder;
         }
-        cell.append_bits(self.chain.len(), 3)?;
+        cell.append_bits(self.chain.len(), 8)?;
         cell.checked_append_references_and_data(&prev.into())?;
         Ok(())
     }
@@ -1181,7 +1181,14 @@ impl Deserializable for TopBlockDescr {
         }
         self.proof_for.read_from(slice)?;
         self.signatures = BlockSignatures::read_maybe_from(slice)?;
-        let len = slice.get_next_int(3)?;
+        let len = slice.get_next_int(8)?;
+        if !(len >= 1 && len <= 8) {
+            fail!(
+                BlockError::InvalidData(
+                    "Failed check: `len >= 1 && len <= 8`".to_string()
+                )
+            )
+        }
         {
             let mut slice = slice.clone();
             for i in (0..len).rev() {
