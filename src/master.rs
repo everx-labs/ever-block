@@ -1211,6 +1211,13 @@ impl ShardDescr {
             _ => 0
         }
     }
+    pub fn fsm_interval(&self) -> u32 {
+        match self.split_merge_at {
+            FutureSplitMerge::Split{split_utime: _, interval} => interval,
+            FutureSplitMerge::Merge{merge_utime: _, interval} => interval,
+            _ => 0
+        }
+    }
 }
 
 const SHARD_IDENT_TAG_A: u8 = 0xa; // 4 bit
