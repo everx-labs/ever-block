@@ -24,10 +24,11 @@ use crate::{
     define_HashmapE,
     error::BlockError,
     hashmapaug::HashmapAugType,
+    shard::ShardIdent,
     shard_accounts::ShardAccounts,
     signature::{CryptoSignature, SigPubKey},
     types::{ChildCell, ExtraCurrencyCollection, Grams, Number8, Number12, Number16, Number13, Number32},
-    validators::ValidatorSet,
+    validators::{ValidatorDescr, ValidatorSet},
     Serializable, Deserializable,
 };
 
@@ -248,6 +249,27 @@ impl ConfigParams {
             Ok(gb) => gb.version,
             Err(_) => 0
         }
+    }
+}
+
+impl ConfigParams {
+    pub fn compute_validator_set_cc(&self, shard: &ShardIdent, at: u32, cc_seqno: u32, cc_seqno_delta: &mut u32) -> Result<Vec<ValidatorDescr>> {
+        let vset = self.validator_set()?;
+        let ccc = self.catchain_config()?;
+        if (*cc_seqno_delta & 0xfffffffe) != 0 {
+            fail!("seqno_delta>1 is not implemented yet");
+        }
+        *cc_seqno_delta += cc_seqno;
+        vset.calc_subset(&ccc, shard.shard_prefix_with_tag(), shard.workchain_id(), *cc_seqno_delta, at.into())
+        .map(|(set, _hash)| {
+            set
+        })
+    }
+    pub fn compute_validator_set(&self, shard: &ShardIdent, _at: u32, cc_seqno: u32) -> Result<Vec<ValidatorDescr>> {
+        let vset = self.validator_set()?;
+        let ccc = self.catchain_config()?;
+        vset.calc_subset(&ccc, shard.shard_prefix_with_tag(), shard.workchain_id(), cc_seqno, _at.into())
+        .map(|(set, _seq_no)| set)
     }
 }
 

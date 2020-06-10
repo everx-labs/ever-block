@@ -142,7 +142,7 @@ impl ProcessedUpto {
     }
     pub fn compute_shard_end_lt(&self, acc: &AccountIdPrefixFull) -> Result<u64> {
         match self.ref_extra {
-            Some(ref mc) if acc.is_valid() => mc.hashes.get_shard(
+            Some(ref mc) if acc.is_valid() => mc.shards().get_shard(
                 &ShardIdent::with_tagged_prefix(acc.workchain_id, acc.prefix)?
             )?.map(|shard| shard.descr().end_lt).ok_or_else(|| error!("Shard not found")),
             _ => Ok(0)

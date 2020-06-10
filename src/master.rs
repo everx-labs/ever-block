@@ -124,6 +124,30 @@ impl ShardHashes {
         }
         Ok(vec)
     }
+    pub fn calc_shard_cc_seqno(&self, shard: &ShardIdent) -> Result<u32> {
+        if shard.is_masterchain() {
+            fail!("Given `shard` can't be masterchain")
+        }
+        ShardIdent::check_workchain_id(shard.workchain_id())?;
+
+        let shard1 = self.find_shard(&shard.left_ancestor_mask()?)?
+            .ok_or_else(|| error!("get_shard_cc_seqno: can't find shard1"))?;
+
+        if shard1.shard.is_ancestor_for(shard) {
+            return Ok(shard1.descr.next_catchain_seqno)
+        } else if !shard.is_parent_for(&shard1.shard) {
+            fail!("get_shard_cc_seqno: invalid shard1 {} for {}", &shard1.shard, shard)
+        }
+
+        let shard2 = self.find_shard(&shard.right_ancestor_mask()?)?
+            .ok_or_else(|| error!("get_shard_cc_seqno: can't find shard2"))?;
+
+        if !shard.is_parent_for(&shard2.shard) {
+            fail!("get_shard_cc_seqno: invalid shard2 {} for {}", &shard2.shard, shard)
+        }
+
+        return Ok(std::cmp::max(shard1.descr.next_catchain_seqno, shard2.descr.next_catchain_seqno) + 1)
+    }
 }
 
 impl ShardHashes {
@@ -229,7 +253,7 @@ masterchain_block_extra#cca5
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct McBlockExtra {
     key_block: bool,
-    hashes: ShardHashes, // workchain_id of ShardIdent from all blocks
+    shards: ShardHashes, // workchain_id of ShardIdent from all blocks
     fees: ShardFees,
     prev_blk_signatures: CryptoSignatures,
     recover_create_msg: Option<ChildCell<InMsg>>,
@@ -248,7 +272,7 @@ impl McBlockExtra {
     /// Adds new workchain
     pub fn add_workchain(&mut self, workchain_id: i32, descr: &ShardDescr, fee: &CurrencyCollection) -> Result<ShardIdent> {
         let shards = BinTree::with_item(descr);
-        self.hashes.set(&workchain_id, &InRefValue(shards))?;
+        self.shards.set(&workchain_id, &InRefValue(shards))?;
 
         let ident = ShardIdent::with_workchain_id(workchain_id)?;
 
@@ -259,7 +283,7 @@ impl McBlockExtra {
     /// Split Shard
     pub fn split_shard(&mut self, ident: &mut ShardIdent, descr: &ShardDescr, _fee: &CurrencyCollection) -> Result<()> {
         // TODO fee?
-        let shards = match self.hashes.get(&ident.workchain_id())? {
+        let shards = match self.shards.get(&ident.workchain_id())? {
             Some(InRefValue(mut shards)) => {
                 shards.split(ident.shard_key(false), descr)?;
                 shards
@@ -268,7 +292,7 @@ impl McBlockExtra {
                 BinTree::with_item(descr)
             }
         };
-        self.hashes.set(&ident.workchain_id(), &InRefValue(shards))?;
+        self.shards.set(&ident.workchain_id(), &InRefValue(shards))?;
         Ok(())
     }
 
@@ -309,11 +333,11 @@ impl McBlockExtra {
 
     pub fn is_key_block(&self) -> bool { self.config.is_some() }
 
-    pub fn hashes(&self) -> &ShardHashes { &self.hashes }
-    pub fn hashes_mut(&mut self) -> &mut ShardHashes { &mut self.hashes }
+    pub fn hashes(&self) -> &ShardHashes { &self.shards }
+    pub fn hashes_mut(&mut self) -> &mut ShardHashes { &mut self.shards }
 
-    pub fn shards(&self) -> &ShardHashes { &self.hashes }
-    pub fn shards_mut(&mut self) -> &mut ShardHashes { &mut self.hashes }
+    pub fn shards(&self) -> &ShardHashes { &self.shards }
+    pub fn shards_mut(&mut self) -> &mut ShardHashes { &mut self.shards }
 
     pub fn fees(&self) -> &ShardFees { &self.fees }
     pub fn fees_mut(&mut self) -> &mut ShardFees { &mut self.fees }
@@ -361,7 +385,7 @@ impl Deserializable for McBlockExtra {
             )
         }
         let key_block = cell.get_next_bit()?;
-        self.hashes.read_from(cell)?;
+        self.shards.read_from(cell)?;
         self.fees.read_from(cell)?;
 
         let ref mut cell1 = cell.checked_drain_reference()?.into();
@@ -393,7 +417,7 @@ impl Serializable for McBlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u16(MC_BLOCK_EXTRA_TAG)?;
         self.config.is_some().write_to(cell)?;
-        self.hashes.write_to(cell)?;
+        self.shards.write_to(cell)?;
         self.fees.write_to(cell)?;
 
         let mut cell1 = BuilderData::new();
@@ -871,7 +895,7 @@ masterchain_state_extra#cc26
 */
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct McStateExtra {
-    pub hashes: ShardHashes, // TODO: correct name shards
+    shards: ShardHashes,
     pub config: ConfigParams,
     pub validator_info: ValidatorInfo,
     pub prev_blocks: OldMcBlocksInfo,
@@ -889,20 +913,20 @@ impl McStateExtra {
     /// Adds new workchain
     pub fn add_workchain(&mut self, workchain_id: i32, descr: &ShardDescr) -> Result<ShardIdent> {
         let shards = BinTree::with_item(descr);
-        self.hashes.set(&workchain_id, &InRefValue(shards))?;
+        self.shards.set(&workchain_id, &InRefValue(shards))?;
         Ok(ShardIdent::with_workchain_id(workchain_id)?)
     }
 
     /// Split Shard
     pub fn split_shard(&mut self, ident: &ShardIdent, descr: &ShardDescr) -> Result<()> {
-        let shards = match self.hashes.get(&ident.workchain_id())? {
+        let shards = match self.shards.get(&ident.workchain_id())? {
             Some(InRefValue(mut shards)) => {
                 shards.split(ident.shard_key(false), descr)?;
                 shards
             }
             None => BinTree::with_item(descr)
         };
-        self.hashes.set(&ident.workchain_id(), &InRefValue(shards))?;
+        self.shards.set(&ident.workchain_id(), &InRefValue(shards))?;
         Ok(())
     }
 
@@ -910,7 +934,7 @@ impl McStateExtra {
     /// Get Shard last seq_no
     ///
     pub fn shard_seq_no(&self, ident: &ShardIdent) -> Result<Option<u32>> {
-        Ok(match self.hashes.get(&ident.workchain_id())? {
+        Ok(match self.shards.get(&ident.workchain_id())? {
             Some(InRefValue(shards)) => shards.get(ident.shard_key(false))?.map(|s| s.seq_no),
             None => None
         })
@@ -920,7 +944,7 @@ impl McStateExtra {
     /// Get shard last Logical Time
     /// 
     pub fn shard_lt(&self, ident: &ShardIdent) -> Result<Option<u64>> {
-        Ok(match self.hashes.get(&ident.workchain_id())? {
+        Ok(match self.shards.get(&ident.workchain_id())? {
             Some(InRefValue(shards)) => shards.get(ident.shard_key(false))?.map(|s| s.start_lt),
             None => None
         })
@@ -930,14 +954,17 @@ impl McStateExtra {
     /// Get shard last block hash
     /// 
     pub fn shard_hash(&self, ident: &ShardIdent) -> Result<Option<UInt256>> {
-        Ok(match self.hashes.get(&ident.workchain_id())? {
+        Ok(match self.shards.get(&ident.workchain_id())? {
             Some(InRefValue(shards)) => shards.get(ident.shard_key(false))?.map(|s| s.root_hash),
             None => None
         })
     }
 
     pub fn shards(&self) -> &ShardHashes {
-        &self.hashes
+        &self.shards
+    }
+    pub fn config(&self) -> &ConfigParams {
+        &self.config
     }
 }
 
@@ -952,7 +979,7 @@ impl Deserializable for McStateExtra {
                 }
             )
         }
-        self.hashes.read_from(cell)?;
+        self.shards.read_from(cell)?;
         self.config.read_from(cell)?;
 
         let ref mut cell1 = cell.checked_drain_reference()?.into();
@@ -984,7 +1011,7 @@ impl Deserializable for McStateExtra {
 impl Serializable for McStateExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u16(Self::tag())?;
-        self.hashes.write_to(cell)?;
+        self.shards.write_to(cell)?;
         self.config.write_to(cell)?;
 
         let mut cell1 = BuilderData::new();
