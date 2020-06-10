@@ -174,8 +174,8 @@ impl McShardRecord {
                     want_merge: info.want_merge(),
                     nx_cc_updated: false, // by t-node
                     flags: info.flags(),
-                    next_catchain_seqno: 0xffff_ffff, // is not used in McShardRecord
-                    next_validator_shard: 0xffff_ffff_ffff_ffff, // is not used in McShardRecord
+                    next_catchain_seqno: info.gen_catchain_seqno(),
+                    next_validator_shard: info.shard().shard_prefix_with_tag(),
                     min_ref_mc_seqno: info.min_ref_mc_seqno(),
                     gen_utime: info.gen_utime().0,
                     split_merge_at: FutureSplitMerge::None, // is not used in McShardRecord
