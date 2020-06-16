@@ -345,13 +345,14 @@ impl BlockInfo {
         prev_ref.read_from(&mut self.prev_ref.cell().into())?;
         Ok(prev_ref)
     }
-    pub fn read_prev_ids(&self) -> Result<Vec<ExtBlkRef>> {
+    pub fn read_prev_ids(&self) -> Result<Vec<BlockIdExt>> {
         let prev = self.read_prev_ref()?;
-        let mut vec = vec!(prev.prev1()?);
         if let Some(prev2) = prev.prev2()? {
-            vec.push(prev2);
+            let (shard1, shard2) = self.shard.split()?;
+            Ok(vec![prev.prev1()?.workchain_block_id(shard1).1, prev2.workchain_block_id(shard2).1])
+        } else {
+            Ok(vec!(prev.prev1()?.workchain_block_id(self.shard.clone()).1))
         }
-        Ok(vec)
     }
     pub fn set_prev_stuff(&mut self, after_merge: bool, prev_ref: &BlkPrevInfo) -> Result<()> {
         if !after_merge ^ prev_ref.is_one_prev() {
@@ -832,6 +833,15 @@ pub struct ExtBlkRef {
 impl ExtBlkRef {
     pub fn master_block_id(self) -> (u64, BlockIdExt) {
         (self.end_lt, BlockIdExt::from_ext_blk(self))
+    }
+    pub fn workchain_block_id(self, shard_id: ShardIdent) -> (u64, BlockIdExt) {
+        let block_id = BlockIdExt {
+            shard_id,
+            seq_no: self.seq_no,
+            root_hash: self.root_hash,
+            file_hash: self.file_hash,
+        };
+        (self.end_lt, block_id)
     }
 }
 

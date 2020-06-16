@@ -133,6 +133,9 @@ impl ProcessedUpto {
 
         Ok(enq.enqueued_lt() < shard_end_lt)
     }
+    pub fn can_check_processed(&self) -> bool {
+        self.ref_extra.is_some()
+    }
     pub fn contains(&self, other: &Self) -> bool {
         ShardIdent::with_tagged_prefix(0, self.shard).unwrap().is_ancestor_for(&ShardIdent::with_tagged_prefix(0, other.shard).unwrap())
             && self.mc_seqno >= other.mc_seqno
