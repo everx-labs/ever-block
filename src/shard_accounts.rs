@@ -34,7 +34,7 @@ use ton_types::{
 define_HashmapAugE!(ShardAccounts, 256, UInt256, ShardAccount, DepthBalanceInfo);
 
 impl ShardAccounts {
-    pub fn insert(&mut self, split_depth: u8, account: &Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Option<AccountId>> {
+    pub fn insert(&mut self, split_depth: u8, account: Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Option<AccountId>> {
         match account.get_id() {
             Some(acc_id) => {
                 let depth_balance_info = DepthBalanceInfo::new(split_depth, account.get_balance().unwrap())?;

@@ -914,9 +914,9 @@ pub struct ShardAccount {
 }
 
 impl ShardAccount {
-    pub fn with_params(account: &Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Self> {
+    pub fn with_params(account: Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Self> {
         Ok(ShardAccount {
-            account: ChildCell::with_struct(account)?,
+            account: ChildCell::with_struct(&account)?,
             last_trans_hash,
             last_trans_lt,
         })
