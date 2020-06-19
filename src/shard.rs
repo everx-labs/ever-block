@@ -413,7 +413,7 @@ impl ShardIdent {
     }
 
     pub fn can_split(&self) -> bool {
-        self.prefix_len() == MAX_SPLIT_DEPTH
+        self.prefix_len() < MAX_SPLIT_DEPTH
     }
 
     pub fn is_full(&self) -> bool {
