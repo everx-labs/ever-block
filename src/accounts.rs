@@ -804,6 +804,12 @@ impl Account {
             AccountStatus::AccStateNonexist
         }
     }
+    /// calculate storage fee and sub funds, freeze if not enought
+    pub fn set_last_paid(&mut self, last_paid: u32) {
+        if let Some(stuff) = self.stuff_mut() {
+            stuff.storage_stat.last_paid = last_paid;
+        }
+    }
     /// getting balance of the account
     pub fn get_balance(&self) -> Option<&CurrencyCollection> {
         self.stuff().map(|s| &s.storage.balance)

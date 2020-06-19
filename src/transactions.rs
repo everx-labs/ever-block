@@ -182,16 +182,18 @@ impl TrComputePhase {
 
     /// Set flag, that account is activated. Use 'msg_used' parameter
     /// to indicate that inbound message is used for this activation.
-    pub fn activated(&mut self, msg_used: bool) {
+    pub fn activated(&mut self, _msg_used: bool) {
         match self {
-            TrComputePhase::Vm(ref mut phase_ref) => {
-                phase_ref.account_activated = true;
-                phase_ref.msg_state_used = msg_used;
+            TrComputePhase::Vm(_phase_ref) => {
+                // removed due Durov's code
+                // phase_ref.account_activated = true;
+                // phase_ref.msg_state_used = msg_used;
             },
             _ => {
-                let mut vm_phase = TrComputePhaseVm::default();
-                vm_phase.account_activated = true;
-                vm_phase.msg_state_used = msg_used;
+                let vm_phase = TrComputePhaseVm::default();
+                // removed due Durov's code
+                // vm_phase.account_activated = true;
+                // vm_phase.msg_state_used = msg_used;
                 *self = TrComputePhase::Vm(vm_phase);
             },
         }
