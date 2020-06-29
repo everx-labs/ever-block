@@ -13,6 +13,7 @@
 
 use crate::GetRepresentationHash;
 use crate::{
+    define_HashmapE,
     blocks::Block,
     error::BlockError,
     hashmapaug::HashmapAugType,
@@ -24,7 +25,7 @@ use std::fmt;
 use std::str::FromStr;
 use ton_types::{
     BuilderData, Cell, error, fail, MAX_DATA_BITS, MAX_REFERENCES_COUNT, Result, 
-    SliceData, UsageTree, IBitstring, AccountId, UInt256
+    SliceData, UsageTree, IBitstring, AccountId, HashmapE, HashmapType, UInt256
 };
 
 
@@ -1376,6 +1377,7 @@ impl Message {
             .and_then(|proof| proof.write_to_new_cell())
             .map(|cell| cell.into())
     }
+
 }
 
 impl Serializable for Message
@@ -1463,7 +1465,7 @@ impl Serializable for Message
         }
 
         Ok(())
-    } 
+    }
 }
 
 impl Deserializable for Message {
@@ -1486,6 +1488,8 @@ impl Deserializable for Message {
                 self.init = Some(init);
                 self.init_to_ref = Some(false);
             }  
+        } else {
+            self.init_to_ref = Some(false);
         }
 
         // read body
@@ -1498,11 +1502,13 @@ impl Deserializable for Message {
         self.body = if cell.get_next_bit()? { // body in reference
             self.body_to_ref = Some(true);
             Some(cell.checked_drain_reference()?.into())
-        } else if cell.is_empty() { // no body
-            None
-        } else { // body is leftover
+        } else {
             self.body_to_ref = Some(false);
-            Some(cell.clone())
+            if cell.is_empty() { // no body
+                None
+            } else { // body is leftover
+                Some(cell.clone())
+            }
         };
         Ok(())
     } 
@@ -1586,12 +1592,47 @@ impl fmt::Display for TickTock {
     }
 }
 
+/// simple_lib$_ public:Bool root:^Cell = SimpleLib;
+#[derive(Default, Clone)]
+pub struct SimpleLib {
+    pub public: bool,
+    pub root: Cell,
+}
+
+impl SimpleLib {
+    pub fn new(root: Cell, public: bool) -> Self {
+        Self { public, root }
+    }
+    pub fn is_public_library(&self) -> bool {
+        self.public
+    }
+}
+
+impl Serializable for SimpleLib {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.public.write_to(cell)?;
+        self.root.write_to(cell)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for SimpleLib {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        self.public.read_from(slice)?;
+        self.root.read_from(slice)?;
+        Ok(())
+    }
+}
+
+// HashmapE 256 SimpleLib
+define_HashmapE!{StateInitLib, 256, SimpleLib}
+
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// 3.1.7. Message layout.
 /// split_depth:(Maybe (## 5)) special:(Maybe TickTock)
 /// code:(Maybe ^Cell) data:(Maybe ^Cell)
-/// library:(Maybe ^Cell) = StateInit;
+/// library:(HashmapE 256 SimpleLib) = StateInit;
 /// 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct StateInit {
@@ -1599,33 +1640,33 @@ pub struct StateInit {
     pub special: Option<TickTock>,
     pub code: Option<Cell>,
     pub data: Option<Cell>,
-    pub library: Option<Cell>,
+    pub library: StateInitLib,
 }
 
 impl StateInit {
-    pub fn set_split_depth(&mut self, val: Number5)
-    {
+    pub fn set_split_depth(&mut self, val: Number5) {
         self.split_depth = Some(val);
     }
 
-    pub fn set_special(&mut self, val: TickTock)
-    {
+    pub fn set_special(&mut self, val: TickTock) {
         self.special = Some(val);
     }
 
-    pub fn set_code(&mut self, val: Cell)
-    {
+    pub fn set_code(&mut self, val: Cell) {
         self.code = Some(val);
     }
 
-    pub fn set_data(&mut self, val: Cell)
-    {
+    pub fn set_data(&mut self, val: Cell) {
         self.data = Some(val);
     }
 
-    pub fn set_library(&mut self, val: Cell)
-    {
-        self.library = Some(val);
+    pub fn set_library(&mut self, val: Cell) {
+        self.library = StateInitLib::with_hashmap(Some(val));
+    }
+
+    pub fn set_library_code(&mut self, code: Cell, public: bool) -> Result<()> {
+        self.library.set(&code.repr_hash(), &SimpleLib::new(code, public))?;
+        Ok(())
     }
 }
 
@@ -1636,7 +1677,7 @@ impl Serializable for StateInit {
         self.special.write_maybe_to(cell)?;
         self.code.write_maybe_to(cell)?;
         self.data.write_maybe_to(cell)?;
-        self.library.write_maybe_to(cell)?;
+        self.library.write_to(cell)?;
         Ok(())
     } 
 }
@@ -1658,11 +1699,7 @@ impl Deserializable for StateInit {
             false => None,
         };
 
-        // library:(Maybe ^Cell)
-        self.library = match cell.get_next_bit()? {
-            true => Some(cell.checked_drain_reference()?.clone()),
-            false => None,
-        };
+        self.library.read_from(cell)?;
 
         Ok(())
     } 
@@ -1713,7 +1750,7 @@ pub fn generate_big_msg() -> Message {
     let data = SliceData::new(vec![0x3F, 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xF4]);
     stinit.set_data(data.into_cell());
     let library = SliceData::new(vec![0x3F, 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xF4]);
-    stinit.set_library(library.into_cell());
+    stinit.set_library_code(library.into_cell(), true).unwrap();
     
     let mut body = BuilderData::from_slice(&SliceData::new(
             vec![0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,

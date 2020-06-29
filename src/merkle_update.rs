@@ -170,11 +170,7 @@ impl MerkleUpdate {
                 self.traverse_on_apply(&self.new, &old_cells, 0).into();
 
             // constructed tree's hash have to coinside with self.new_hash
-            if new_root.repr_hash() != self.new_hash {
-                fail!(
-                    BlockError::WrongMerkleUpdate("new bag's hash mismatch".to_string())
-                )
-            }
+            debug_assert_eq!(new_root.repr_hash(), self.new_hash);
 
             Ok(new_root)
         }

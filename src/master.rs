@@ -1368,13 +1368,19 @@ impl LibDescr {
     pub fn lib(&self) -> &Cell {
         &self.lib
     }
-    pub fn is_public_library(&self, _key: &UInt256) -> bool {
-        unimplemented!()
-    }
 }
 
 impl Deserializable for LibDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_int(2)?;
+        if tag != 0 {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "LibDescr".to_string()
+                }
+            )
+        }
         self.lib.read_from(slice)?;
         self.publishers.read_hashmap_root(slice)?;
         Ok(())
@@ -1386,6 +1392,7 @@ impl Serializable for LibDescr {
         if self.publishers.is_empty() {
             fail!(BlockError::InvalidData("self.publishers is empty".to_string()))
         }
+        cell.append_bits(0, 2)?;
         self.lib.write_to(cell)?;
         self.publishers.write_hashmap_root(cell)?;
         Ok(())
