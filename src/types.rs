@@ -642,9 +642,6 @@ macro_rules! define_HashmapE {
             pub fn root(&self) -> Option<&Cell> {
                 self.0.data()
             }
-            pub fn inner(self) -> HashmapE {
-                self.0
-            }
             /// Used for not empty Hashmaps
             pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
                 self.0.read_hashmap_root(slice)
