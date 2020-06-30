@@ -15,9 +15,9 @@ use crate::{
     error::BlockError,
     hashmapaug::HashmapAugType,
     merkle_proof::MerkleProof,
-    messages::{AnycastInfo, CommonMsgInfo, Message, MsgAddressInt, StateInit, TickTock},
+    messages::{AnycastInfo, CommonMsgInfo, Message, MsgAddressInt, SimpleLib, StateInit, StateInitLib, TickTock},
     types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
-    shard::{Libraries, ShardIdent, ShardStateUnsplit},
+    shard::{ShardIdent, ShardStateUnsplit},
     GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
 use std::fmt;
@@ -552,45 +552,34 @@ impl Account {
     /// Create initialized account from "constructor message"
     ///
     pub fn with_message(msg: &Message) -> Result<Self> {
-        let mut storage = AccountStorage::default();
-        let mut address = MsgAddressInt::default();
-
-        match msg.header() {
-            CommonMsgInfo::IntMsgInfo(ref header) => {
-                storage.balance = header.value.clone();
-                address = header.dst.clone();
-            },
-            CommonMsgInfo::ExtInMsgInfo(ref header) => {
-                address = header.dst.clone();
-            },
-            _ => (),
-        }
-        if let Some(init) = msg.state_init() {
-            //code must present in constructor message
-            match init.code {
-                Some(_) => storage.state = AccountState::AccountActive(init.clone()),
-                None => fail!(
-                    BlockError::InvalidData(
-                        "code field must present in StateInit in constructor message  \
-                         while creating account".to_string()
-                    )
-                ),
-            };
-        } else {
-            fail!(
-                BlockError::InvalidData(
-                    "stateInit must present in constructor message \
-                     while creating account".to_string()
-                )
-            )
+        match msg.state_init() {
+            //code must be present in constructor message
+            Some(init) if init.code.is_some() => {
+                let mut storage = AccountStorage::default();
+                let mut address = MsgAddressInt::default();
+                match msg.header() {
+                    CommonMsgInfo::IntMsgInfo(ref header) => {
+                        storage.balance = header.value.clone();
+                        address = header.dst.clone();
+                    },
+                    CommonMsgInfo::ExtInMsgInfo(ref header) => {
+                        address = header.dst.clone();
+                    },
+                    _ => (),
+                }
+                storage.state = AccountState::AccountActive(init.clone());
+                Ok(Account::Account(AccountStuff {
+                    addr: address,
+                    storage_stat: StorageInfo::default(),
+                    storage
+                }))
+            }
+            Some(_) => fail!(BlockError::InvalidData(format!("code field must present in \
+                StateInit in the constructor message {} while creating account", msg.hash()?.to_hex_string()))),
+            None => fail!(BlockError::InvalidData(format!("stateInit must present in constructor message {} \
+                while creating account", msg.hash()?.to_hex_string())))
         }
 
-        let account = Account::Account(AccountStuff {
-            addr: address,
-            storage_stat: StorageInfo::default(),
-            storage: storage
-        });
-        Ok(account)
     }
 
     #[warn(unused_variables)]
@@ -755,13 +744,41 @@ impl Account {
     }
 
     /// set new library code
-    pub fn set_library(&mut self, _new_code: Cell) -> bool {
-        unimplemented!()
+    pub fn set_library(&mut self, code: Cell, public: bool) -> bool {
+        if let Some(stuff) = self.stuff_mut() {
+            if let AccountState::AccountActive(ref mut state_init) = stuff.storage.state {
+                return state_init.library.set(&code.repr_hash(), &SimpleLib::new(code, public)).is_ok()
+            }
+        }
+        false
+    }
+
+    /// change library code public flag
+    pub fn set_library_flag(&mut self, hash: &UInt256, public: bool) -> bool {
+        if let Some(stuff) = self.stuff_mut() {
+            if let AccountState::AccountActive(ref mut state_init) = stuff.storage.state {
+                match state_init.library.get(hash) {
+                    Ok(Some(ref mut lib)) => if lib.is_public_library() == public {
+                        return true
+                    } else {
+                        lib.public = public;
+                        return state_init.library.set(hash, lib).is_ok()
+                    }
+                    _ => return false
+                }
+            }
+        }
+        false
     }
 
     /// delete library code
-    pub fn delete_library(&mut self, _hash: UInt256) -> bool {
-        unimplemented!()
+    pub fn delete_library(&mut self, hash: &UInt256) -> bool {
+        if let Some(stuff) = self.stuff_mut() {
+            if let AccountState::AccountActive(ref mut state_init) = stuff.storage.state {
+                return state_init.library.remove(hash).is_ok()
+            }
+        }
+        false
     }
 
     /// Activate account with new StateInit
@@ -781,15 +798,13 @@ impl Account {
     }
 
     /// getting to the root of the cell with library
-    pub fn get_library(&self) -> Libraries {
+    pub fn get_library(&self) -> StateInitLib {
         if let Some(stuff) = self.stuff() {
             if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
-                if let Some(ref library) = (*state_init).library {
-                    return Libraries::with_hashmap(Some(library.clone()))
-                }
+                return state_init.library.clone()
             }
         }
-        Libraries::default()
+        StateInitLib::default()
     }
 
     /// Get enum variant indicating current state of account
@@ -1019,7 +1034,7 @@ pub fn generate_test_account() -> Account {
     let data = SliceData::new(vec![0b00111111, 0b11111111,0b11111,0b11111111,0b11111111,0b11111111,0b11111111,0b11110100]);
     stinit.set_data(data.into_cell());
     let library = SliceData::new(vec![0b00111111, 0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11110100]);
-    stinit.set_library(library.into_cell());
+    stinit.set_library_code(library.into_cell(), true).unwrap();
 
     let mut balance = CurrencyCollection::new();
     balance.grams = Grams(100000000000u64.into());
