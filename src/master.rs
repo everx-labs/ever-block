@@ -604,9 +604,35 @@ impl OldMcBlocksInfo {
         }
     }
 
+    pub fn check_block(&self, id: &BlockIdExt) -> Result<()> {
+        if !id.shard().is_masterchain() {
+            fail!(BlockError::InvalidData("Given id does not belong masterchain".to_string()));
+        }
+        let found_id = self
+            .get(&id.seq_no())?
+            .ok_or_else(|| error!("Block with given seq_no is not found"))?
+            .blk_ref;
+        
+        if found_id.root_hash != *id.root_hash() {
+            fail!(
+                "Given block has invalid root hash: found {}, expected {}",
+                found_id.root_hash.to_hex_string(),
+                id.root_hash().to_hex_string()
+            )
+        }
+        if found_id.file_hash != *id.file_hash() {
+            fail!(
+                "Given block has invalid file hash: found {}, expected {}",
+                found_id.file_hash.to_hex_string(),
+                id.file_hash().to_hex_string()
+            )
+        }
+        Ok(())
+    }
+
     fn build_key_part(key_prefix: &[u8], key_prefix_len: usize) -> Result<u32> {
         if key_prefix_len > 32 {
-            error!(BlockError::InvalidData("key_prefix_len > 32".to_string()));
+            fail!(BlockError::InvalidData("key_prefix_len > 32".to_string()));
         }
         let mut key_buf = [0_u8; 4];
         key_buf[..key_prefix.len()].copy_from_slice(key_prefix);
