@@ -166,6 +166,15 @@ pub struct TrComputePhaseVm {
     pub vm_final_state_hash: UInt256
 }
 
+impl TrComputePhaseVm {
+    /// Set flag, that account is activated. Use 'msg_used' parameter
+    /// to indicate that inbound message is used for this activation.
+    /// Due to Durov's code does not do enything
+    pub fn activated(_msg_used: bool) -> Self {
+        Self::default()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TrComputePhase {
     Skipped(TrComputePhaseSkipped),

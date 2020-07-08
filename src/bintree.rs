@@ -65,6 +65,10 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
     fn iterate<F: FnMut(SliceData, X) -> Result<bool>>(&self, mut p: F) -> Result<bool> {
         iterate_internal(&mut self.get_data(), BuilderData::new(), &mut p)
     }
+    /// Iterates over all items by pairs
+    fn iterate_pairs<F: FnMut(BuilderData, X, Option<X>) -> Result<bool>>(&self, mut p: F) -> Result<bool> {
+        iterate_internal_pairs(&mut self.get_data(), BuilderData::new(), None, &mut p, true)
+    }
 }
 
 //////////////////////////////////
@@ -124,6 +128,44 @@ where
         iterate_internal(&mut cursor.checked_drain_reference()?.into(), key, p)?
     } else {
         return p(key.into(), X::construct_from(cursor)?)
+    };
+    Ok(result)
+}
+
+fn iterate_internal_pairs<X, F>(
+    cursor: &mut SliceData,
+    mut key: BuilderData,
+    sibling: Option<Cell>,
+    func: &mut F,
+    check_sibling: bool,
+) -> Result<bool>
+where 
+    X: Default + Serializable + Deserializable, 
+    F: FnMut(BuilderData, X, Option<X>) -> Result<bool> {
+    
+    let result = if cursor.get_next_bit()? {
+        let mut left_key = key.clone();
+        left_key.append_bit_zero()?;
+        key.append_bit_one()?;
+        let left = cursor.checked_drain_reference()?;
+        let right = cursor.checked_drain_reference()?;
+        iterate_internal_pairs(&mut left.clone().into(), left_key, Some(right.clone()), func, true)? &&
+        iterate_internal_pairs(&mut right.into(), key, Some(left), func, false)?
+    } else {
+        let left = X::construct_from(cursor)?;
+        match sibling {
+            Some(cell) => {
+                let mut cursor = SliceData::from(cell.clone());
+                if cursor.get_next_bit()? {
+                    func(key.clone(), left, None)?
+                } else if check_sibling {
+                    func(key, left, Some(X::construct_from(&mut cursor)?))?
+                } else {
+                    true
+                }
+            }
+            None => func(key.clone(), left, None)?
+        }
     };
     Ok(result)
 }

@@ -89,6 +89,15 @@ impl ShardHashes {
             })
         })
     }
+    pub fn iterate_shards_with_siblings<F>(&self, mut func: F) -> Result<bool>
+    where F: FnMut(ShardIdent, ShardDescr, Option<ShardDescr>) -> Result<bool> {
+        self.iterate_with_keys(|wc_id: i32, InRefValue(shardes_tree)| {
+            shardes_tree.iterate_pairs(|prefix, shard_descr, sibling| {
+                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix.into())?;
+                func(shard_ident, shard_descr, sibling)
+            })
+        })
+    }
     pub fn has_workchain(&self, workchain_id: i32) -> Result<bool> {
         self.get_as_slice(&workchain_id).map(|result| result.is_some())
     }
@@ -151,18 +160,19 @@ impl ShardHashes {
 }
 
 impl ShardHashes {
-    pub fn dump(&self, heading: &str) {
+    pub fn dump(&self, heading: &str) -> usize {
+        let mut count = 0;
         println!("dumping shard records for: {}", heading);
         self.iterate_with_keys(|workchain_id: i32, InRefValue(bintree)| {
             println!("workchain: {}", workchain_id);
             bintree.iterate(|prefix, descr| {
                 let shard = ShardIdent::with_prefix_slice(workchain_id, prefix.clone().into())?;
-                println!("shard: {}", shard);
-                println!("seq_no: {}", descr.seq_no);
-                println!("prefix: {}", prefix);
+                println!("shard: {:064b} seq_no: {}", shard.shard_prefix_with_tag(), descr.seq_no);
+                count += 1;
                 Ok(true)
             })
         }).unwrap();
+        count
     }
 }
 
