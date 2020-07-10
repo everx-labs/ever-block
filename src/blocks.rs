@@ -1235,7 +1235,7 @@ impl TopBlockDescrSet {
         }
     }
     pub fn insert(&mut self, shard: &ShardIdent, descr: &TopBlockDescr) -> Result<()> {
-        let key = shard.full_key()?;
+        let key = shard.full_key_with_tag()?;
         let value = descr.write_to_new_cell()?;
         self.collection.0.setref(key, &value.into()).map(|_|())
     }

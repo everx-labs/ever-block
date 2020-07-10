@@ -381,7 +381,8 @@ impl BlockSignatures {
     /// Create new instance of BlockSignatures
     pub fn with_params(
         validator_info: ValidatorBaseInfo,
-        pure_signatures: BlockSignaturesPure) -> Self {
+        pure_signatures: BlockSignaturesPure
+    ) -> Self {
         BlockSignatures {
             validator_info,
             pure_signatures,

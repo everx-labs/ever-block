@@ -117,8 +117,8 @@ impl ValidatorBaseInfo {
 
     pub fn with_params(
         validator_list_hash_short: u32, 
-        catchain_seqno: u32) -> Self 
-    {
+        catchain_seqno: u32
+    ) -> Self {
         ValidatorBaseInfo {
             validator_list_hash_short,
             catchain_seqno,
