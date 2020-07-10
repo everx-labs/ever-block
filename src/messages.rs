@@ -1660,8 +1660,6 @@ impl StateInit {
         self.data = Some(val);
     }
 
-    pub fn libraries(&self) -> StateInitLib { self.library.clone() }
-
     pub fn set_library(&mut self, val: Cell) {
         self.library = StateInitLib::with_hashmap(Some(val));
     }

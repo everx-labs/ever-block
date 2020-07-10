@@ -798,15 +798,14 @@ impl Account {
     }
 
     /// getting to the root of the cell with library
-    pub fn libraries(&self) -> StateInitLib {
+    pub fn get_library(&self) -> StateInitLib {
         if let Some(stuff) = self.stuff() {
             if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
-                return state_init.libraries()
+                return state_init.library.clone()
             }
         }
         StateInitLib::default()
     }
-    pub fn get_library(&self) -> StateInitLib { self.libraries() }
 
     /// Get enum variant indicating current state of account
     pub fn status(&self) -> AccountStatus {
