@@ -11,9 +11,6 @@
 * limitations under the License.
 */
 
-use std::ops::Deref;
-use std::sync::Arc;
-
 use ton_types::{
     BuilderData, Cell, error,
     fail,
@@ -108,6 +105,18 @@ impl ConfigParams {
         match self.config(28)? {
             Some(ConfigParamEnum::ConfigParam28(ccc)) => Ok(ccc),
             _ => fail!("no CatchainConfig in config_params")
+        }
+    }
+    pub fn elector_address(&self) -> Result<UInt256> {
+        match self.config(1)? {
+            Some(ConfigParamEnum::ConfigParam1(param)) => Ok(param.elector_addr),
+            _ => fail!("no elector address in config")
+        }
+    }
+    pub fn elector_params(&self) -> Result<ConfigParam15> {
+        match self.config(15)? {
+            Some(ConfigParamEnum::ConfigParam15(param)) => Ok(param),
+            _ => fail!("no elector params in config")
         }
     }
     pub fn fee_collector_address(&self) -> Result<UInt256> {
@@ -1163,43 +1172,8 @@ gas_flat_pfx#d1
 ///
 /// GasLimitsPrices
 /// 
-
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct GasPrices {
-    pub gas_price: u64,
-    pub gas_limit: u64,
-    pub gas_credit: u64,
-    pub block_gas_limit: u64,
-    pub freeze_due_limit: u64,
-    pub delete_due_limit: u64,
-}
-
-impl Deserializable for GasPrices {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.gas_price.read_from(cell)?;
-        self.gas_limit.read_from(cell)?;
-        self.gas_credit.read_from(cell)?;
-        self.block_gas_limit.read_from(cell)?;
-        self.freeze_due_limit.read_from(cell)?;
-        self.delete_due_limit.read_from(cell)?;
-        Ok(())
-    }
-}
-
-impl Serializable for GasPrices {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.gas_price.write_to(cell)?;
-        self.gas_limit.write_to(cell)?;
-        self.gas_credit.write_to(cell)?;
-        self.block_gas_limit.write_to(cell)?;
-        self.freeze_due_limit.write_to(cell)?;
-        self.delete_due_limit.write_to(cell)?;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct GasPricesEx {
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct GasLimitsPrices {
     pub gas_price: u64,
     pub gas_limit: u64,
     pub special_gas_limit: u64,
@@ -1207,85 +1181,45 @@ pub struct GasPricesEx {
     pub block_gas_limit: u64,
     pub freeze_due_limit: u64,
     pub delete_due_limit: u64,
-}
-
-impl Deserializable for GasPricesEx {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.gas_price.read_from(cell)?;
-        self.gas_limit.read_from(cell)?;
-        self.special_gas_limit.read_from(cell)?;
-        self.gas_credit.read_from(cell)?;
-        self.block_gas_limit.read_from(cell)?;
-        self.freeze_due_limit.read_from(cell)?;
-        self.delete_due_limit.read_from(cell)?;
-        Ok(())
-    }
-}
-
-impl Serializable for GasPricesEx {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.gas_price.write_to(cell)?;
-        self.gas_limit.write_to(cell)?;
-        self.special_gas_limit.write_to(cell)?;
-        self.gas_credit.write_to(cell)?;
-        self.block_gas_limit.write_to(cell)?;
-        self.freeze_due_limit.write_to(cell)?;
-        self.delete_due_limit.write_to(cell)?;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct GasFlatPfx {
     pub flat_gas_limit: u64,
     pub flat_gas_price: u64,
-    pub other: Arc<GasLimitsPrices>,
-}
-
-impl Deserializable for GasFlatPfx {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.flat_gas_limit.read_from(cell)?;
-        self.flat_gas_price.read_from(cell)?;
-        self.other = Arc::new(GasLimitsPrices::construct_from(cell)?);
-        if let GasLimitsPrices::FlatPfx(_) = self.other.deref() {
-            fail!(
-                BlockError::InvalidData("GasFlatPfx.other can't be GasFlatPfx".to_string())
-            )
-        }
-        Ok(())
-    }
-}
-
-impl Serializable for GasFlatPfx {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.flat_gas_limit.write_to(cell)?;
-        self.flat_gas_price.write_to(cell)?;
-        if let GasLimitsPrices::FlatPfx(_) = self.other.deref() {
-            fail!(
-                BlockError::InvalidData("GasFlatPfx.other can't be GasFlatPfx".to_string())
-            )
-        }
-        self.other.write_to(cell)?;
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum GasLimitsPrices {
-    Std(GasPrices),
-    Ex(GasPricesEx),
-    FlatPfx(GasFlatPfx),
-}
-
-impl Default for GasLimitsPrices {
-    fn default() -> Self {
-        GasLimitsPrices::Std(GasPrices::default())
-    }
+    pub max_gas_threshold: u128,
 }
 
 impl GasLimitsPrices {
     pub fn new() -> Self {
         Self::default()
+    }
+    /// Calculate gas fee by gas used value
+    pub fn calc_gas_fee(&self, gas_used: u64) -> u128 {
+        // There is a flat_gas_limit value which is the minimum gas value possible and has fixed price.
+        // If actual gas value is less then flat_gas_limit then flat_gas_price paid.
+        // If actual gas value is bigger then flat_gas_limit then flat_gas_price paid for first 
+        // flat_gas_limit gas and remaining value costs gas_price
+        if gas_used <= self.flat_gas_limit {
+            self.flat_gas_price as u128
+        } else {
+            // gas_price is pseudo value (shifted by 16 as forward and storage price)
+            // after calculation divide by 0xffff with ceil rounding
+            self.flat_gas_price as u128 + (((gas_used - self.flat_gas_limit) as u128 * self.gas_price as u128 + 0xffff) >> 16)
+        }
+    }
+
+    /// Get gas price in nanograms
+    pub fn get_real_gas_price(&self) -> u64 {
+        self.gas_price >> 16
+    }
+
+    /// Calculate gas by grams balance
+    pub fn calc_gas(&self, value: u128) -> u64 {
+        if value >= self.max_gas_threshold {
+            return self.gas_limit
+        }
+        if value < self.flat_gas_price as u128 {
+            return 0
+        }
+        let res = ((value - self.flat_gas_price as u128) << 16) / (self.gas_price as u128);
+        self.flat_gas_limit + res as u64
     }
 }
 
@@ -1295,39 +1229,65 @@ const GAS_FLAT_PFX_TAG: u8 = 0xD1;
 
 impl Deserializable for GasLimitsPrices {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        *self = match cell.get_next_byte()? {
-            GAS_PRICES_TAG => GasLimitsPrices::Std(GasPrices::construct_from(cell)?),
-            GAS_PRICES_EXT_TAG => GasLimitsPrices::Ex(GasPricesEx::construct_from(cell)?),
-            GAS_FLAT_PFX_TAG => GasLimitsPrices::FlatPfx(GasFlatPfx::construct_from(cell)?),
-            tag => {
-                fail!(
-                    BlockError::InvalidConstructorTag {
-                        t: tag as u32,
-                        s: "GasLimitsPrices".to_string()
-                    }
-                )
+        self.max_gas_threshold = 0;
+        self.flat_gas_limit = 0;
+        self.flat_gas_price = 0;
+        self.special_gas_limit = 0;
+        loop {
+            match cell.get_next_byte()? {
+                GAS_PRICES_TAG => {
+                    self.gas_price.read_from(cell)?;
+                    self.gas_limit.read_from(cell)?;
+                    self.gas_credit.read_from(cell)?;
+                    self.block_gas_limit.read_from(cell)?;
+                    self.freeze_due_limit.read_from(cell)?;
+                    self.delete_due_limit.read_from(cell)?;
+                    break;
+                }
+                GAS_PRICES_EXT_TAG => {
+                    self.gas_price.read_from(cell)?;
+                    self.gas_limit.read_from(cell)?;
+                    self.special_gas_limit.read_from(cell)?;
+                    self.gas_credit.read_from(cell)?;
+                    self.block_gas_limit.read_from(cell)?;
+                    self.freeze_due_limit.read_from(cell)?;
+                    self.delete_due_limit.read_from(cell)?;
+                    break;
+                }
+                GAS_FLAT_PFX_TAG => {
+                    self.flat_gas_limit.read_from(cell)?;
+                    self.flat_gas_price.read_from(cell)?;
+                }
+                tag => {
+                    fail!(
+                        BlockError::InvalidConstructorTag {
+                            t: tag as u32,
+                            s: "GasLimitsPrices".to_string()
+                        }
+                    )
+                }
             }
-        };
+        }
+        if self.gas_limit > self.flat_gas_limit {
+            self.max_gas_threshold += (self.gas_price as u128) * ((self.gas_limit - self.flat_gas_limit) as u128) >> 16;
+        }
         Ok(())
     }
 }
 
 impl Serializable for GasLimitsPrices {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        match self {
-            GasLimitsPrices::Std(gp) => {
-                cell.append_u8(GAS_PRICES_TAG)?;
-                gp.write_to(cell)?;
-            },
-            GasLimitsPrices::Ex(gp) => {
-                cell.append_u8(GAS_PRICES_EXT_TAG)?;
-                gp.write_to(cell)?;
-            },
-            GasLimitsPrices::FlatPfx(gp) => {
-                cell.append_u8(GAS_FLAT_PFX_TAG)?;
-                gp.write_to(cell)?;
-            },
-        };
+        cell.append_u8(GAS_FLAT_PFX_TAG)?;
+        self.flat_gas_limit.write_to(cell)?;
+        self.flat_gas_price.write_to(cell)?;
+        cell.append_u8(GAS_PRICES_EXT_TAG)?;
+        self.gas_price.write_to(cell)?;
+        self.gas_limit.write_to(cell)?;
+        self.special_gas_limit.write_to(cell)?;
+        self.gas_credit.write_to(cell)?;
+        self.block_gas_limit.write_to(cell)?;
+        self.freeze_due_limit.write_to(cell)?;
+        self.delete_due_limit.write_to(cell)?;
         Ok(())
     }
 }

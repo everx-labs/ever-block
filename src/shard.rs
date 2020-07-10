@@ -90,6 +90,10 @@ impl AccountIdPrefixFull {
         Self{ workchain_id: MASTERCHAIN_ID, prefix: SHARD_FULL}
     }
 
+    pub fn workchain(workchain_id: i32, prefix: u64) -> Self {
+        Self{ workchain_id, prefix}
+    }
+
     /// Constructs AccountIdPrefixFull prefix for specified address and stores it in the "to" argument.
     /// Returns true if there are sufficient bits in the address (64 or more) and address is valid
     /// (workchain_id != 0x80000000); false otherwise.
