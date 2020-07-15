@@ -155,6 +155,16 @@ pub trait Deserializable: Default {
         x.read_from(slice)?;
         Ok(x)
     }
+    /// adapter for tests
+    fn construct_from_bytes(bytes: &[u8]) -> Result<Self> {
+        let cell = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(bytes))?;
+        Self::construct_from(&mut cell.into())
+    }
+    /// adapter for tests
+    fn construct_from_file(file_name: &str) -> Result<Self> {
+        let bytes = std::fs::read(file_name)?;
+        Self::construct_from_bytes(&bytes)
+    }
     // Override it to implement skipping
     fn skip(slice: &mut SliceData) -> Result<()> {
         Self::construct_from(slice)?;

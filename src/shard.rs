@@ -842,6 +842,10 @@ impl ShardStateUnsplit {
         self.min_ref_mc_seqno = value
     }
 
+    pub fn out_msg_queue_info_cell(&self) -> &Cell {
+        self.out_msg_queue_info.cell()
+    }
+
     pub fn read_out_msg_queue_info(&self) -> Result<OutMsgQueueInfo> {
         self.out_msg_queue_info.read_struct()
     }

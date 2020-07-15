@@ -65,10 +65,11 @@ macro_rules! define_HashmapAugE {
             }
             /// Deserialization from SliceData - just clone and set window
             pub fn with_data(bit_len: usize, slice: &mut SliceData) -> Result<Self> {
-                let (data, extra) = match slice.get_next_bit()? {
-                    true => (Some(slice.checked_drain_reference()?), <$y_type>::construct_from(slice)?),
-                    false => (None, Default::default())
+                let data = match slice.get_next_bit()? {
+                    true => Some(slice.checked_drain_reference()?),
+                    false => None
                 };
+                let extra = <$y_type>::construct_from(slice)?;
                 Ok(Self {
                     extra,
                     bit_len,

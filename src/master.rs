@@ -620,7 +620,7 @@ impl OldMcBlocksInfo {
         }
         let found_id = self
             .get(&id.seq_no())?
-            .ok_or_else(|| error!("Block with given seq_no is not found"))?
+            .ok_or_else(|| error!("Block with given seq_no {} is not found", id.seq_no()))?
             .blk_ref;
         
         if found_id.root_hash != *id.root_hash() {
