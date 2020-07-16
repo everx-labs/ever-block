@@ -137,10 +137,10 @@ impl ProcessedUpto {
         self.ref_extra.is_some()
     }
     pub fn contains(&self, other: &Self) -> bool {
-        ShardIdent::with_tagged_prefix(0, self.shard).unwrap().is_ancestor_for(&ShardIdent::with_tagged_prefix(0, other.shard).unwrap())
+        ShardIdent::is_ancestor(self.shard, other.shard)
             && self.mc_seqno >= other.mc_seqno
-            && (self.last_msg_lt > other.last_msg_lt
-            || (self.last_msg_lt == other.last_msg_lt && self.last_msg_hash >= other.last_msg_hash)
+            && ((self.last_msg_lt > other.last_msg_lt)
+            || ((self.last_msg_lt == other.last_msg_lt) && (self.last_msg_hash >= other.last_msg_hash))
         )
     }
     pub fn compute_shard_end_lt(&self, acc: &AccountIdPrefixFull) -> Result<u64> {
