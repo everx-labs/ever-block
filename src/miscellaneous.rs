@@ -13,7 +13,7 @@
 
 use crate::{
     define_HashmapE,
-    master::McStateExtra,
+    master::ShardHashes,
     outbound_messages::EnqueuedMsg,
     shard::{AccountIdPrefixFull, ShardIdent},
     Serializable, Deserializable,
@@ -92,19 +92,24 @@ pub struct ProcessedUpto {
     pub mc_seqno: u32,
     pub last_msg_lt: u64,
     pub last_msg_hash: UInt256,
-    pub ref_extra: Option<McStateExtra>,
+    pub ref_shards: Option<ShardHashes>,
 }
 
 impl ProcessedUpto {
 
     // New instance ProcessedUpto structure
-    pub fn with_params(last_msg_lt: u64, last_msg_hash: UInt256) -> Self {
-        ProcessedUpto {
-            shard: 0,
-            mc_seqno: 0,
+    pub fn with_params(
+        shard: u64,
+        mc_seqno: u32,
+        last_msg_lt: u64,
+        last_msg_hash: UInt256
+    ) -> Self {
+        Self {
+            shard,
+            mc_seqno,
             last_msg_lt,
             last_msg_hash,
-            ref_extra: None,
+            ref_shards: None,
         }   
     }
     pub fn already_processed(&self, enq: &EnqueuedMsg) -> Result<bool> {
@@ -113,28 +118,25 @@ impl ProcessedUpto {
         }
 
         let env = enq.read_out_msg()?;
-        if !ShardIdent::contains(self.shard, env.next_addr().prefix()?) {
+        let (cur_prefix, next_prefix) = env.calc_cur_next_prefix()?;
+        if !ShardIdent::contains(self.shard, next_prefix.prefix) {
             return Ok(false)
         }
         if enq.enqueued_lt == self.last_msg_lt && self.last_msg_hash < env.message_cell().repr_hash() {
             return Ok(false)
         }
-        if env.cur_addr().workchain_id()? == env.next_addr().workchain_id()?
-            && ShardIdent::contains(self.shard, env.cur_addr().prefix()?)
-        {
+        if env.same_workchain()? && ShardIdent::contains(self.shard, cur_prefix.prefix) {
             // this branch is needed only for messages generated in the same shard
             // (such messages could have been processed without a reference from the masterchain)
             // enable this branch only if an extra boolean parameter is set
             return Ok(true)
         }
-        let mut acc = AccountIdPrefixFull::default();
-        acc.prefix = env.cur_addr().prefix()?;
-        let shard_end_lt = self.compute_shard_end_lt(&acc)?;
+        let shard_end_lt = self.compute_shard_end_lt(&cur_prefix)?;
 
         Ok(enq.enqueued_lt() < shard_end_lt)
     }
     pub fn can_check_processed(&self) -> bool {
-        self.ref_extra.is_some()
+        self.ref_shards.is_some()
     }
     pub fn contains(&self, other: &Self) -> bool {
         ShardIdent::is_ancestor(self.shard, other.shard)
@@ -144,10 +146,12 @@ impl ProcessedUpto {
         )
     }
     pub fn compute_shard_end_lt(&self, acc: &AccountIdPrefixFull) -> Result<u64> {
-        match self.ref_extra {
-            Some(ref mc) if acc.is_valid() => mc.shards().get_shard(
-                &ShardIdent::with_tagged_prefix(acc.workchain_id, acc.prefix)?
-            )?.map(|shard| shard.descr().end_lt).ok_or_else(|| error!("Shard not found")),
+        match self.ref_shards {
+            Some(ref shards) if acc.is_valid() => {
+                shards.find_shard(&acc.shard_ident()?)?
+                .map(|shard| shard.descr().end_lt)
+                .ok_or_else(|| error!("Shard not found for AccountIdPrefixFull {}", acc))
+            }
             _ => Ok(0)
         }
     }

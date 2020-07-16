@@ -61,6 +61,10 @@ impl AccountIdPrefixFull {
         self.workchain_id != INVALID_WORKCHAIN_ID
     }
 
+    pub fn shard_ident(&self) -> Result<ShardIdent> {
+        ShardIdent::with_tagged_prefix(self.workchain_id, self.prefix & (!0 << (64 - MAX_SPLIT_DEPTH)))
+    }
+
     /// Is address belongs to masterchain (workchain_id == MASTERCHAIN_ID)
     pub fn is_masterchain(&self) -> bool {
         self.workchain_id == MASTERCHAIN_ID
@@ -148,9 +152,12 @@ impl AccountIdPrefixFull {
 
     /// Performs Hypercube Routing from self to dest address.
     /// Result: (transit_addr_dest_bits, nh_addr_dest_bits)
-    pub fn perform_hypercube_routing(&self, dest: &AccountIdPrefixFull, cur_shard: &ShardIdent, ia: &IntermediateAddress)
-                                     -> Result<Option<(IntermediateAddress, IntermediateAddress)>>
-    {
+    pub fn perform_hypercube_routing(
+        &self,
+        dest: &AccountIdPrefixFull,
+        cur_shard: &ShardIdent,
+        ia: &IntermediateAddress
+    ) -> Result<Option<(IntermediateAddress, IntermediateAddress)>> {
         let transit = self.interpolate_addr_intermediate(dest, ia)?;
         if !cur_shard.contains_full_prefix(&transit) {
             return Ok(None);

@@ -14,6 +14,7 @@
 use crate::{
     error::BlockError,
     messages::Message,
+    shard::AccountIdPrefixFull,
     types::{AddSub, ChildCell, Grams},
     Serializable, Deserializable,
 };
@@ -440,6 +441,27 @@ impl MsgEnvelope {
     ///
     pub fn next_addr(&self) -> &IntermediateAddress{
         &self.next_addr
+    }
+
+    pub fn calc_cur_next_prefix(&self) -> Result<(AccountIdPrefixFull, AccountIdPrefixFull)> {
+        let msg = self.read_message()?;
+        let src_prefix = AccountIdPrefixFull::prefix(&msg.src().unwrap_or_default())?;
+        let dst_prefix = AccountIdPrefixFull::prefix(&msg.dst().unwrap_or_default())?;
+
+        let cur_prefix  = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.cur_addr)?;
+        let next_prefix = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.next_addr)?;
+        Ok((cur_prefix, next_prefix))
+    }
+
+    pub fn same_workchain(&self) -> Result<bool> {
+        let msg = self.read_message()?;
+        debug_assert!(msg.is_internal(), "Message with hash {} is not internal",
+            self.message_cell().repr_hash().to_hex_string());
+        if let (Some(src), Some(dst)) = (msg.src(), msg.dst()) {
+            return Ok(src.get_workchain_id() == dst.get_workchain_id())
+        }
+        fail!("Message with hash {} has wrong type of src/dst address",
+            self.message_cell().repr_hash().to_hex_string())
     }
 }
 

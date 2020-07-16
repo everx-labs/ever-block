@@ -18,7 +18,7 @@ use crate::{
     error::BlockError,
     hashmapaug::{Augmentable, HashmapAugType},
     merkle_proof::MerkleProof,
-    messages::{generate_big_msg, CommonMsgInfo, Message},
+    messages::{generate_big_msg, Message},
     shard::ShardStateUnsplit,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
     MaybeSerialize, MaybeDeserialize, Serializable, Deserializable,
@@ -1493,9 +1493,9 @@ impl Transaction {
     }
 
     pub fn contains_out_msg(&self, msg: &Message, hash: &UInt256) -> bool {
-        if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
-            if (header.created_lt > self.lt) && (header.created_lt <= self.lt + self.outmsg_cnt as u64) {
-                if let Ok(Some(msg_slice)) = self.out_msgs.get_as_slice(&U15::from_lt(header.created_lt - self.lt - 1)) {
+        if let Some(created_lt) = msg.lt() {
+            if (created_lt > self.lt) && (created_lt <= self.lt + self.outmsg_cnt as u64) {
+                if let Ok(Some(msg_slice)) = self.out_msgs.get_as_slice(&U15::from_lt(created_lt - self.lt - 1)) {
                     if let Ok(cell) = msg_slice.reference(0) {
                         return &cell.repr_hash() == hash
                     }
