@@ -18,6 +18,7 @@ use crate::{
     Serializable, Deserializable,
     validators::ValidatorDescr
 };
+use ed25519::signature::{Signature, Verifier};
 use std::{
     io::{Cursor, Write},
     collections::HashMap
@@ -36,7 +37,7 @@ ed25519_signature#5 R:bits256 s:bits256 = CryptoSignature;
 /// CryptoSignature
 /// 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CryptoSignature(ed25519_dalek::Signature);
+pub struct CryptoSignature(ed25519::Signature);
 
 impl CryptoSignature {
     pub fn new() -> Self {
@@ -45,7 +46,7 @@ impl CryptoSignature {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self>
     {
-        Ok(Self(ed25519_dalek::Signature::from_bytes(bytes)?))
+        Ok(Self(ed25519::Signature::from_bytes(bytes)?))
     }
 
     pub fn from_str(string: &str) -> Result<Self> {
@@ -69,7 +70,7 @@ impl CryptoSignature {
             cur.write(r).unwrap();
             cur.write(s).unwrap();
         }
-        Ok(Self(ed25519_dalek::Signature::from_bytes(&sign[..])?))
+        Ok(Self(ed25519::Signature::from_bytes(&sign[..])?))
     }
 
     pub fn from_r_s_str(r: &str, s: &str) -> Result<Self> {
@@ -96,14 +97,14 @@ impl CryptoSignature {
         (r_bytes, s_bytes)
     }
 
-    pub fn signature(&self) -> &ed25519_dalek::Signature {
+    pub fn signature(&self) -> &ed25519::Signature {
         &self.0
     }
 }
 
 impl Default for CryptoSignature {
     fn default() -> Self {
-        Self(ed25519_dalek::Signature::from_bytes(&[0; ed25519_dalek::SIGNATURE_LENGTH]).unwrap())
+        Self(ed25519::Signature::from_bytes(&[0; ed25519_dalek::SIGNATURE_LENGTH]).unwrap())
     }
 }
 
@@ -130,7 +131,7 @@ impl Deserializable for CryptoSignature {
             )
         }
         let buf = cell.get_next_bits(ed25519_dalek::SIGNATURE_LENGTH * 8)?;
-        self.0 = ed25519_dalek::Signature::from_bytes(&buf)?;
+        self.0 = ed25519::Signature::from_bytes(&buf)?;
         Ok(())
     }
 }

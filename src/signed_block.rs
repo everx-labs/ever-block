@@ -16,6 +16,7 @@ use crate::{
 	error::BlockError,
 	Deserializable, Serializable,
 };
+use ed25519::signature::{Signature, Signer, Verifier};
 use sha2::Digest;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -31,7 +32,7 @@ use ton_types::{
 const SHA256_SIZE: usize = 32;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BlockSignature(ed25519_dalek::Signature);
+pub struct BlockSignature(ed25519::Signature);
 
 // ed25519_signature#5
 // 	R:uint256
@@ -46,7 +47,7 @@ impl Serializable for BlockSignature {
 
 impl Deserializable for BlockSignature {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.0 = ed25519_dalek::Signature::from_bytes(
+        self.0 = ed25519::Signature::from_bytes(
             &cell.get_next_bytes(ed25519_dalek::SIGNATURE_LENGTH)?
         )?;
 	Ok(())
@@ -56,7 +57,7 @@ impl Deserializable for BlockSignature {
 impl Default for BlockSignature {
     fn default() -> Self {
         BlockSignature(
-            ed25519_dalek::Signature::from_bytes(
+            ed25519::Signature::from_bytes(
                 &vec!(0; ed25519_dalek::SIGNATURE_LENGTH)
             ).unwrap()
         )

@@ -402,8 +402,8 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         match self.find_key(true, signed)? {
             Some((key, mut val)) => {
                 let key = K::construct_from(&mut key.into())?;
+                Y::skip(&mut val)?;
                 let val = <X>::construct_from(&mut val)?;
-                // let _aug = <$y_type>::construct_from(&mut val)?;
                 Ok(Some((key, val)))
             },
             None => Ok(None)
@@ -414,8 +414,8 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         match self.find_key(false, signed)? {
             Some((key, mut val)) => {
                 let key = K::construct_from(&mut key.into())?;
+                Y::skip(&mut val)?;
                 let val = <X>::construct_from(&mut val)?;
-                // let _aug = <$y_type>::construct_from(&mut val)?;
                 Ok(Some((key, val)))
             },
             None => Ok(None)
