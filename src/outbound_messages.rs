@@ -198,7 +198,7 @@ pub struct OutMsgQueueKey{
 }
 
 impl OutMsgQueueKey {
-    pub fn with_workchain_id_and_prefix(workchain_id: i32, prefix: u64, hash: UInt256 ) -> Self {
+    pub fn with_workchain_id_and_prefix(workchain_id: i32, prefix: u64, hash: UInt256) -> Self {
         Self {
             workchain_id,
             prefix,
@@ -206,17 +206,20 @@ impl OutMsgQueueKey {
         }
     }
 
+    // Note! hash of Message
     pub fn with_account_prefix(prefix: &AccountIdPrefixFull, hash: UInt256) -> Self {
         Self::with_workchain_id_and_prefix(prefix.workchain_id, prefix.prefix, hash)
     }
 
-    pub fn with_msg_envelope(env: &MsgEnvelope, msg: &Message, hash: UInt256) -> Result<Self> {
+    // Note! msg == env.read_message()?
+    pub fn with_msg_envelope(env: &MsgEnvelope, msg: &Message) -> Result<Self> {
+        debug_assert_eq!(&env.read_message()?, msg);
         let src = msg.src().unwrap_or_default();
         let dst = msg.dst().unwrap_or_default();
         let src_prefix  = AccountIdPrefixFull::prefix(&src)?;
         let dest_prefix = AccountIdPrefixFull::prefix(&dst)?;
         let next_hop = src_prefix.interpolate_addr_intermediate(&dest_prefix, &env.next_addr())?;
-        Ok(Self::with_account_prefix(&next_hop, hash))
+        Ok(Self::with_account_prefix(&next_hop, env.message_cell().repr_hash()))
     }
 
     pub fn first_u64(acc: &AccountId) -> u64 { // TODO: remove to AccountId
@@ -484,18 +487,18 @@ impl OutMsg {
     }
 
     ///
-    /// the function returns the message cell (if exists)
+    /// the function returns the message envelope hash (if exists)
     ///
-    pub fn envelope_message_cell(&self) -> Option<Cell> {
+    pub fn envelope_message_hash(&self) -> Option<UInt256> {
         match self {
             OutMsg::External(_) => None,
-            OutMsg::Immediately(ref x) => Some(x.out_message_cell().clone()),
-            OutMsg::New(ref x) => Some(x.out_message_cell().clone()),
-            OutMsg::Transit(ref x) => Some(x.out_message_cell().clone()),
-            OutMsg::Dequeue(ref x) => Some(x.out_message_cell().clone()),
-            OutMsg::DequeueShort(_) => None,
-            OutMsg::DequeueImmediately(ref x) => Some(x.out_message_cell().clone()),
-            OutMsg::TransitRequired(ref x) => Some(x.out_message_cell().clone()),
+            OutMsg::Immediately(ref x) => Some(x.out_message_cell().repr_hash()),
+            OutMsg::New(ref x) => Some(x.out_message_cell().repr_hash()),
+            OutMsg::Transit(ref x) => Some(x.out_message_cell().repr_hash()),
+            OutMsg::Dequeue(ref x) => Some(x.out_message_cell().repr_hash()),
+            OutMsg::DequeueShort(ref x) => Some(x.msg_env_hash.clone()),
+            OutMsg::DequeueImmediately(ref x) => Some(x.out_message_cell().repr_hash()),
+            OutMsg::TransitRequired(ref x) => Some(x.out_message_cell().repr_hash()),
             OutMsg::None => None
         }
     }

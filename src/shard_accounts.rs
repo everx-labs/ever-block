@@ -12,7 +12,6 @@
 */
 
 use crate::{
-    error::BlockError,
     define_HashmapAugE,
     accounts::{Account, ShardAccount},
     hashmapaug::{Augmentable, HashmapAugType},
@@ -21,7 +20,7 @@ use crate::{
 };
 use std::fmt;
 use ton_types::{
-    error, fail, Result,
+    fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, IBitstring, HashmapType, SliceData, hm_label,
 };

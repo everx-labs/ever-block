@@ -55,6 +55,15 @@ macro_rules! define_HashmapAugE {
         }
 
         impl $varname {
+            // pub fn dump<K: Deserializable + Debug, X: Deserializable + Debug, Y: Augmentable + Debug>(&self) {
+            pub fn dump(&self) {
+                self.iterate_slices(|ref mut key, ref mut value| {
+                    dbg!(<$k_type>::construct_from(key).unwrap());
+                    dbg!(<$y_type>::construct_from(value).unwrap());
+                    dbg!(<$x_type>::construct_from(value).unwrap());
+                    Ok(true)
+                }).unwrap();
+            }
             /// Constructs new HashmapAugE for bit_len keys
             pub fn with_bit_len(bit_len: usize) -> Self {
                 Self {
@@ -163,19 +172,6 @@ macro_rules! define_HashmapAugE {
             fn bit_len_mut(&mut self) -> &mut usize {
                 &mut self.bit_len
             }
-            /// iterates all combined slices with aug and value in tree with callback function
-            fn iterate_slices<F> (&self, mut p: F) -> Result<bool>
-            where F: FnMut(SliceData, SliceData) -> Result<bool> {
-                if let Some(root) = self.data() {
-                    Self::iterate_internal(
-                        &mut SliceData::from(root),
-                        BuilderData::default(),
-                        self.bit_len(),
-                        &mut |k, v| p(k, v))
-                } else {
-                    Ok(true)
-                }
-            }
         }
 
         impl HashmapAugType<$k_type, $x_type, $y_type> for $varname {
@@ -188,35 +184,6 @@ macro_rules! define_HashmapAugE {
         }
 
         impl $varname {
-            /// internal recursive iterates all elements with callback function
-            fn iterate_internal<F>(
-                cursor: &mut SliceData, 
-                mut key: BuilderData, 
-                mut bit_len: usize, 
-                found: &mut F
-            ) -> Result<bool>
-            where F: FnMut(SliceData, SliceData) -> Result<bool> {
-                let label = cursor.get_label(bit_len)?;
-                let label_length = label.remaining_bits();
-                if label_length < bit_len {
-                    bit_len -= label_length + 1;
-                    for i in 0..2 {
-                        let mut key = key.clone();
-                        key.checked_append_references_and_data(&label)?;
-                        key.append_bit_bool(i != 0)?;
-                        let ref mut child = SliceData::from(cursor.reference(i)?);
-                        if !Self::iterate_internal(child, key, bit_len, found)? {
-                            return Ok(false)
-                        }
-                    }
-                } else if label_length == bit_len {
-                    key.checked_append_references_and_data(&label)?;
-                    return found(key.into(), cursor.clone())
-                } else {
-                    fail!(BlockError::InvalidData("label_length > bit_len".to_string()))
-                }
-                Ok(true)
-            }
             /*
             /// removes item from hashmapaug
             fn remove(&mut self, key: &K) -> Result<bool> {
@@ -403,7 +370,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
             Some((key, mut val)) => {
                 let key = K::construct_from(&mut key.into())?;
                 Y::skip(&mut val)?;
-                let val = <X>::construct_from(&mut val)?;
+                let val = X::construct_from(&mut val)?;
                 Ok(Some((key, val)))
             },
             None => Ok(None)
@@ -415,8 +382,20 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
             Some((key, mut val)) => {
                 let key = K::construct_from(&mut key.into())?;
                 Y::skip(&mut val)?;
-                let val = <X>::construct_from(&mut val)?;
+                let val = X::construct_from(&mut val)?;
                 Ok(Some((key, val)))
+            },
+            None => Ok(None)
+        }
+    }
+    /// gets item with aug for minimal or maximal key
+    fn get_minmax(&self, min: bool, signed: bool) -> Result<Option<(K, X, Y)>> {
+        match self.find_key(min, signed)? {
+            Some((key, mut val)) => {
+                let key = K::construct_from(&mut key.into())?;
+                let aug = Y::construct_from(&mut val)?;
+                let val = X::construct_from(&mut val)?;
+                Ok(Some((key, val, aug)))
             },
             None => Ok(None)
         }

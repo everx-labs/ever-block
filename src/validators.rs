@@ -530,8 +530,8 @@ impl Deserializable for ValidatorSet {
         let mut total_weight = 0;
         for i in 0..self.total.0 {
             let mut val = validators.get(&(i as u16))?.ok_or_else(|| 
-                BlockError::InvalidData(format!("Validator's hash map doesn't contain validator with index {}", i))
-            )?;
+                BlockError::InvalidData(format!("Validator's hash map doesn't \
+                    contain validator with index {}", i)))?;
             val.prev_weight_sum = total_weight;
             total_weight += val.weight;
             self.list.push(val);

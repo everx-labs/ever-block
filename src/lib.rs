@@ -144,6 +144,13 @@ pub trait Serializable {
         Ok(cell)
     }
 
+    fn write_to_file(&self, file_name: &str) -> Result<()> {
+        let cell = self.serialize()?;
+        let bytes = ton_types::serialize_toc(&cell)?;
+        std::fs::write(file_name, bytes)?;
+        Ok(())
+    }
+
     fn serialize(&self) -> Result<Cell> {
         Ok(self.write_to_new_cell()?.into())
     }
@@ -163,6 +170,11 @@ pub trait Deserializable: Default {
     /// adapter for tests
     fn construct_from_file(file_name: &str) -> Result<Self> {
         let bytes = std::fs::read(file_name)?;
+        Self::construct_from_bytes(&bytes)
+    }
+    /// adapter for tests
+    fn construct_from_base64(string: &str) -> Result<Self> {
+        let bytes = base64::decode(string)?;
         Self::construct_from_bytes(&bytes)
     }
     // Override it to implement skipping

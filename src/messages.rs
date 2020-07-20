@@ -1103,6 +1103,10 @@ impl Message {
         self.body.clone()
     }
 
+    pub fn body_as_cell(&self) -> Cell {
+        self.body.as_ref().map(|slice| slice.into_cell()).unwrap_or_default()
+    }
+
     pub fn set_body(&mut self, body: SliceData) {
         self.body_to_ref = None;
         self.init_to_ref = None;

@@ -182,6 +182,10 @@ pub enum TrComputePhase {
 }
 
 impl TrComputePhase {
+    pub fn skipped(reason: ComputeSkipReason) -> Self {
+        TrComputePhase::Skipped(TrComputePhaseSkipped{ reason })
+    }
+
     pub fn get_vmphase_mut(&mut self) -> Option<&mut TrComputePhaseVm> {
         match self {
             TrComputePhase::Vm(ref mut vm_ref) => return Some(vm_ref),
@@ -365,6 +369,15 @@ pub enum TrBouncePhase {
 impl Default for TrBouncePhase {
     fn default() -> Self {
         TrBouncePhase::Negfunds
+    }
+}
+
+impl TrBouncePhase {
+    pub fn ok(msg_size: StorageUsedShort, msg_fees: Grams, fwd_fees: Grams) -> Self {
+        TrBouncePhase::Ok(TrBouncePhaseOk::with_params(msg_size, msg_fees, fwd_fees))
+    }
+    pub fn no_funds(msg_size: StorageUsedShort, req_fwd_fees: Grams) -> Self {
+        TrBouncePhase::Nofunds(TrBouncePhaseNofunds::with_params(msg_size, req_fwd_fees))
     }
 }
 
