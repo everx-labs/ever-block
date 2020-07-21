@@ -18,6 +18,7 @@ use crate::{
     error::BlockError,
     hashmapaug::HashmapAugType,
     merkle_proof::MerkleProof,
+    shard::MASTERCHAIN_ID,
     types::{AddSub, CurrencyCollection, Grams, Number5, Number9, UnixTime32},
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
 };
@@ -437,6 +438,9 @@ impl MsgAddressInt {
         }
 
         Ok((workchain_id, account_id))
+    }
+    pub fn is_masterchain(&self) -> bool {
+        self.get_workchain_id() == MASTERCHAIN_ID
     }
 }
 
@@ -1297,29 +1301,9 @@ impl Message {
     /// 
     pub fn workchain_id(&self) -> Option<i32> {
         match &self.header {
-            CommonMsgInfo::IntMsgInfo(ref imi) => {
-                match imi.dst {
-                    MsgAddressInt::AddrStd(ref addr) => {
-                        Some(addr.workchain_id as i32)
-                    }
-                    MsgAddressInt::AddrVar(ref addr) => {
-                        Some(addr.workchain_id)
-                    }
-                }
-            }
-            CommonMsgInfo::ExtOutMsgInfo(_) => {
-                None
-            }
-            CommonMsgInfo::ExtInMsgInfo(ref eimi) => {
-                match &eimi.dst {
-                    MsgAddressInt::AddrStd(ref addr) => {
-                        Some(addr.workchain_id as i32)
-                    }
-                    MsgAddressInt::AddrVar(ref addr) => {
-                        Some(addr.workchain_id)
-                    }
-                }
-            }
+            CommonMsgInfo::IntMsgInfo(ref imi) => Some(imi.dst.get_workchain_id()),
+            CommonMsgInfo::ExtInMsgInfo(ref eimi) => Some(eimi.dst.get_workchain_id()),
+            CommonMsgInfo::ExtOutMsgInfo(_) => None
         }
     }
 
@@ -1334,13 +1318,13 @@ impl Message {
         };
         match addr1 {
             MsgAddressIntOrNone::None => None,
-            MsgAddressIntOrNone::Some(ref addr) => {
-                match addr {
-                    MsgAddressInt::AddrStd(ref addr) => Some(addr.workchain_id as i32),
-                    MsgAddressInt::AddrVar(ref addr) => Some(addr.workchain_id)
-                }
-            }
+            MsgAddressIntOrNone::Some(ref addr) => Some(addr.get_workchain_id())
         }
+    }
+
+    pub fn is_masterchain(&self) -> bool {
+        self.src_workchain_id() == Some(MASTERCHAIN_ID)
+            || self.workchain_id() == Some(MASTERCHAIN_ID)
     }
 
     pub fn prepare_proof(&self, is_inbound: bool, block_root: &Cell) -> Result<Cell> {
