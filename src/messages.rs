@@ -971,7 +971,7 @@ pub type MessageId = UInt256;
 ///
 /// 
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Eq)]
 pub struct Message {
     header: CommonMsgInfo,
     init: Option<StateInit>,
@@ -1003,8 +1003,6 @@ impl PartialEq for Message {
     }
 }
 
-impl Eq for Message {}
-
 impl Message {
     
     pub fn int_header(&self) -> Option<&InternalMessageHeader> {
@@ -1024,6 +1022,13 @@ impl Message {
     pub fn ext_out_header(&self) -> Option<&ExtOutMessageHeader> {
         match self.header() {
             CommonMsgInfo::ExtOutMsgInfo(header) => Some(header),
+            _ => None
+        }
+    }
+
+    pub fn int_header_mut(&mut self) -> Option<&mut InternalMessageHeader> {
+        match self.header {
+            CommonMsgInfo::IntMsgInfo(ref mut header) => Some(header),
             _ => None
         }
     }
@@ -1188,8 +1193,6 @@ impl Message {
     /// Internal and External outbound messages
     ///
     pub fn set_at_and_lt(&mut self, at: u32, lt: u64) {
-        self.body_to_ref = None;
-        self.init_to_ref = None;
         match self.header {
             CommonMsgInfo::IntMsgInfo(ref mut header) => {
                 header.created_at = UnixTime32(at);
@@ -1366,12 +1369,12 @@ impl Message {
             .map(|cell| cell.into())
     }
 
-}
-
-impl Serializable for Message
-{
-    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-
+    pub fn serialize_with_params(
+        &self,
+        builder: &mut BuilderData,
+        body_to_ref: &Option<bool>,
+        init_to_ref: &Option<bool>
+    ) -> Result<()> {
         // write header
         self.header.write_to(builder)?;
 
@@ -1392,8 +1395,8 @@ impl Serializable for Message
             self.body.as_ref().map(|s| (s.remaining_bits(), s.remaining_references())).unwrap_or((0, 0));
 
         let (body_to_ref, init_to_ref) = 
-        if let (Some(b), Some(i)) = (self.body_to_ref, self.init_to_ref) {
-            (b, i)
+        if let (Some(b), Some(i)) = (body_to_ref, init_to_ref) {
+            (*b, *i)
         } else {
             if header_bits + state_bits + body_bits <= MAX_DATA_BITS &&
                 header_refs + state_refs + body_refs <= MAX_REFERENCES_COUNT {
@@ -1451,8 +1454,22 @@ impl Serializable for Message
                 builder.append_bit_zero()?;
             },
         }
-
         Ok(())
+    }
+}
+
+impl Serializable for Message {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        // first try to serialize as it was
+        if self.body_to_ref != None || self.init_to_ref != None {
+            let b = builder.clone();
+            if self.serialize_with_params(builder, &self.body_to_ref, &self.init_to_ref).is_ok() {
+                return Ok(())
+            }
+            *builder = b;
+        }
+        // now try to repack to possible serilalize
+        self.serialize_with_params(builder, &None, &None)
     }
 }
 

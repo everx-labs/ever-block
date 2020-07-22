@@ -154,7 +154,7 @@ impl ConfigParams {
             Some(ConfigParamEnum::ConfigParam35(param)) => param.cur_temp_validators,
             _ => match self.config(34)? {
                 Some(ConfigParamEnum::ConfigParam34(param)) => param.cur_validators,
-                _ => ValidatorSet::default()
+                _ => fail!("no validator set in config")
             }
         };
         Ok(vset)
@@ -231,6 +231,15 @@ impl ConfigParams {
     }
 }
 
+pub enum GlobalCapabilities {
+    CapIhrEnabled = 1,
+    CapCreateStatsEnabled = 2,
+    CapBounceMsgBody = 4,
+    CapReportVersion = 8,
+    CapSplitMergeTransactions = 16,
+    CapShortDequeue = 32,
+}
+
 impl ConfigParams {
     pub fn get_lt_align(&self) -> u64 {
         1_000_000
@@ -244,6 +253,12 @@ impl ConfigParams {
     pub fn has_capabilities(&self) -> bool {
         match self.get_global_version() {
             Ok(gb) => gb.capabilities != 0,
+            Err(_) => false
+        }
+    }
+    pub fn has_capability(&self, capability: GlobalCapabilities) -> bool {
+        match self.get_global_version() {
+            Ok(gb) => (gb.capabilities & (capability as u64)) != 0,
             Err(_) => false
         }
     }
