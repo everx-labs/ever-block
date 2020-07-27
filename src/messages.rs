@@ -587,7 +587,7 @@ impl Deserializable for MsgAddressIntOrNone {
     } 
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct InternalMessageHeader {
     pub ihr_disabled: bool,
     pub bounce: bool,
@@ -599,23 +599,6 @@ pub struct InternalMessageHeader {
     pub fwd_fee: Grams,
     pub created_lt: u64,
     pub created_at: UnixTime32,
-}
-
-impl Default for InternalMessageHeader {
-    fn default() -> Self {
-        InternalMessageHeader {
-            ihr_disabled: false,
-            bounce: false,
-            bounced: false,
-            src: MsgAddressIntOrNone::None,
-            dst: MsgAddressInt::default(),
-            value: CurrencyCollection::default(), 
-            ihr_fee: Grams::zero(),
-            fwd_fee: Grams::zero(),
-            created_lt: 0,
-            created_at: UnixTime32::default(),
-        }
-    }
 }
 
 impl InternalMessageHeader {
@@ -635,8 +618,8 @@ impl InternalMessageHeader {
             src: MsgAddressIntOrNone::Some(src),
             dst: dst,
             value: value, 
-            ihr_fee: Grams::zero(),
-            fwd_fee: Grams::zero(),
+            ihr_fee: Default::default(),
+            fwd_fee: Default::default(),
             created_lt: 0,  // Logical Time will be set on BlockBuilder
             created_at: UnixTime32::default(),  // UNIX time too
         }
@@ -1520,20 +1503,8 @@ impl Deserializable for Message {
 }
 
 impl InternalMessageHeader {
-
     pub fn new() -> Self {
-        InternalMessageHeader {
-            ihr_disabled: false,
-            bounce: false,
-            bounced: false,
-            src: MsgAddressIntOrNone::default(),
-            dst: MsgAddressInt::default(),
-            value: CurrencyCollection::default(), 
-            ihr_fee: Grams::zero(),
-            fwd_fee: Grams::zero(),
-            created_lt: 0,
-            created_at: UnixTime32::default(),
-        }
+        Default::default()
     }
 }
 

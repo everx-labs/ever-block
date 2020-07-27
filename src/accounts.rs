@@ -342,6 +342,16 @@ pub struct AccountStorage {
     pub state: AccountState,
 }
 
+impl AccountStorage {
+    pub fn with_balance(balance: CurrencyCollection) -> Self {
+        AccountStorage {
+            last_trans_lt: 0,
+            balance,
+            state: AccountState::AccountUninit,
+        }
+    }
+}
+
 impl Serializable for AccountStorage {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.last_trans_lt.write_to(cell)?; //last_trans_lt:uint64
@@ -524,28 +534,22 @@ impl Account {
     /// create unintialize account, only with address and balance
     ///
     pub fn with_address_and_ballance(addr: &MsgAddressInt, balance: &CurrencyCollection) -> Self {
-        let mut storage = AccountStorage::default();
-        storage.balance = balance.clone();
-        //storage.last_trans_lt = current_unix_time(); //the time of account creation or last transaction time
-
-        let account = Account::Account(AccountStuff {
+        Account::Account(AccountStuff {
             addr: addr.clone(),
             storage_stat: StorageInfo::default(),
-            storage: storage
-        });
-        account
+            storage: AccountStorage::with_balance(balance.clone()),
+        })
     }
 
     ///
     /// Create unintialize account with zero balance
     ///
     pub fn with_address(addr: &MsgAddressInt) -> Self {
-        let account = Account::Account(AccountStuff {
+        Account::Account(AccountStuff {
             addr: addr.clone(),
             storage_stat: StorageInfo::default(),
-            storage: AccountStorage::default()
-        });
-        account
+            storage: AccountStorage::with_balance(Default::default()),
+        })
     }
 
     ///

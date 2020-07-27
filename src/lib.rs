@@ -162,6 +162,9 @@ pub trait Deserializable: Default {
         x.read_from(slice)?;
         Ok(x)
     }
+    fn construct_from_cell(cell: Cell) -> Result<Self> {
+        Self::construct_from(&mut cell.into())
+    }
     /// adapter for tests
     fn construct_from_bytes(bytes: &[u8]) -> Result<Self> {
         let cell = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(bytes))?;

@@ -18,7 +18,8 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use num::{BigInt, bigint::Sign, One, Zero};
+use num::{BigInt, BigUint, bigint::Sign, One, Zero};
+use num_traits::cast::ToPrimitive;
 use ton_types::{error, fail, Result,
     BuilderData, Cell, CellType, IBitstring, HashmapE, HashmapType, SliceData, ExceptionCode, UInt256
 };
@@ -206,12 +207,13 @@ macro_rules! define_VarIntegerN {
         impl Serializable for $varname {
             fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
                 let bits = 8 - ($N as u8).leading_zeros();
-                let bytes = (0 as $tt).leading_zeros() / 8 - self.0.leading_zeros() / 8;
+                let bytes = ((0 as $tt).leading_zeros() / 8 - self.0.leading_zeros() / 8) as usize;
                 if bytes > $N {
                     fail!(ExceptionCode::IntegerOverflow)
                 }
-                cell.append_bits(bytes as usize, bits as usize)?;
-                cell.append_bits(self.0 as usize, bytes as usize * 8)?;
+                cell.append_bits(bytes, bits as usize)?;
+                let be_bytes = self.0.to_be_bytes();
+                cell.append_raw(&be_bytes[be_bytes.len() - bytes..], bytes * 8)?;
                 Ok(())
             }
         }
@@ -241,8 +243,7 @@ macro_rules! define_VarIntegerN {
         }
     }
 }
-
-define_VarIntegerN!(Grams, 16, BigInt);
+define_VarIntegerN!(Grams, 15, u128);
 define_VarIntegerN!(VarUInteger32, 32, BigInt);
 define_VarIntegerN!(VarUInteger3, 3, u32);
 define_VarIntegerN!(VarUInteger7, 7, u64);
@@ -254,10 +255,94 @@ impl Augmentable for Grams {
     }
 }
 
+impl AddSub for Grams {
+    fn add(&mut self, other: &Grams) -> Result<()> {
+        self.0 += &other.0;
+        Ok(())
+    }
+    fn sub(&mut self, other: &Grams) -> Result<bool> {
+        if self.0 >= other.0 {
+            self.0 -= &other.0;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+}
+
 impl Grams {
     pub fn shr(mut self, shr: u8) -> Self {
-        *self.value_mut() >>= shr as usize;
+        self.0 >>= shr as usize;
         self
+    }
+
+    // to be deleted
+    pub fn value(&self) -> BigInt {
+        BigInt::from(self.0 as i128)
+    }
+
+    pub fn zero() -> Self {
+        Self(0)
+    }
+
+    pub fn one() -> Self {
+        Self(1)
+    }
+
+    pub fn sgn(&self) -> bool {
+        false
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl From<BigInt> for Grams {
+    fn from(value: BigInt) -> Self {
+        Self::from(&value)
+    }
+}
+impl From<&BigInt> for Grams {
+    fn from(value: &BigInt) -> Self {
+        match value.to_u128() {
+            Some(value) => Self(value),
+            None => {
+                log::error!("Cannot convert BigInt {} to u128", value);
+                Self(0)
+            }
+        }
+    }
+}
+impl From<BigUint> for Grams {
+    fn from(value: BigUint) -> Self {
+        Self::from(&value)
+    }
+}
+impl From<&BigUint> for Grams {
+    fn from(value: &BigUint) -> Self {
+        match value.to_u128() {
+            Some(value) => Self(value),
+            None => {
+                log::error!("Cannot convert BigUint {} to u128", value);
+                Self(0)
+            }
+        }
+    }
+}
+impl From<u64> for Grams {
+    fn from(value: u64) -> Self {
+        Self(value as u128)
+    }
+}
+impl From<u32> for Grams {
+    fn from(value: u32) -> Self {
+        Self(value as u128)
+    }
+}
+impl From<i32> for Grams {
+    fn from(value: i32) -> Self {
+        Self(value as u128)
     }
 }
 
@@ -356,7 +441,7 @@ impl Augmentable for CurrencyCollection {
 
 impl CurrencyCollection {
     pub fn new() -> Self {
-        Self::from_grams(Grams::zero())
+        Self::from_grams(Default::default())
     }
 
     pub fn get_other(&self, key: u32) -> Result<Option<VarUInteger32>> {
