@@ -20,7 +20,7 @@ use crate::{
     merkle_proof::MerkleProof,
     messages::{generate_big_msg, Message},
     shard::ShardStateUnsplit,
-    types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
+    types::{AddSub, ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
     MaybeSerialize, MaybeDeserialize, Serializable, Deserializable,
 };
 use std::{fmt, sync::Arc};
@@ -95,9 +95,9 @@ impl Default for ComputeSkipReason {
 impl Serializable for ComputeSkipReason {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let tag = match self {
-            ComputeSkipReason::NoState => 0b0,
+            ComputeSkipReason::NoState  => 0b00,
             ComputeSkipReason::BadState => 0b01,
-            ComputeSkipReason::NoGas => 0b10,
+            ComputeSkipReason::NoGas    => 0b10,
         };
         cell.append_bits(tag, 2)?;
         Ok(())
@@ -1359,6 +1359,11 @@ impl Transaction {
         self.end_status = end_status;
     }
 
+    /// add fee
+    pub fn add_fee_grams(&mut self, fee: &Grams) -> Result<()> {
+        self.total_fees.grams.add(fee)
+    }
+
     /// set total fees
     pub fn set_total_fees(&mut self, fees: CurrencyCollection) {
         self.total_fees = fees;
@@ -1430,7 +1435,7 @@ impl Transaction {
         self.out_msgs.setref(
             &U15(self.outmsg_cnt),
             &msg_cell
-            )?;
+        )?;
         self.outmsg_cnt += 1;
         Ok(())
     }
