@@ -28,7 +28,7 @@ use std::{fmt, sync::Arc};
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
-    BuilderData, Cell, IBitstring, HashmapType, SliceData, hm_label,
+    BuilderData, Cell, IBitstring, HashmapType, HashmapSubtree, SliceData, hm_label,
 };
 
 
@@ -155,6 +155,8 @@ impl OutMsgDescr {
 // _ (HashmapAugE 352 EnqueuedMsg uint64) = OutMsgQueue;
 // 352 = 32 - dest workchain_id, 64 - first 64 bit of dest account address, 256 - message hash
 define_HashmapAugE!(OutMsgQueue, 352, OutMsgQueueKey, EnqueuedMsg, MsgTime);
+
+impl HashmapSubtree for OutMsgQueue {}
 
 type MsgTime = u64;
 

@@ -818,6 +818,31 @@ pub struct ValueFlow {
     pub minted: CurrencyCollection,        // serialized into another cell 2
 }
 
+impl fmt::Display for ValueFlow {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\
+            from_prev_blk: {}, \
+            to_next_blk: {}, \
+            imported: {}, \
+            exported: {}, \
+            fees_collected: {}, \
+            fees_imported: {}, \
+            recovered: {}, \
+            created: {}, \
+            minted: {}",
+            self.from_prev_blk,
+            self.to_next_blk,
+            self.imported,
+            self.exported,
+            self.fees_collected,
+            self.fees_imported,
+            self.recovered,
+            self.created,
+            self.minted
+        )
+    }
+}
+
 /*
 ext_blk_ref$_ start_lt:uint64 end_lt:uint64
     seq_no:uint32 hash:uint256 = ExtBlkRef;

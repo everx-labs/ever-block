@@ -193,10 +193,7 @@ macro_rules! define_VarIntegerN {
 
         impl fmt::Display for $varname {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(
-                    f,
-                    "vui{}[len = {}, value = {}]", $N, Self::get_len(&self.0), &self.0
-                )
+                write!(f, "{}", &self.0)
             }
         }
     };
@@ -235,10 +232,7 @@ macro_rules! define_VarIntegerN {
 
         impl fmt::Display for $varname {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(
-                    f,
-                    "vui{}[value = {}]", $N, &self.0
-                )
+                write!(f, "{}", &self.0)
             }
         }
     }
@@ -540,14 +534,18 @@ impl AddSub for CurrencyCollection {
 
 impl fmt::Display for CurrencyCollection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CurrencyCollection: Grams {}, other curencies:\n", self.grams)?;
-        let mut len = 0;
-        self.other.iterate_with_keys(|key: u32, value| {
-            write!(f, "key: {}, value: {}\n", key, value)?;
-            len += 1;
-            Ok(true)
-        }).unwrap();
-        write!(f, "count: {}", len)
+        write!(f, "{}", self.grams.0)?;
+        if !self.other.is_empty() {
+            let mut len = 0;
+            write!(f, ", other: {{")?;
+            self.other.iterate_with_keys(|key: u32, value| {
+                len += 1;
+                write!(f, " {} => {},", key, value.0)?;
+                Ok(true)
+            }).ok();
+            write!(f, " count: {} }}", len)?;
+        }
+        Ok(())
     }
 }
 
