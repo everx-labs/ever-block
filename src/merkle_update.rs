@@ -159,13 +159,11 @@ impl MerkleUpdate {
 
     /// Applies update to given tree of cells by returning new updated one
     pub fn apply_for(&self, old_root: &Cell) -> Result<Cell> {
-
-        let old_cells = self.check(old_root)?;
-
-        // cells for new bag
         if self.new_hash == self.old_hash {
             Ok(old_root.clone())
         } else {
+            // cells for new bag
+            let old_cells = self.check(old_root)?;
             let new_root: Cell =
                 self.traverse_on_apply(&self.new, &old_cells, 0).into();
 

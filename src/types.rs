@@ -926,14 +926,14 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
     pub fn with_struct(s: &T) -> Result<Self> {
         Ok(
             ChildCell {
-                cell: s.write_to_new_cell()?.into(),
+                cell: s.serialize()?,
                 phantom: PhantomData
             }
         )
     }
 
     pub fn write_struct(&mut self, s: &T) -> Result<()> {
-        self.cell = s.write_to_new_cell()?.into();
+        self.cell = s.serialize()?;
         Ok(())
     }
 
