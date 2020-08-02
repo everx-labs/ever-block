@@ -13,10 +13,13 @@
 
 use crate::{
     define_HashmapE,
+    master::ShardHashes,
+    outbound_messages::EnqueuedMsg,
+    shard::{AccountIdPrefixFull, ShardIdent},
     Serializable, Deserializable,
 };
 use ton_types::{
-    Result, BuilderData, Cell, SliceData, HashmapE, HashmapType, UInt256,
+    error, Result, BuilderData, Cell, SliceData, HashmapE, HashmapType, UInt256,
 };
 
 
@@ -27,14 +30,30 @@ _ (HashmapE 96 ProcessedUpto) = ProcessedInfo;
 */
 define_HashmapE!(ProcessedInfo, 96, ProcessedUpto);
 
+impl ProcessedInfo {
+    pub fn min_seqno(&self) -> Result<u32> {
+        match self.0.get_min(false, &mut 0)? {
+            Some((key, _value)) => ProcessedInfoKey::construct_from(&mut key.into()).map(|key| key.mc_seqno),
+            None => Ok(0)
+        }
+    }
+}
+
 /// Struct ProcessedInfoKey describe key for ProcessedInfo
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ProcessedInfoKey {
-    pub shard: u64,
-    pub mc_seqno: u32,
+    shard: u64,
+    mc_seqno: u32,
 }
 
 impl ProcessedInfoKey {
+    pub fn from_rec(rec: &ProcessedUpto) -> Self {
+        Self {
+            shard: rec.shard,
+            mc_seqno: rec.mc_seqno,
+        }
+    }
+
     // New instance ProcessedInfoKey structure
     pub fn with_params(shard: u64, mc_seqno: u32) -> Self {
         ProcessedInfoKey {
@@ -69,20 +88,72 @@ impl Deserializable for ProcessedInfoKey {
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ProcessedUpto {
+    pub shard: u64,
+    pub mc_seqno: u32,
     pub last_msg_lt: u64,
     pub last_msg_hash: UInt256,
+    pub ref_shards: Option<ShardHashes>,
 }
 
 impl ProcessedUpto {
+
     // New instance ProcessedUpto structure
     pub fn with_params(
+        shard: u64,
+        mc_seqno: u32,
         last_msg_lt: u64,
         last_msg_hash: UInt256
     ) -> Self {
         Self {
+            shard,
+            mc_seqno,
             last_msg_lt,
             last_msg_hash,
+            ref_shards: None,
         }   
+    }
+    pub fn already_processed(&self, enq: &EnqueuedMsg) -> Result<bool> {
+        if enq.enqueued_lt() > self.last_msg_lt {
+            return Ok(false)
+        }
+
+        let env = enq.read_out_msg()?;
+        let (cur_prefix, next_prefix) = env.calc_cur_next_prefix()?;
+        if !ShardIdent::contains(self.shard, next_prefix.prefix) {
+            return Ok(false)
+        }
+        if enq.enqueued_lt == self.last_msg_lt && self.last_msg_hash < env.message_cell().repr_hash() {
+            return Ok(false)
+        }
+        if env.same_workchain()? && ShardIdent::contains(self.shard, cur_prefix.prefix) {
+            // this branch is needed only for messages generated in the same shard
+            // (such messages could have been processed without a reference from the masterchain)
+            // enable this branch only if an extra boolean parameter is set
+            return Ok(true)
+        }
+        let shard_end_lt = self.compute_shard_end_lt(&cur_prefix)?;
+
+        Ok(enq.enqueued_lt() < shard_end_lt)
+    }
+    pub fn can_check_processed(&self) -> bool {
+        self.ref_shards.is_some()
+    }
+    pub fn contains(&self, other: &Self) -> bool {
+        ShardIdent::is_ancestor(self.shard, other.shard)
+            && self.mc_seqno >= other.mc_seqno
+            && ((self.last_msg_lt > other.last_msg_lt)
+            || ((self.last_msg_lt == other.last_msg_lt) && (self.last_msg_hash >= other.last_msg_hash))
+        )
+    }
+    pub fn compute_shard_end_lt(&self, acc: &AccountIdPrefixFull) -> Result<u64> {
+        match self.ref_shards {
+            Some(ref shards) if acc.is_valid() => {
+                shards.find_shard(&acc.shard_ident()?)?
+                .map(|shard| shard.descr().end_lt)
+                .ok_or_else(|| error!("Shard not found for AccountIdPrefixFull {}", acc))
+            }
+            _ => Ok(0)
+        }
     }
 }
 

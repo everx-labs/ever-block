@@ -167,12 +167,7 @@ impl ShardHashes {
             println!("workchain: {}", workchain_id);
             bintree.iterate(|prefix, descr| {
                 let shard = ShardIdent::with_prefix_slice(workchain_id, prefix.clone().into())?;
-                println!(
-                    "shard: {:064b} seq_no: {} shard: 0x{}",
-                    shard.shard_prefix_with_tag(),
-                    descr.seq_no,
-                    shard.shard_prefix_as_str_with_tag()
-                );
+                println!("shard: {:064b} seq_no: {}", shard.shard_prefix_with_tag(), descr.seq_no);
                 count += 1;
                 Ok(true)
             })
@@ -185,16 +180,16 @@ impl ShardHashes {
 pub struct McShardRecord {
     pub shard: ShardIdent,
     pub descr: ShardDescr,
-    pub block_id: BlockIdExt,
+    pub blk_id: BlockIdExt,
 }
 
 impl McShardRecord {
     pub fn from_shard_descr(shard: ShardIdent, descr: ShardDescr) -> Self {
-        let block_id = BlockIdExt::with_params(shard, descr.seq_no, descr.root_hash.clone(), descr.file_hash.clone());
-        Self { shard, descr, block_id }
+        let blk_id = BlockIdExt::with_params(shard, descr.seq_no, descr.root_hash.clone(), descr.file_hash.clone());
+        Self { shard, descr, blk_id }
     }
 
-    pub fn from_block(block: &Block, block_id: BlockIdExt) -> Result<Self> {
+    pub fn from_block(block: &Block, blk_id: BlockIdExt) -> Result<Self> {
         let info = block.read_info()?;
         let value_flow = block.read_value_flow()?;
         Ok(
@@ -205,8 +200,8 @@ impl McShardRecord {
                     reg_mc_seqno: 0xffff_ffff, // by t-node
                     start_lt: info.start_lt(),
                     end_lt: info.end_lt(),
-                    root_hash: block_id.root_hash().clone(),
-                    file_hash: block_id.file_hash().clone(),
+                    root_hash: blk_id.root_hash().clone(),
+                    file_hash: blk_id.file_hash().clone(),
                     before_split: info.before_split(),
                     before_merge: false, // by t-node
                     want_split: info.want_split(),
@@ -221,22 +216,25 @@ impl McShardRecord {
                     fees_collected: value_flow.fees_collected.clone(),
                     funds_created: value_flow.created.clone(),
                 },
-                block_id,
+                blk_id,
             }
         )
     }
 
-    pub fn shard(&self) -> &ShardIdent { &self.shard }
+    pub fn shard(&self) -> &ShardIdent {
+        &self.shard
+    }
 
-    pub fn descr(&self) -> &ShardDescr { &self.descr }
+    pub fn descr(&self) -> &ShardDescr {
+        &self.descr
+    }
 
-    // to be deleted
-    pub fn blk_id(&self) -> &BlockIdExt { &self.block_id }
-
-    pub fn block_id(&self) -> &BlockIdExt { &self.block_id }
+    pub fn blk_id(&self) -> &BlockIdExt {
+        &self.blk_id
+    }
 
     pub fn basic_info_equal(&self, other: &Self, compare_fees: bool, compare_reg_seqno: bool) -> bool {
-        self.block_id == other.block_id
+        self.blk_id == other.blk_id
             && self.descr.start_lt == other.descr.start_lt
             && self.descr.end_lt == other.descr.end_lt
             && (!compare_reg_seqno || self.descr.reg_mc_seqno == other.descr.reg_mc_seqno)
