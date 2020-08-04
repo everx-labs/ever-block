@@ -13,15 +13,15 @@
 
 use crate::{
     error::BlockError,
-    messages::Message,
-    shard::AccountIdPrefixFull,
-    types::{AddSub, ChildCell, Grams},
+    messages::{InternalMessageHeader, Message, MsgAddressInt},
+    shard::{AccountIdPrefixFull, ShardIdent},
+    types::{AddSub, ChildCell, CurrencyCollection, Grams},
     Serializable, Deserializable,
 };
 use std::cmp::Ordering;
 use ton_types::{
     error, fail, Result,
-    BuilderData, Cell, IBitstring, SliceData,
+    BuilderData, Cell, IBitstring, SliceData, UInt256,
 };
 
 /*
@@ -98,7 +98,7 @@ impl IntermediateAddress {
 
 impl Default for IntermediateAddress{
     fn default() -> Self{
-        IntermediateAddress::Regular(IntermediateAddressRegular::default())
+        IntermediateAddress::full_src()
     }
 }
 
@@ -367,15 +367,45 @@ impl MsgEnvelope {
     ///
     /// Create Envelope with message and remainig_fee
     ///
-    pub fn with_message_and_fee(msg: &Message, fee_remainig: Grams) -> Result<Self> {
-        Ok(
-            MsgEnvelope {
+    pub fn with_message_and_fee(msg: &Message, fwd_fee_remaining: Grams) -> Result<Self> {
+        Ok(MsgEnvelope {
                 cur_addr: IntermediateAddress::default(),
                 next_addr: IntermediateAddress::default(),
-                fwd_fee_remaining: fee_remainig,
+                fwd_fee_remaining,
                 msg: ChildCell::with_struct(msg)?,
-            }
-        )
+        })
+    }
+
+    ///
+    /// Create Envelope with hypercube routing params
+    ///
+    pub fn hypercube_routing(msg: &Message, src_shard: &ShardIdent, fwd_fee_remaining: Grams) -> Result<Self> {
+        let msg_cell = msg.serialize()?;
+        let src = msg.src().ok_or_else(|| error!("Message {} is not internal or have bad \
+            source address", msg_cell.repr_hash().to_hex_string()))?;
+        let dst = msg.dst().ok_or_else(|| error!("Message {} is not internal or have bad \
+            destination address", msg_cell.repr_hash().to_hex_string()))?;
+        let src_prefix = AccountIdPrefixFull::prefix(&src)?;
+        let dst_prefix = AccountIdPrefixFull::prefix(&dst)?;
+        let ia = IntermediateAddress::full_src();
+        let route_info = src_prefix.perform_hypercube_routing(&dst_prefix, src_shard, &ia)?;
+        Ok(MsgEnvelope {
+            cur_addr: route_info.0,
+            next_addr: route_info.1,
+            fwd_fee_remaining,
+            msg: ChildCell::with_cell(msg_cell),
+        })
+    }
+
+    /// calc prefixes with routing info
+    pub fn calc_cur_next_prefix(&self) -> Result<(AccountIdPrefixFull, AccountIdPrefixFull)> {
+        let msg = self.read_message()?;
+        let src_prefix = AccountIdPrefixFull::prefix(&msg.src().unwrap_or_default())?;
+        let dst_prefix = AccountIdPrefixFull::prefix(&msg.dst().unwrap_or_default())?;
+
+        let cur_prefix  = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.cur_addr)?;
+        let next_prefix = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.next_addr)?;
+        Ok((cur_prefix, next_prefix))
     }
 
     ///
@@ -443,16 +473,7 @@ impl MsgEnvelope {
         &self.next_addr
     }
 
-    pub fn calc_cur_next_prefix(&self) -> Result<(AccountIdPrefixFull, AccountIdPrefixFull)> {
-        let msg = self.read_message()?;
-        let src_prefix = AccountIdPrefixFull::prefix(&msg.src().unwrap_or_default())?;
-        let dst_prefix = AccountIdPrefixFull::prefix(&msg.dst().unwrap_or_default())?;
-
-        let cur_prefix  = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.cur_addr)?;
-        let next_prefix = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.next_addr)?;
-        Ok((cur_prefix, next_prefix))
-    }
-
+    /// is message route in one workchain
     pub fn same_workchain(&self) -> Result<bool> {
         let msg = self.read_message()?;
         debug_assert!(msg.is_internal(), "Message with hash {} is not internal",
@@ -467,7 +488,7 @@ impl MsgEnvelope {
 
 const MSG_ENVELOPE_TAG : usize = 0x4;
 
-impl Serializable for MsgEnvelope{
+impl Serializable for MsgEnvelope {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(MSG_ENVELOPE_TAG, 4)?;
         self.cur_addr.write_to(cell)?;
@@ -478,7 +499,7 @@ impl Serializable for MsgEnvelope{
     }
 }
 
-impl Deserializable for MsgEnvelope{
+impl Deserializable for MsgEnvelope {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         let tag = cell.get_next_int(4)? as usize;
         if tag != MSG_ENVELOPE_TAG {
@@ -495,4 +516,26 @@ impl Deserializable for MsgEnvelope{
         self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
     }
+}
+
+// prepare for testing purposes
+pub fn prepare_test_env_message(src_prefix: u64, dst_prefix: u64, bits: u8) -> Result<(Message, MsgEnvelope)> {
+    let shard = ShardIdent::with_prefix_len(bits, 0, src_prefix)?;
+    let src = UInt256::from(src_prefix.to_be_bytes().to_vec());
+    let dst = UInt256::from(dst_prefix.to_be_bytes().to_vec());
+    let src = MsgAddressInt::with_standart(None, 0, src.into())?;
+    let dst = MsgAddressInt::with_standart(None, 0, dst.into())?;
+
+    // let src_prefix = AccountIdPrefixFull::prefix(&src).unwrap();
+    // let dst_prefix = AccountIdPrefixFull::prefix(&dst).unwrap();
+    // let ia = IntermediateAddress::full_src();
+    // let route_info = src_prefix.perform_hypercube_routing(&dst_prefix, &shard, &ia)?.unwrap();
+    // let cur_prefix  = src_prefix.interpolate_addr_intermediate(&dst_prefix, &route_info.0)?;
+    // let next_prefix = src_prefix.interpolate_addr_intermediate(&dst_prefix, &route_info.1)?;
+
+    let hdr = InternalMessageHeader::with_addresses(src, dst, CurrencyCollection::with_grams(1));
+    let msg = Message::with_int_header(hdr);
+
+    let env = MsgEnvelope::hypercube_routing(&msg, &shard, Grams::from(1_000_000_000))?;
+    Ok((msg , env))
 }

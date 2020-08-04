@@ -432,6 +432,23 @@ impl OutMsg {
     }
 
     ///
+    /// the function returns the message envelop (if exists)
+    ///
+    pub fn out_message_cell(&self) -> Option<&Cell> {
+        match self {
+            OutMsg::External(_) => None,
+            OutMsg::Immediately(ref x) => Some(x.out_message_cell()),
+            OutMsg::New(ref x) => Some(x.out_message_cell()),
+            OutMsg::Transit(ref x) => Some(x.out_message_cell()),
+            OutMsg::Dequeue(ref x) => Some(x.out_message_cell()),
+            OutMsg::DequeueShort(_) => None,
+            OutMsg::DequeueImmediately(ref x) => Some(x.out_message_cell()),
+            OutMsg::TransitRequired(ref x) => Some(x.out_message_cell()),
+            OutMsg::None => None
+        }
+    }
+
+    ///
     /// the function returns the message (if exists)
     ///
     pub fn read_message(&self) -> Result<Option<Message>> {
@@ -530,6 +547,16 @@ impl OutMsg {
             OutMsg::DequeueImmediately(ref x) => Some(x.read_reimport_message()).transpose(),
             OutMsg::TransitRequired(ref x) => Some(x.read_imported()).transpose(),
             _ => Ok(None),
+        }
+    }
+
+    pub fn reimport_cell(&self) -> Option<&Cell> {
+        match self {
+            OutMsg::Immediately(ref x) => Some(x.reimport_message_cell()),
+            OutMsg::Transit(ref x) => Some(x.imported_cell()),
+            OutMsg::DequeueImmediately(ref x) => Some(x.reimport_message_cell()),
+            OutMsg::TransitRequired(ref x) => Some(x.imported_cell()),
+            _ => None
         }
     }
 

@@ -157,24 +157,24 @@ impl AccountIdPrefixFull {
         dest: &AccountIdPrefixFull,
         cur_shard: &ShardIdent,
         ia: &IntermediateAddress
-    ) -> Result<Option<(IntermediateAddress, IntermediateAddress)>> {
+    ) -> Result<(IntermediateAddress, IntermediateAddress)> {
         let transit = self.interpolate_addr_intermediate(dest, ia)?;
         if !cur_shard.contains_full_prefix(&transit) {
-            return Ok(None);
+            fail!("Shard {} must fully contain transit prefix {}", cur_shard, transit)
         }
 
         if cur_shard.contains_full_prefix(&dest) {
             // If destination is in this shard, set cur:=next_hop:=dest
-            return Ok(Some((IntermediateAddress::full_dest(), IntermediateAddress::full_dest())));
+            return Ok((IntermediateAddress::full_dest(), IntermediateAddress::full_dest()))
         }
 
         if transit.is_masterchain() || dest.is_masterchain() {
             // Route messages to/from masterchain directly
-            return Ok(Some((ia.clone(), IntermediateAddress::full_dest())))
+            return Ok((ia.clone(), IntermediateAddress::full_dest()))
         }
 
         if transit.workchain_id != dest.workchain_id {
-            return Ok(Some((ia.clone(), IntermediateAddress::use_dest_bits(32)?)));
+            return Ok((ia.clone(), IntermediateAddress::use_dest_bits(32)?))
         }
 
         let x = cur_shard.prefix & (cur_shard.prefix - 1);
@@ -189,10 +189,9 @@ impl AccountIdPrefixFull {
             let h = t ^ (q & !m);
             i += 4;
             if h < x || h > y {
-                return Ok(Some((
-                    IntermediateAddress::use_dest_bits(28 + i)?,
-                    IntermediateAddress::use_dest_bits(32 + i)?
-                )));
+                let cur_prefix = IntermediateAddress::use_dest_bits(28 + i)?;
+                let next_prefix = IntermediateAddress::use_dest_bits(32 + i)?;
+                return Ok((cur_prefix, next_prefix))
             }
         }
     }
