@@ -1283,6 +1283,7 @@ impl Deserializable for GasLimitsPrices {
                 }
             }
         }
+        self.max_gas_threshold = self.flat_gas_price as u128;
         if self.gas_limit > self.flat_gas_limit {
             self.max_gas_threshold += (self.gas_price as u128) * ((self.gas_limit - self.flat_gas_limit) as u128) >> 16;
         }

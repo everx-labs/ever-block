@@ -835,6 +835,11 @@ impl Account {
         self.stuff().map(|s| &s.storage.balance)
     }
 
+    /// setting balance of the account
+    pub fn set_balance(&mut self, balance: CurrencyCollection) {
+        self.stuff_mut().map(|s| s.storage.balance = balance);
+    }
+
     /// adding funds to account (for example, for credit phase transaction)
     pub fn add_funds(&mut self, funds_to_add: &CurrencyCollection) -> Result<()> {
         if let Some(stuff) = self.stuff_mut() {
