@@ -303,6 +303,10 @@ impl BlockSignaturesPure {
         self.sig_weight
     }
 
+    pub fn set_weight(&mut self, weight: u64) {
+        self.sig_weight = weight;
+    }
+
     /// Add crypto signature pair to BlockSignaturesPure
     pub fn add_sigpair(&mut self, signature: CryptoSignaturePair) {
         self.sig_count += 1;
@@ -325,11 +329,12 @@ impl BlockSignaturesPure {
         let mut weight = 0;
         self.signatures().iterate_slices(|ref mut _key, ref mut slice| {
             let sign = CryptoSignaturePair::construct_from(slice)?;
-            let vd = &validators_map[&sign.node_id_short];
-            if !vd.public_key.verify_signature(data, &sign.sign) {
-                fail!(BlockError::BadSignature)
+            if let Some(vd) = validators_map.get(&sign.node_id_short) {
+                if !vd.public_key.verify_signature(data, &sign.sign) {
+                    fail!(BlockError::BadSignature)
+                }
+                weight += vd.weight;
             }
-            weight += vd.weight;
             Ok(true)
         })?;
         Ok(weight)
