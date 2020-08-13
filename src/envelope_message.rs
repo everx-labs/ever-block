@@ -519,7 +519,7 @@ impl Deserializable for MsgEnvelope {
 }
 
 // prepare for testing purposes
-pub fn prepare_test_env_message(src_prefix: u64, dst_prefix: u64, bits: u8) -> Result<(Message, MsgEnvelope)> {
+pub fn prepare_test_env_message(src_prefix: u64, dst_prefix: u64, bits: u8, at: u32, lt: u64) -> Result<(Message, MsgEnvelope)> {
     let shard = ShardIdent::with_prefix_len(bits, 0, src_prefix)?;
     let src = UInt256::from(src_prefix.to_be_bytes().to_vec());
     let dst = UInt256::from(dst_prefix.to_be_bytes().to_vec());
@@ -533,9 +533,10 @@ pub fn prepare_test_env_message(src_prefix: u64, dst_prefix: u64, bits: u8) -> R
     // let cur_prefix  = src_prefix.interpolate_addr_intermediate(&dst_prefix, &route_info.0)?;
     // let next_prefix = src_prefix.interpolate_addr_intermediate(&dst_prefix, &route_info.1)?;
 
-    let hdr = InternalMessageHeader::with_addresses(src, dst, CurrencyCollection::with_grams(1));
-    let msg = Message::with_int_header(hdr);
+    let hdr = InternalMessageHeader::with_addresses(src, dst, CurrencyCollection::with_grams(1_000_000_000));
+    let mut msg = Message::with_int_header(hdr);
+    msg.set_at_and_lt(at, lt);
 
-    let env = MsgEnvelope::hypercube_routing(&msg, &shard, Grams::from(1_000_000_000))?;
+    let env = MsgEnvelope::hypercube_routing(&msg, &shard, Grams::from(1_000_000))?;
     Ok((msg , env))
 }

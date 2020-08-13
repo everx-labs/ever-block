@@ -15,7 +15,7 @@ use crate::{
     define_HashmapAugE,
     error::BlockError,
     envelope_message::MsgEnvelope,
-    hashmapaug::{Augmentable, HashmapAugType},
+    hashmapaug::{Augmentable, HashmapAugType, HashmapAugRemover},
     inbound_messages::InMsg,
     messages::{CommonMsgInfo, Message},
     miscellaneous::{IhrPendingInfo, ProcessedInfo},
@@ -24,7 +24,7 @@ use crate::{
     transactions::Transaction,
     GetRepresentationHash, Serializable, Deserializable,
 };
-use std::{fmt, sync::Arc};
+use std::fmt;
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
@@ -76,6 +76,12 @@ impl EnqueuedMsg {
             enqueued_lt,
             out_msg: ChildCell::with_struct(out_msg)?,
         })
+    }
+
+    pub fn created_lt(&self) -> Result<u64> {
+        let env = self.read_out_msg()?;
+        let msg = env.read_message()?;
+        msg.lt().ok_or_else(|| error!("wrong message type {:x}", env.message_cell().repr_hash()))
     }
 
     pub fn enqueued_lt(&self) -> u64 {
@@ -155,6 +161,7 @@ impl OutMsgDescr {
 // _ (HashmapAugE 352 EnqueuedMsg uint64) = OutMsgQueue;
 // 352 = 32 - dest workchain_id, 64 - first 64 bit of dest account address, 256 - message hash
 define_HashmapAugE!(OutMsgQueue, 352, OutMsgQueueKey, EnqueuedMsg, MsgTime);
+impl HashmapAugRemover<OutMsgQueueKey, EnqueuedMsg, MsgTime> for OutMsgQueue {}
 
 impl HashmapSubtree for OutMsgQueue {}
 
@@ -171,19 +178,12 @@ impl Augmentable for MsgTime {
 
 impl OutMsgQueue {
     /// insert OutMessage to OutMsgQueue
-    pub fn insert(&mut self, workchain_id: i32, prefix: u64, env: Arc<MsgEnvelope>, msg_lt: u64) -> Result<()> {
+    pub fn insert(&mut self, workchain_id: i32, prefix: u64, env: &MsgEnvelope, msg_lt: u64) -> Result<()> {
         let hash = env.message_cell().repr_hash();
         let key = OutMsgQueueKey::with_workchain_id_and_prefix(workchain_id, prefix, hash);
-        let enq = EnqueuedMsg::with_param(msg_lt, &env)?;
+        let enq = EnqueuedMsg::with_param(msg_lt, env)?;
         self.set(&key, &enq, &msg_lt)
     }
-
-    pub fn filter_queue(&mut self, _old_shard: &ShardIdent, _subshard: &ShardIdent) -> Result<()> {
-        self.filter(|_key: &OutMsgQueueKey, _enq, _lt| {
-            Ok(false)
-        })
-    }
-
 }
 
 ///
@@ -248,6 +248,15 @@ impl Deserializable for OutMsgQueueKey {
         self.prefix.read_from(slice)?;
         self.hash.read_from(slice)?;
         Ok(())
+    }
+}
+
+impl fmt::LowerHex for OutMsgQueueKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            write!(f, "0x")?;
+        }
+        write!(f, "{}", self.to_hex_string())
     }
 }
 
