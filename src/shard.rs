@@ -22,7 +22,7 @@ use crate::{
     messages::MsgAddressInt,
     outbound_messages::OutMsgQueueInfo,
     shard_accounts::{DepthBalanceInfo, ShardAccounts},
-    types::{ChildCell, CurrencyCollection},
+    types::{AddSub, ChildCell, CurrencyCollection},
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize, IntermediateAddress,
     validators::ValidatorSet,
 };
@@ -978,14 +978,35 @@ impl ShardStateUnsplit {
     }
 
     pub fn merge_with(&mut self, other: &ShardStateUnsplit) -> Result<()> {
+        if &self.shard_id.sibling() != other.shard() {
+            fail!("shards {} and {} are not siblings", self.shard_id, other.shard())
+        }
         self.shard_id = self.shard_id.merge()?;
         let merge_key = self.shard_id.shard_key(false);
         let mut accounts = self.read_accounts()?;
-        accounts.merge(&other.read_accounts()?, &merge_key)?;
+        let other_accounts = other.read_accounts()?;
+        accounts.merge(&other_accounts, &merge_key)?;
+        let mut total_balance = self.total_balance.clone();
+        total_balance.add(&other.total_balance)?;
+        if &total_balance != accounts.root_extra().balance() {
+            fail!("sum of balance {} and {} is not equal to total balance of merged ccounts {}",
+                self.total_balance, other.total_balance, accounts.root_extra().balance())
+        }
+        self.total_balance = total_balance;
+        self.total_validator_fees.add(&other.total_validator_fees)?;
         self.write_accounts(&accounts)?;
-        self.total_balance = accounts.root_extra().balance().clone();
-        // debug_assert!(self.master_ref.is_some());
-        // TODO: merge other
+
+        let mut info = self.read_out_msg_queue_info()?;
+        info.merge_with(&other.read_out_msg_queue_info()?, &merge_key)?;
+        self.write_out_msg_queue_info(&info)?;
+
+        self.gen_time = std::cmp::max(self.gen_time, other.gen_time);
+        self.gen_lt = std::cmp::max(self.gen_lt, other.gen_lt);
+
+        self.overload_history = 0;
+        self.underload_history = 0;
+
+        self.vert_seq_no = std::cmp::max(self.vert_seq_no, other.vert_seq_no);
         Ok(())
     }
 

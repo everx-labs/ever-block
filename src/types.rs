@@ -820,6 +820,9 @@ macro_rules! define_HashmapE {
                 })?;
                 Ok(vec)
             }
+            pub fn merge(&mut self, other: &Self, split_key: &SliceData) -> Result<()> {
+                self.0.merge(&other.0, split_key)
+            }
             pub fn split(&self, split_key: &SliceData) -> Result<(Self, Self)> {
                 self.0.split(split_key).map(|(left, right)| (Self(left), Self(right)))
             }

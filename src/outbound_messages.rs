@@ -313,6 +313,14 @@ impl OutMsgQueueInfo {
         &self.ihr_pending
     }
 
+    pub fn merge_with(&mut self, other: &Self, key: &SliceData) -> Result<()> {
+        let empty_key = SliceData::default();
+        self.out_queue.merge(&other.out_queue, &empty_key)?;
+        self.proc_info.merge(&other.proc_info, &empty_key)?;
+        self.ihr_pending.merge(&other.ihr_pending, key)?;
+        Ok(())
+    }
+
     pub fn split(&self, shard: &ShardIdent) -> Result<(OutMsgQueueInfo, OutMsgQueueInfo)> {
         let mut left = self.clone();
         let mut right = self.clone();
