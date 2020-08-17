@@ -17,7 +17,7 @@ use crate::{
 };
 use ton_types::{
     error, fail, Result, IBitstring, BuilderData, Cell, SliceData,
-    ExceptionCode, HashmapType, Leaf,
+    ExceptionCode, HashmapType, Leaf, HashmapFilterResult, HashmapRemover,
 };
 
 pub type AugResult<Y> = Result<(Option<SliceData>, Y)>;
@@ -55,7 +55,7 @@ macro_rules! define_HashmapAugE {
         }
 
         impl $varname {
-            // pub fn dump<K: Deserializable + Debug, X: Deserializable + Debug, Y: Augmentable + Debug>(&self) {
+            /// Dumps hashmap contents
             pub fn dump(&self) {
                 self.iterate_slices(|ref mut key, ref mut value| {
                     dbg!(<$k_type>::construct_from(key).unwrap());
@@ -154,6 +154,17 @@ macro_rules! define_HashmapAugE {
                 }
                 Ok(builder)
             }
+            fn make_fork(key: SliceData, bit_len: usize, left: Cell, right: Cell) -> Result<(BuilderData, SliceData)> {
+                let branch_bit_len = bit_len.checked_sub(key.remaining_bits() + 1).ok_or_else(|| error!("fail too short label"))?;
+                let mut builder = Self::make_cell_with_label(key, bit_len)?;
+                let aug = Self::calc_extra(&left, &right, branch_bit_len)?;
+                let mut remainder = BuilderData::new();
+                remainder.checked_append_reference(left)?;
+                remainder.checked_append_reference(right)?;
+                aug.write_to(&mut remainder)?;
+                builder.append_builder(&remainder)?;
+                Ok((builder, remainder.into()))
+            }
             fn is_fork(slice: &mut SliceData) -> Result<bool> {
                 Ok(slice.remaining_references() > 1)
             }
@@ -184,24 +195,6 @@ macro_rules! define_HashmapAugE {
         }
 
         impl $varname {
-            /*
-            /// removes item from hashmapaug
-            fn remove(&mut self, key: &K) -> Result<bool> {
-                let key = key.write_to_new_cell()?.into();
-                self.remove(key).map(|result| result.is_some())
-            }
-            // /// removes item from hashmapaug
-            // fn remove(&mut self, key: &K) -> Result<Option<$x_type>> {
-            //     let key = key.write_to_new_cell()?.into();
-            //     self.remove(key)?
-            //         .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
-            // }
-            */
-            fn value_aug(slice: &mut SliceData) -> Result<($x_type, $y_type)> {
-                let aug = <$y_type>::construct_from(slice)?;
-                let val = <$x_type>::construct_from(slice)?;
-                Ok((val, aug))
-            }
             /// scans differences in two hashmaps
             pub fn scan_diff_with_aug<F>(&self, other: &Self, mut op: F) -> Result<bool>
             where F: FnMut($k_type, Option<($x_type, $y_type)>, Option<($x_type, $y_type)>) -> Result<bool> {
@@ -243,7 +236,6 @@ macro_rules! define_HashmapAugE {
             }
         }
 
-        #[cfg_attr(rustfmt, rustfmt_skip)]
         impl fmt::Display for $varname {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 match self.data() {
@@ -258,6 +250,16 @@ macro_rules! define_HashmapAugE {
 pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + Serializable, Y: Augmentable>: HashmapType {
     fn root_extra(&self) -> &Y;
     fn set_root_extra(&mut self, aug: Y);
+    fn value_aug(slice: &mut SliceData) -> Result<(X, Y)> {
+        let aug = Y::construct_from(slice)?;
+        let val = X::construct_from(slice)?;
+        Ok((val, aug))
+    }
+    fn aug_value(slice: &mut SliceData) -> Result<(Y, X)> {
+        let aug = Y::construct_from(slice)?;
+        let val = X::construct_from(slice)?;
+        Ok((aug, val))
+    }
     fn get_serialized_raw(&self, key: SliceData) -> Leaf {
         self.hashmap_get(key, &mut 0)
     }
@@ -723,123 +725,20 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
 // TODO: move private operations here
 trait HashmapAugOperations {}
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum HashmapFilterResult {
-    Cancel, // cancel traverse and skip changes
-    Stop,   // cancel traverse and accept changes
-    Remove, // remove element and continue
-    Accept, // accept element and continue
-}
-
-pub trait HashmapAugRemover<K, X, Y>: HashmapAugType<K, X, Y>
+pub trait HashmapAugRemover<K, X, Y>: HashmapAugType<K, X, Y> + HashmapRemover
 where K: Deserializable + Serializable, X: Deserializable + Serializable, Y: Augmentable {
     fn filter<F: FnMut(K, X, Y) -> Result<HashmapFilterResult>> (&mut self, mut func: F) -> Result<()> {
-        let bit_len = self.bit_len();
-        let mut result = HashmapFilterResult::Accept;
-        hashmap_filter::<Self, K, X, Y, F>(self.data_mut(), &mut BuilderData::default(), bit_len, &mut result, &mut func)?;
-        if result == HashmapFilterResult::Stop {
-            let aug = match self.data() {
-                Some(root) => Self::find_extra(&mut root.into(), bit_len)?,
-                None => Y::default()
-            };
-            self.set_root_extra(aug);
-        }
-        Ok(())
-    }
-}
-
-fn hashmap_filter<T, K, X, Y, F>(
-    cell_opt: &mut Option<Cell>,
-    key: &mut BuilderData,
-    mut bit_len: usize,
-    result: &mut HashmapFilterResult,
-    func: &mut F
-) -> Result<(bool, Option<SliceData>)> // is_removed and remainder
-where
-    K: Deserializable + Serializable,
-    X: Deserializable + Serializable,
-    Y: Augmentable,
-    T: HashmapAugType<K, X, Y> + ?Sized,
-    F: FnMut(K, X, Y) -> Result<HashmapFilterResult>
-{
-    if *result == HashmapFilterResult::Cancel || *result == HashmapFilterResult::Stop {
-        return Ok((false, None))
-    }
-    let mut cursor = match cell_opt {
-        None => { // it only for root
-            *result = HashmapFilterResult::Cancel;
-            return Ok((false, None))
-        }
-        Some(cell) => SliceData::from(cell.clone()),
-    };
-    let key_length = key.length_in_bits();
-    let this_bit_len = bit_len;
-    *key = cursor.get_label_raw(&mut bit_len, std::mem::replace(key, BuilderData::default()))?;
-    let remainder = cursor.clone();
-    if bit_len == 0 {
-        let key = K::construct_from(&mut key.into())?;
-        let aug = Y::construct_from(&mut cursor)?;
-        let val = X::construct_from(&mut cursor)?;
-        let removed = match func(key, val, aug)? {
-            HashmapFilterResult::Remove => {
-                *cell_opt = None;
-                true
-            }
-            HashmapFilterResult::Accept => false,
-            new_result => {
-                *result = new_result;
-                false
-            }
+        Self::hashmap_filter(self, |key, mut aug_val| {
+            let key = K::construct_from(&mut key.into())?;
+            let (val, aug) = Self::value_aug(&mut aug_val)?;
+            func(key, val, aug)
+        })?;
+        let aug = match self.data() {
+            Some(root) => Self::find_extra(&mut root.into(), self.bit_len())?,
+            None => Y::default()
         };
-        return Ok((removed, Some(remainder)))
-    }
-    let mut changed = false;
-    bit_len -= 1;
-    let mut next = vec![];
-    for i in 0..2 {
-        let mut key = key.clone();
-        key.append_bit_bool(i == 1)?;
-        let mut cell = Some(cursor.checked_drain_reference()?);
-        let (removed, remainder) = hashmap_filter::<T, K, X, Y, F>(&mut cell, &mut key, bit_len, result, func)?;
-        if *result == HashmapFilterResult::Cancel {
-            return Ok((false, None))
-        }
-        changed |= removed;
-        if let Some(cell) = cell {
-            next.push((cell, key, remainder));
-        }
-    }
-    if !changed {
-        return Ok((false, Some(remainder)))
-    } else if let Some((right, new_key, next_remainder)) = next.pop() {
-        if let Some((left, _, _)) = next.pop() { // prepare new fork
-            let aug = T::calc_extra(&left, &right, bit_len)?;
-            let mut label = SliceData::from(key);
-            label.move_by(key_length)?;
-            let mut builder = T::make_cell_with_label(label, this_bit_len)?; // TODO: add make_fork_with_label
-            let mut remainder = BuilderData::new();
-            remainder.checked_append_reference(left)?;
-            remainder.checked_append_reference(right)?;
-            aug.write_to(&mut remainder)?;
-            builder.append_builder(&remainder)?;
-            *cell_opt = Some(builder.into());
-            return Ok((true, Some(remainder.into())))
-        } else { // replace fork with edge
-            *key = new_key;
-            let mut label = SliceData::from(key);
-            label.move_by(key_length)?;
-            let mut builder = T::make_cell_with_label(label, this_bit_len)?;
-            if let Some(ref remainder) = next_remainder {
-                builder.checked_append_references_and_data(remainder)?;
-            } else {
-                panic!("should be")
-            }
-            *cell_opt = Some(builder.into());
-            return Ok((true, next_remainder))
-        }
-    } else {
-        *cell_opt = None;
-        return Ok((true, None))
+        self.set_root_extra(aug);
+        Ok(())
     }
 }
 

@@ -20,7 +20,7 @@ use crate::{
 };
 use std::fmt;
 use ton_types::{
-    fail, Result,
+    error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, IBitstring, HashmapType, SliceData, hm_label,
 };
