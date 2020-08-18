@@ -659,6 +659,13 @@ impl InternalMessageHeader {
     pub fn fwd_fee(&self) -> &Grams {
         &self.fwd_fee
     }
+
+    pub fn src(&self) -> Result<&MsgAddressInt> {
+        match self.src {
+            MsgAddressIntOrNone::Some(ref addr) => Ok(addr),
+            MsgAddressIntOrNone::None => fail!("incorrect source address")
+        }
+    }
 }
 
 impl Serializable for InternalMessageHeader{
@@ -1271,10 +1278,9 @@ impl Message {
     /// Is message an external inbound?
     /// 
     pub fn is_inbound_external(&self) -> bool {
-        if let CommonMsgInfo::ExtInMsgInfo(ref _header) = self.header {
-            true
-        } else {
-            false
+        match self.header {
+            CommonMsgInfo::ExtInMsgInfo(_) => true,
+            _ => false
         }
     }
 

@@ -409,6 +409,18 @@ impl Default for OutMsg {
 }
 
 impl OutMsg {
+    /// Create External
+    pub fn external(msg: &Message, tr: &Transaction) -> Result<OutMsg> {
+        Ok(OutMsg::External(OutMsgExternal::with_params(msg, tr)?))
+    }
+    /// Create Ordinary internal message
+    pub fn new(env: &MsgEnvelope, tr: &Transaction) -> Result<OutMsg> {
+        Ok(OutMsg::New(OutMsgNew::with_params(env, tr)?))
+    }
+    /// Create Immediately internal message
+    pub fn immediately(env: &MsgEnvelope, tr: &Transaction, reimport: &InMsg) -> Result<OutMsg> {
+        Ok(OutMsg::Immediately(OutMsgImmediately::with_params(env, tr, reimport)?))
+    }
 
     /// Check if is valid message
     pub fn is_valid(&self) -> bool {
@@ -820,10 +832,10 @@ pub struct OutMsgNew {
 }
 
 impl OutMsgNew {
-    pub fn with_params(msg: &MsgEnvelope, tr: &Transaction) -> Result<Self> {
+    pub fn with_params(env: &MsgEnvelope, tr: &Transaction) -> Result<Self> {
         Ok(
             OutMsgNew {
-                out_msg: ChildCell::with_struct(msg)?,
+                out_msg: ChildCell::with_struct(env)?,
                 transaction: ChildCell::with_struct(tr)?,
             }
         )
