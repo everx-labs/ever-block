@@ -193,8 +193,8 @@ impl ConfigParams {
         })?;
         Ok(vec)
     }
-    pub fn fwd_prices(&self, is_masterchain: bool) -> Result<MsgForwardPrices> {
-        if is_masterchain {
+    pub fn fwd_prices(&self, masterchain: bool) -> Result<MsgForwardPrices> {
+        if masterchain {
             if let Some(ConfigParamEnum::ConfigParam24(param)) = self.config(24)? {
                 return Ok(param)
             }
@@ -205,8 +205,8 @@ impl ConfigParams {
         }
         fail!("Forward prices not found")
     }
-    pub fn gas_prices(&self, is_masterchain: bool) -> Result<GasLimitsPrices> {
-        if is_masterchain {
+    pub fn gas_prices(&self, masterchain: bool) -> Result<GasLimitsPrices> {
+        if masterchain {
             if let Some(ConfigParamEnum::ConfigParam20(param)) = self.config(20)? {
                 return Ok(param)
             }

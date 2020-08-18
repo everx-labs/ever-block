@@ -407,22 +407,19 @@ impl MsgAddressInt {
     pub fn with_standart(anycast: Option<AnycastInfo>, workchain_id: i8, address: AccountId) -> Result<Self> {
         Ok(MsgAddressInt::AddrStd(MsgAddrStd::with_address(anycast, workchain_id, address)))
     }
-    pub fn get_address(&self) -> SliceData { self.address() }
-    pub fn get_workchain_id(&self) -> i32 { self.workchain_id() }
-    pub fn get_rewrite_pfx(&self) -> Option<AnycastInfo> { self.rewrite_pfx() }
-    pub fn address(&self) -> AccountId {
+    pub fn get_address(&self) -> SliceData {
         match self {
-            MsgAddressInt::AddrStd(addr_std) => addr_std.address.clone().into(),
+            MsgAddressInt::AddrStd(addr_std) => addr_std.address.write_to_new_cell().unwrap().into(),
             MsgAddressInt::AddrVar(addr_var) => addr_var.address.clone()
         }
     }
-    pub fn workchain_id(&self) -> i32 {
+    pub fn get_workchain_id(&self) -> i32 {
         match self {
             MsgAddressInt::AddrStd(addr_std) => addr_std.workchain_id as i32,
             MsgAddressInt::AddrVar(addr_var) => addr_var.workchain_id
         }
     }
-    pub fn rewrite_pfx(&self) -> Option<AnycastInfo> {
+    pub fn get_rewrite_pfx(&self) -> Option<AnycastInfo> {
         match self {
             MsgAddressInt::AddrStd(addr_std) => addr_std.anycast.clone(),
             MsgAddressInt::AddrVar(addr_var) => addr_var.anycast.clone()
@@ -658,13 +655,6 @@ impl InternalMessageHeader {
     ///
     pub fn fwd_fee(&self) -> &Grams {
         &self.fwd_fee
-    }
-
-    pub fn src(&self) -> Result<&MsgAddressInt> {
-        match self.src {
-            MsgAddressIntOrNone::Some(ref addr) => Ok(addr),
-            MsgAddressIntOrNone::None => fail!("incorrect source address")
-        }
     }
 }
 
@@ -1278,9 +1268,10 @@ impl Message {
     /// Is message an external inbound?
     /// 
     pub fn is_inbound_external(&self) -> bool {
-        match self.header {
-            CommonMsgInfo::ExtInMsgInfo(_) => true,
-            _ => false
+        if let CommonMsgInfo::ExtInMsgInfo(ref _header) = self.header {
+            true
+        } else {
+            false
         }
     }
 

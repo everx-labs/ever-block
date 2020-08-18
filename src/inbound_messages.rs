@@ -137,34 +137,6 @@ impl Default for InMsg {
 
 
 impl InMsg {
-    /// Create external
-    pub fn external(msg: &Message, tr: &Transaction) -> Result<InMsg> {
-        Ok(InMsg::External(InMsgExternal::with_params(msg, tr)?))
-    }
-    /// Create IHR
-    pub fn ihr(msg: &Message, tr: &Transaction, ihr_fee: Grams, proof: Cell) -> Result<InMsg> {
-        Ok(InMsg::IHR(InMsgIHR::with_params(msg, tr, ihr_fee, proof)?))
-    }
-    /// Create Immediatelly
-    pub fn immediatelly(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<InMsg> {
-        Ok(InMsg::Immediatelly(InMsgFinal::with_params(env, tr, fwd_fee)?))
-    }
-    /// Create Final
-    pub fn finally(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<InMsg> {
-        Ok(InMsg::Final(InMsgFinal::with_params(env, tr, fwd_fee)?))
-    }
-    /// Create Transit
-    pub fn transit(in_msg: &MsgEnvelope, out_msg: &MsgEnvelope, fwd_fee: Grams) -> Result<InMsg> {
-        Ok(InMsg::Transit(InMsgTransit::with_params(in_msg, out_msg, fwd_fee)?))
-    }
-    /// Create DiscardedFinal
-    pub fn discard_final(in_msg: &MsgEnvelope, tr_id: u64, fwd_fee: Grams) -> Result<InMsg> {
-        Ok(InMsg::DiscardedFinal(InMsgDiscardedFinal::with_params(in_msg, tr_id, fwd_fee)?))
-    }
-    /// Create DiscardedTransit
-    pub fn discard_transit(msg: &MsgEnvelope, tr_id: u64, fwd_fee: Grams, proof: Cell) -> Result<InMsg> {
-        Ok(InMsg::DiscardedTransit(InMsgDiscardedTransit::with_params(msg, tr_id, fwd_fee, proof)?))
-    }
 
     /// Check if is valid message
     pub fn is_valid(&self) -> bool {
@@ -564,10 +536,10 @@ pub struct InMsgFinal {
 }
 
 impl InMsgFinal {
-    pub fn with_params(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<Self> {
+    pub fn with_params(msg: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<Self> {
         Ok(
             InMsgFinal {
-                in_msg: ChildCell::with_struct(env)?,
+                in_msg: ChildCell::with_struct(msg)?,
                 transaction: ChildCell::with_struct(tr)?,
                 fwd_fee,
             }

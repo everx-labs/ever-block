@@ -28,7 +28,7 @@ use std::fmt;
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
-    BuilderData, Cell, IBitstring, HashmapType, HashmapRemover, HashmapSubtree, SliceData, hm_label,
+    BuilderData, Cell, IBitstring, HashmapType, HashmapSubtree, SliceData, hm_label,
 };
 
 
@@ -161,9 +161,9 @@ impl OutMsgDescr {
 // _ (HashmapAugE 352 EnqueuedMsg uint64) = OutMsgQueue;
 // 352 = 32 - dest workchain_id, 64 - first 64 bit of dest account address, 256 - message hash
 define_HashmapAugE!(OutMsgQueue, 352, OutMsgQueueKey, EnqueuedMsg, MsgTime);
-impl HashmapRemover for OutMsgQueue {}
-impl HashmapSubtree for OutMsgQueue {}
 impl HashmapAugRemover<OutMsgQueueKey, EnqueuedMsg, MsgTime> for OutMsgQueue {}
+
+impl HashmapSubtree for OutMsgQueue {}
 
 type MsgTime = u64;
 
@@ -409,18 +409,6 @@ impl Default for OutMsg {
 }
 
 impl OutMsg {
-    /// Create External
-    pub fn external(msg: &Message, tr: &Transaction) -> Result<OutMsg> {
-        Ok(OutMsg::External(OutMsgExternal::with_params(msg, tr)?))
-    }
-    /// Create Ordinary internal message
-    pub fn new(env: &MsgEnvelope, tr: &Transaction) -> Result<OutMsg> {
-        Ok(OutMsg::New(OutMsgNew::with_params(env, tr)?))
-    }
-    /// Create Immediately internal message
-    pub fn immediately(env: &MsgEnvelope, tr: &Transaction, reimport: &InMsg) -> Result<OutMsg> {
-        Ok(OutMsg::Immediately(OutMsgImmediately::with_params(env, tr, reimport)?))
-    }
 
     /// Check if is valid message
     pub fn is_valid(&self) -> bool {
@@ -832,10 +820,10 @@ pub struct OutMsgNew {
 }
 
 impl OutMsgNew {
-    pub fn with_params(env: &MsgEnvelope, tr: &Transaction) -> Result<Self> {
+    pub fn with_params(msg: &MsgEnvelope, tr: &Transaction) -> Result<Self> {
         Ok(
             OutMsgNew {
-                out_msg: ChildCell::with_struct(env)?,
+                out_msg: ChildCell::with_struct(msg)?,
                 transaction: ChildCell::with_struct(tr)?,
             }
         )

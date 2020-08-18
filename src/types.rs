@@ -747,9 +747,6 @@ macro_rules! define_HashmapE {
             pub fn count(&self, max: usize) -> Result<usize> {
                 self.0.count(max)
             }
-            pub fn count_cells(&self, max: usize) -> Result<usize> {
-                self.0.count_cells(max)
-            }
             /// iterates items
             pub fn iterate<F>(&self, mut p: F) -> Result<bool>
             where F: FnMut($x_type) -> Result<bool> {
