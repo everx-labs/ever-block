@@ -369,11 +369,25 @@ impl MsgEnvelope {
     ///
     pub fn with_message_and_fee(msg: &Message, fwd_fee_remaining: Grams) -> Result<Self> {
         Ok(MsgEnvelope {
-                cur_addr: IntermediateAddress::default(),
-                next_addr: IntermediateAddress::default(),
-                fwd_fee_remaining,
-                msg: ChildCell::with_struct(msg)?,
+            cur_addr: IntermediateAddress::default(),
+            next_addr: IntermediateAddress::default(),
+            fwd_fee_remaining,
+            msg: ChildCell::with_struct(msg)?,
         })
+    }
+
+    pub fn with_routing(
+        msg: Cell,
+        fwd_fee_remaining: Grams,
+        cur_addr: IntermediateAddress,
+        next_addr: IntermediateAddress
+    ) -> Self {
+        MsgEnvelope {
+            cur_addr,
+            next_addr,
+            fwd_fee_remaining,
+            msg: ChildCell::with_cell(msg),
+        }
     }
 
     ///

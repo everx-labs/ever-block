@@ -20,7 +20,7 @@ use crate::{
     define_HashmapAugE,
     envelope_message::MsgEnvelope,
     error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugType},
+    hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     messages::{CommonMsgInfo, Message},
     transactions::Transaction,
     types::{AddSub, ChildCell, CurrencyCollection, Grams},
@@ -137,6 +137,34 @@ impl Default for InMsg {
 
 
 impl InMsg {
+    /// Create external
+    pub fn external(msg: &Message, tr: &Transaction) -> Result<InMsg> {
+        Ok(InMsg::External(InMsgExternal::with_params(msg, tr)?))
+    }
+    /// Create IHR
+    pub fn ihr(msg: &Message, tr: &Transaction, ihr_fee: Grams, proof: Cell) -> Result<InMsg> {
+        Ok(InMsg::IHR(InMsgIHR::with_params(msg, tr, ihr_fee, proof)?))
+    }
+    /// Create Immediatelly
+    pub fn immediatelly(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<InMsg> {
+        Ok(InMsg::Immediatelly(InMsgFinal::with_params(env, tr, fwd_fee)?))
+    }
+    /// Create Final
+    pub fn finally(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<InMsg> {
+        Ok(InMsg::Final(InMsgFinal::with_params(env, tr, fwd_fee)?))
+    }
+    /// Create Transit
+    pub fn transit(in_msg: &MsgEnvelope, out_msg: &MsgEnvelope, fwd_fee: Grams) -> Result<InMsg> {
+        Ok(InMsg::Transit(InMsgTransit::with_params(in_msg, out_msg, fwd_fee)?))
+    }
+    /// Create DiscardedFinal
+    pub fn discard_final(in_msg: &MsgEnvelope, tr_id: u64, fwd_fee: Grams) -> Result<InMsg> {
+        Ok(InMsg::DiscardedFinal(InMsgDiscardedFinal::with_params(in_msg, tr_id, fwd_fee)?))
+    }
+    /// Create DiscardedTransit
+    pub fn discard_transit(msg: &MsgEnvelope, tr_id: u64, fwd_fee: Grams, proof: Cell) -> Result<InMsg> {
+        Ok(InMsg::DiscardedTransit(InMsgDiscardedTransit::with_params(msg, tr_id, fwd_fee, proof)?))
+    }
 
     /// Check if is valid message
     pub fn is_valid(&self) -> bool {
@@ -171,7 +199,7 @@ impl InMsg {
                 InMsg::Transit(ref _x) => None,
                 InMsg::DiscardedFinal(ref _x) => None,
                 InMsg::DiscardedTransit(ref _x) => None,
-                InMsg::None => None,
+                InMsg::None => fail!("wrong message type")
             }
         )
     }
@@ -258,7 +286,7 @@ impl InMsg {
             InMsg::Transit(ref x) => Some(x.read_in_message()).transpose(),
             InMsg::DiscardedFinal(ref x) => Some(x.read_message()).transpose(),
             InMsg::DiscardedTransit(ref x) => Some(x.read_message()).transpose(),
-            InMsg::None => Ok(None),
+            InMsg::None => fail!("wrong message type"),
         }
     }
 
@@ -290,11 +318,15 @@ impl InMsg {
             InMsg::Transit(ref x) => Some(x.read_out_message()).transpose(),
             InMsg::DiscardedFinal(_) => Ok(None),
             InMsg::DiscardedTransit(_) => Ok(None),
-            InMsg::None => Ok(None)
+            InMsg::None => fail!("wrong message type")
         }
     }
 
-    pub fn get_fee(&self) -> Result<Option<ImportFees>> {
+    pub fn get_fee(&self) -> Result<ImportFees> { self.aug() }
+}
+
+impl Augmentation<ImportFees> for InMsg {
+    fn aug(&self) -> Result<ImportFees> {
         let mut fees = ImportFees::default();
         match self {
             InMsg::External(ref _x) => {
@@ -363,12 +395,11 @@ impl InMsg {
                 // value_imported := in_msg.fwd_fee
                 fees.value_imported.grams.add(&x.fwd_fee())?;
             }
-            _ => return Ok(None)
+            InMsg::None => fail!("wrong InMsg type")
         }
-        Ok(Some(fees))
+        Ok(fees)
     }
 }
-
 
 impl Serializable for InMsg {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -536,10 +567,10 @@ pub struct InMsgFinal {
 }
 
 impl InMsgFinal {
-    pub fn with_params(msg: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<Self> {
+    pub fn with_params(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<Self> {
         Ok(
             InMsgFinal {
-                in_msg: ChildCell::with_struct(msg)?,
+                in_msg: ChildCell::with_struct(env)?,
                 transaction: ChildCell::with_struct(tr)?,
                 fwd_fee,
             }
@@ -762,10 +793,15 @@ impl Deserializable for InMsgDiscardedTransit {
 define_HashmapAugE!(InMsgDescr, 256, UInt256, InMsg, ImportFees);
 
 impl InMsgDescr {
+    /// insert new or replace existing, key - hash of Message
+    pub fn insert_with_key(&mut self, key: UInt256, in_msg: &InMsg) -> Result<()> {
+        let aug = in_msg.aug()?;
+        self.set(&key, in_msg, &aug)
+    }
+
     /// insert new or replace existing
     pub fn insert(&mut self, in_msg: &InMsg) -> Result<()> {
-        let hash = in_msg.message_cell()?.repr_hash();
-        self.set(&hash, &in_msg, &in_msg.get_fee()?.unwrap_or_default())
+        self.insert_with_key(in_msg.message_cell()?.repr_hash(), in_msg)
     }
 
     /// insert or replace existion record

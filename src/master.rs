@@ -157,6 +157,66 @@ impl ShardHashes {
 
         return Ok(std::cmp::max(shard1.descr.next_catchain_seqno, shard2.descr.next_catchain_seqno) + 1)
     }
+    pub fn split_shard(
+        &mut self,
+        splitted_shard: &ShardIdent,
+        splitter: impl FnOnce(ShardDescr) -> Result<(ShardDescr, ShardDescr)>
+    ) -> Result<()> {
+        let mut tree = self.get(&splitted_shard.workchain_id())?
+            .ok_or_else(|| error!("Can't find workchain {}", splitted_shard.workchain_id()))?;
+        if !tree.0.split(splitted_shard.shard_key(false), splitter)? {
+            fail!("Splitted shard {} is not found", splitted_shard)
+        } else {
+            self.set(&splitted_shard.workchain_id(), &tree)
+        }
+    }
+    pub fn merge_shards(
+        &mut self,
+        new_shard: &ShardIdent,
+        merger: impl FnOnce(ShardDescr, ShardDescr) -> Result<ShardDescr>
+    ) -> Result<()> {
+        let mut tree = self.get(&new_shard.workchain_id())?
+            .ok_or_else(|| error!("Can't find workchain {}", new_shard.workchain_id()))?;
+        if !tree.0.merge(new_shard.shard_key(false), merger)? {
+            fail!("Merged shards's parent {} is not found", new_shard)
+        } else {
+            self.set(&new_shard.workchain_id(), &tree)
+        }
+    }
+    pub fn update_shard(
+        &mut self,
+        shard: &ShardIdent,
+        mutator: impl FnOnce(ShardDescr) -> Result<ShardDescr>
+    ) -> Result<()> {
+        let mut tree = self.get(&shard.workchain_id())?
+            .ok_or_else(|| error!("Can't find workchain {}", shard.workchain_id()))?;
+        if !tree.0.update(shard.shard_key(false), mutator)? {
+            fail!("Updated shard {} is not found", shard)
+        } else {
+            self.set(&shard.workchain_id(), &tree)
+        }
+    }
+    pub fn add_workchain(
+        &mut self,
+        workchain_id: i32,
+        reg_mc_seqno: u32,
+        zerostate_root_hash: UInt256,
+        zerostate_file_hash: UInt256
+    ) -> Result<()> {
+
+        if self.has_workchain(workchain_id)? {
+            fail!("Workchain {} is already added", workchain_id);
+        }
+        
+        let mut descr = ShardDescr::default();
+        descr.reg_mc_seqno = reg_mc_seqno;
+        descr.root_hash = zerostate_root_hash;
+        descr.file_hash = zerostate_file_hash;
+        descr.min_ref_mc_seqno = !0;
+        let tree = BinTree::with_item(&descr);
+
+        self.set(&workchain_id, &InRefValue(tree))
+    }
 }
 
 impl ShardHashes {
@@ -251,6 +311,22 @@ impl McShardRecord {
     }
 }
 
+impl ShardFees {
+    pub fn store_shard_fees(
+        &mut self,
+        shard: &ShardIdent,
+        fees: CurrencyCollection,
+        created: CurrencyCollection
+    ) -> Result<()> {
+        let id = ShardIdentFull{
+            workchain_id: shard.workchain_id(),
+            prefix: shard.shard_prefix_with_tag(),
+        };
+        let fee = ShardFeeCreated{fees, create: created};
+        self.set(&id, &fee, &fee)
+    }
+}
+
 /*
 masterchain_block_extra#cca5
   key_block:(## 1)
@@ -281,32 +357,6 @@ pub fn shard_ident_to_u64(shard: &[u8]) -> u64 {
 }
 
 impl McBlockExtra {
-    /// Adds new workchain
-    pub fn add_workchain(&mut self, workchain_id: i32, descr: &ShardDescr, fee: &CurrencyCollection) -> Result<ShardIdent> {
-        let shards = BinTree::with_item(descr);
-        self.shards.set(&workchain_id, &InRefValue(shards))?;
-
-        let ident = ShardIdent::with_workchain_id(workchain_id)?;
-
-        let fee = ShardFeeCreated::with_fee(fee.clone());
-        self.fees.set_serialized(ident.full_key()?, &fee.write_to_new_cell()?.into(), &fee)?;
-        Ok(ident)
-    }
-    /// Split Shard
-    pub fn split_shard(&mut self, ident: &mut ShardIdent, descr: &ShardDescr, _fee: &CurrencyCollection) -> Result<()> {
-        // TODO fee?
-        let shards = match self.shards.get(&ident.workchain_id())? {
-            Some(InRefValue(mut shards)) => {
-                shards.split(ident.shard_key(false), descr)?;
-                shards
-            }
-            None => {
-                BinTree::with_item(descr)
-            }
-        };
-        self.shards.set(&ident.workchain_id(), &InRefValue(shards))?;
-        Ok(())
-    }
 
     ///
     /// Get all fees for blockchain
@@ -314,24 +364,7 @@ impl McBlockExtra {
     pub fn total_fee(&self) -> &CurrencyCollection {
         &self.fees.root_extra().fees
     }
-    
-    // ///
-    // /// Set fee value for selected shard
-    // /// 
-    // pub fn set_shard_fee(&mut self, _shard_ident: &ShardIdent, _shard_fee: &CurrencyCollection)
-    // -> Option<ExceptionCode> {
-    //     unimplemented!()
-    //     // let shard_key = ident.shard_key(false);
-    //     // if let Some(shards) = self.fees.get(&ident.workchain_id())? {
-    //     //     shards.set_extra(shard_key, fee);
-    //     // } else if shard_key.is_empty() {
-    //     //     let shards = BinTreeAug::with_extra(fee);
-    //     //     self.fees.insert(ident.workchain_id(), shards);
-    //     // } else {
-    //     //     return err_opt!(ExceptionCode::Other);
-    //     // }
-    //     // None
-    // }
+
 
     ///
     /// Get total fees for shard
@@ -933,7 +966,7 @@ masterchain_state_extra#cc26
 */
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct McStateExtra {
-    shards: ShardHashes,
+    pub shards: ShardHashes,
     pub config: ConfigParams,
     pub validator_info: ValidatorInfo,
     pub prev_blocks: OldMcBlocksInfo,
@@ -953,19 +986,6 @@ impl McStateExtra {
         let shards = BinTree::with_item(descr);
         self.shards.set(&workchain_id, &InRefValue(shards))?;
         Ok(ShardIdent::with_workchain_id(workchain_id)?)
-    }
-
-    /// Split Shard
-    pub fn split_shard(&mut self, ident: &ShardIdent, descr: &ShardDescr) -> Result<()> {
-        let shards = match self.shards.get(&ident.workchain_id())? {
-            Some(InRefValue(mut shards)) => {
-                shards.split(ident.shard_key(false), descr)?;
-                shards
-            }
-            None => BinTree::with_item(descr)
-        };
-        self.shards.set(&ident.workchain_id(), &InRefValue(shards))?;
-        Ok(())
     }
 
     ///

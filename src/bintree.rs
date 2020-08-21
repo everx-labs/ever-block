@@ -73,43 +73,95 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
 
 //////////////////////////////////
 // helper functions
-fn internal_merge(
-    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, mut key: SliceData
-) -> bool {
+fn internal_merge<X, F>(
+    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, merger): (SliceData, F)
+) -> Result<bool> 
+where F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable
+{
     if *bits != 1 || children.len() < 2 {
-        false
+        Ok(false)
     } else if let Ok(x) = key.get_next_bit_int() {
         let mut child = BuilderData::from(&children.remove(x));
-        let result = child.update_cell(internal_merge, key);
+        let result = child.update_cell(internal_merge, (key, merger));
         children.insert(x, child.into());
         result
     } else {
-        let mut child = BuilderData::from(&children.remove(0));
-        child.cell_data(data, bits, children);
-        true
+        let mut right_slice = SliceData::from(&children.remove(1));
+        let mut left_slice = SliceData::from(&children.remove(0));
+        if right_slice.get_next_bit()? | left_slice.get_next_bit()? {
+            return Ok(false)
+        }
+        let right = X::construct_from(&mut right_slice)?;
+        let left = X::construct_from(&mut left_slice)?;
+        let merged = merger(left, right)?;
+        let mut merged_cell = BuilderData::with_raw(vec![0], 1)?;
+        merged.write_to(&mut merged_cell)?;
+        merged_cell.cell_data(data, bits, children);
+        Ok(true)
     }
 }
 
-fn internal_split<X: Default + Serializable + Deserializable>(
-    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, value): (SliceData, &X)
-) -> Result<bool> {
+fn internal_split<X, F>(
+    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, splitter): (SliceData, F)
+) -> Result<bool>
+where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
+{
     if *bits == 1 && data.as_slice() == [0x80] { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
         if children.len() < 2 {
             return Ok(false)
         }
         if let Ok(x) = key.get_next_bit_int() {
             let mut child = BuilderData::from(&children.remove(x));
-            let result = child.update_cell(internal_split, (key, value));
+            let result = child.update_cell(internal_split, (key, splitter));
             children.insert(x, child.into());
             return result
         }
     } else if key.is_empty() { // bt_leaf$0 {X:Type} leaf:X
         let leaf = BuilderData::with_raw_and_refs(std::mem::replace(data, vec![0x80]), *bits, children.drain(..))?;
         *bits = 1;
-        children.push(leaf.into()); // existing always left
-        let mut cell = BuilderData::with_raw(vec![0], 1)?;
-        value.write_to(&mut cell)?;
-        children.push(cell.into()); // new value right
+
+        let mut leaf_slice = SliceData::from(leaf);
+        if leaf_slice.get_next_bit()? {
+            return Ok(false)
+        }
+        let (left, right) = splitter(X::construct_from(&mut leaf_slice)?)?;
+        let mut left_cell = BuilderData::with_raw(vec![0], 1)?;
+        left.write_to(&mut left_cell)?;
+        children.push(left_cell.into());
+        let mut right_cell = BuilderData::with_raw(vec![0], 1)?;
+        right.write_to(&mut right_cell)?;
+        children.push(right_cell.into());
+
+        return Ok(true)
+    }
+    Ok(false)
+}
+
+fn internal_update<X, F>(
+    data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, mutator): (SliceData, F)
+) -> Result<bool>
+where F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
+{
+    if *bits == 1 && data.as_slice() == [0x80] { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
+        if children.len() < 2 {
+            return Ok(false)
+        }
+        if let Ok(x) = key.get_next_bit_int() {
+            let mut child = BuilderData::from(&children.remove(x));
+            let result = child.update_cell(internal_update, (key, mutator));
+            children.insert(x, child.into());
+            return result
+        }
+    } else if key.is_empty() { // bt_leaf$0 {X:Type} leaf:X
+        let leaf = BuilderData::with_raw_and_refs(std::mem::replace(data, vec![0x80]), *bits, children.drain(..))?;
+        let mut leaf_slice = SliceData::from(leaf);
+        if leaf_slice.get_next_bit()? {
+            return Ok(false)
+        }
+        let value = mutator(X::construct_from(&mut leaf_slice)?)?;
+        let mut new_left_cell = BuilderData::with_raw(vec![0], 1)?;
+        value.write_to(&mut new_left_cell)?;
+        new_left_cell.cell_data(data, bits, children);
         return Ok(true)
     }
     Ok(false)
@@ -199,24 +251,49 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
             phantom: PhantomData::<X>,
         }
     }
-    /// Splits item by key old item will be left
-    pub fn split(&mut self, key: SliceData, value: &X) -> Result<bool> {
+
+    /// Splits item by calling splitter function, returns false if item was not found
+    pub fn split(
+        &mut self,
+        key: SliceData,
+        splitter: impl FnOnce(X) -> Result<(X, X)>
+    ) -> Result<bool> {
         let mut builder = BuilderData::from_slice(&self.data);
-        if builder.update_cell(internal_split, (key, value))? {
+        if builder.update_cell(internal_split, (key, splitter))? {
             self.data = builder.into();
             Ok(true)
         } else {
             Ok(false)
         }
     }
-    /// Merges items in fork and put left instead
-    pub fn merge(&mut self, key: SliceData) -> bool {
+
+    /// Merge 2 items in fork by calling merger function, returns false if fork was not found
+    pub fn merge(
+        &mut self,
+        key: SliceData,
+        merger: impl FnOnce(X, X) -> Result<X>
+    ) -> Result<bool> {
         let mut builder = BuilderData::from_slice(&self.data);
-        if builder.update_cell(internal_merge, key) {
+        if builder.update_cell(internal_merge, (key, merger))? {
             self.data = builder.into();
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
+        }
+    }
+
+    /// Change item with given key calling mutator function, returns false if item was not found
+    pub fn update(
+        &mut self,
+        key: SliceData,
+        mutator: impl FnOnce(X) -> Result<X>
+    ) -> Result<bool> {
+        let mut builder = BuilderData::from_slice(&self.data);
+        if builder.update_cell(internal_update, (key, mutator))? {
+            self.data = builder.into();
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 }
@@ -312,16 +389,16 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
             Ok(false)
         }
     }
-    /// Merges items in fork and put left instead
-    pub fn merge(&mut self, key: SliceData) -> bool {
-        let mut builder = BuilderData::from_slice(&self.data);
-        if builder.update_cell(internal_merge, key) {
-            self.data = builder.into();
-            true
-        } else {
-            false
-        }
-    }
+    // /// Merges items in fork and put left instead
+    // pub fn merge(&mut self, key: SliceData) -> bool {
+    //     let mut builder = BuilderData::from_slice(&self.data);
+    //     if builder.update_cell(internal_merge, key) {
+    //         self.data = builder.into();
+    //         true
+    //     } else {
+    //         false
+    //     }
+    // }
 
     //////////////////////////////////
     // helper functions

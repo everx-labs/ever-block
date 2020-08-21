@@ -276,7 +276,7 @@ impl Deserializable for AccountId {
 impl Serializable for AccountId {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         if self.remaining_bits() != 256 {
-            fail!(BlockError::TvmException(ExceptionCode::CellUnderflow))
+            fail!("account_id must contain 256 bits, but {}", self.remaining_bits())
         }
         cell.append_bytestring(&self)?;
         Ok(())

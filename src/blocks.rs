@@ -62,6 +62,10 @@ impl BlockIdExt {
         BlockIdExt::default()
     }
 
+    pub fn fake_id(shard_id: ShardIdent, seq_no: u32) -> Self {
+        Self::with_params(shard_id, seq_no, Default::default(), Default::default())
+    }
+
     // New instance of BlockIdExt structure
     pub fn with_params(
         shard_id: ShardIdent,
@@ -418,6 +422,21 @@ impl Default for BlkPrevInfo {
 }
 
 impl BlkPrevInfo {
+
+    pub fn new(mut ext_block_refs: Vec<ExtBlkRef>) -> Result<Self> {
+        match ext_block_refs.len() {
+            2 => {
+                let prev1 = ChildCell::with_struct(&ext_block_refs[0])?;
+                let prev2 = ChildCell::with_struct(&ext_block_refs[1])?;
+                Ok(BlkPrevInfo::Blocks { prev1, prev2 })
+            }
+            1 => {
+                let prev = ext_block_refs.remove(0);
+                Ok(BlkPrevInfo::Block{ prev })
+            }
+            _ => fail!("prev blocks must be 1 or 2")
+        }
+    }
 
     pub fn default_block() -> Self {
         BlkPrevInfo::Block {

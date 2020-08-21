@@ -13,11 +13,12 @@
 
 use crate::{
     error::BlockError,
-    hashmapaug::HashmapAugType,
+    hashmapaug::{HashmapAugType, Augmentation},
     merkle_proof::MerkleProof,
     messages::{AnycastInfo, CommonMsgInfo, Message, MsgAddressInt, SimpleLib, StateInit, StateInitLib, TickTock},
     types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
     shard::{ShardIdent, ShardStateUnsplit},
+    shard_accounts::DepthBalanceInfo,
     GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
 use std::fmt;
@@ -684,11 +685,14 @@ impl Account {
         self.stuff().map(|s| &s.storage.state)
     }
 
-    pub fn get_tick_tock(&self) -> Option<&TickTock> {
+    pub fn state_init(&self) -> Option<&StateInit> {
         match self.state() {
-            Some(AccountState::AccountActive(state_init)) => state_init.special.as_ref(),
+            Some(AccountState::AccountActive(state_init)) => Some(state_init),
             _ => None
         }
+    }
+    pub fn get_tick_tock(&self) -> Option<&TickTock> {
+        self.state_init().and_then(|s| s.special.as_ref())
     }
 
     /// Get copy of account's storage information.
@@ -699,26 +703,12 @@ impl Account {
 
     /// getting to the root of the cell with Code of Smart Contract
     pub fn get_code(&self) -> Option<Cell> {
-        if let Some(stuff) = self.stuff() {
-            if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
-                if let Some(ref code) = (*state_init).code {
-                    return Some(code.clone());
-                }
-            }
-        }
-        None
+        self.state_init().and_then(|s| s.code.clone())
     }
 
     /// getting to the root of the cell with persistent Data of Smart Contract
     pub fn get_data(&self) -> Option<Cell> {
-        if let Some(stuff) = self.stuff() {
-            if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
-                if let Some(ref data) = (*state_init).data {
-                    return Some(data.clone());
-                }
-            }
-        }
-        None
+        self.state_init().and_then(|s| s.data.clone())
     }
 
     /// save persistent data of smart contract (for example, after execute code of smart contract into transaction)
@@ -810,7 +800,6 @@ impl Account {
         }
         StateInitLib::default()
     }
-    pub fn get_library(&self) -> StateInitLib { self.libraries() }
 
     /// Get enum variant indicating current state of account
     pub fn status(&self) -> AccountStatus {
@@ -831,9 +820,11 @@ impl Account {
         }
     }
     /// getting balance of the account
-    pub fn get_balance(&self) -> Option<&CurrencyCollection> {
+    pub fn balance(&self) -> Option<&CurrencyCollection> {
         self.stuff().map(|s| &s.storage.balance)
     }
+    /// deprecated: getting balance of the account
+    pub fn get_balance(&self) -> Option<&CurrencyCollection> { self.balance() }
 
     /// setting balance of the account
     pub fn set_balance(&mut self, balance: CurrencyCollection) {
@@ -855,6 +846,10 @@ impl Account {
         } else {
             Ok(false)
         }
+    }
+
+    pub fn split_depth(&self) -> Option<Number5> {
+        self.state_init().and_then(|s| s.split_depth.clone())
     }
 
     pub fn last_tr_time(&mut self) -> Option<u64> {
@@ -893,6 +888,19 @@ impl Account {
                 .and_then(|proof| proof.write_to_new_cell())
                 .map(|cell| cell.into())
         }
+    }
+}
+
+impl Augmentation<DepthBalanceInfo> for Account {
+    fn aug(&self) -> Result<DepthBalanceInfo> {
+        let mut info = DepthBalanceInfo::default();
+        if let Some(balance) = self.balance() {
+            info.set_balance(balance.clone());
+        }
+        if let Some(split_depth) = self.state_init().and_then(|s| s.split_depth.clone()) {
+            info.set_split_depth(split_depth);
+        }
+        Ok(info)
     }
 }
 

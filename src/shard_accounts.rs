@@ -20,9 +20,10 @@ use crate::{
 };
 use std::fmt;
 use ton_types::{
-    fail, Result,
+    error, fail, Result,
     AccountId, UInt256,
-    BuilderData, Cell, IBitstring, HashmapType, SliceData, hm_label,
+    BuilderData, Cell, IBitstring,
+    HashmapType, HashmapRemover, SliceData, hm_label,
 };
 
 
@@ -31,6 +32,7 @@ use ton_types::{
 // of the shardchain state (cf. 1.2.1 and 1.2.2) is given by (upd from Lite Client v11):
 // _ (HashmapAugE 256 ShardAccount DepthBalanceInfo) = ShardAccounts;
 define_HashmapAugE!(ShardAccounts, 256, UInt256, ShardAccount, DepthBalanceInfo);
+impl HashmapRemover for ShardAccounts {}
 
 impl ShardAccounts {
     pub fn insert(&mut self, split_depth: u8, account: &Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Option<AccountId>> {
@@ -76,13 +78,11 @@ impl DepthBalanceInfo {
         })
     }
 
-    pub fn set_balance(&mut self, balance: CurrencyCollection) {
-        self.balance = balance
-    }
+    pub fn set_split_depth(&mut self, split_depth: Number5) { self.split_depth = split_depth }
 
-    pub fn balance(&self) -> &CurrencyCollection {
-        &self.balance
-    }
+    pub fn set_balance(&mut self, balance: CurrencyCollection) { self.balance = balance }
+
+    pub fn balance(&self) -> &CurrencyCollection { &self.balance }
 }
 
 impl Augmentable for DepthBalanceInfo {

@@ -16,7 +16,7 @@ use crate::{
     accounts::{Account, AccountStatus, StorageUsedShort},
     blocks::Block,
     error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugType},
+    hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     merkle_proof::MerkleProof,
     messages::{generate_big_msg, Message},
     shard::ShardStateUnsplit,
@@ -1283,9 +1283,9 @@ pub struct Transaction {
 impl Transaction {
 
     /// create new transaction
-    pub fn with_address_and_status(address: AccountId, orig_status: AccountStatus) -> Self {
+    pub fn with_address_and_status(account_addr: AccountId, orig_status: AccountStatus) -> Self {
         Transaction {
-            account_addr: address,
+            account_addr,
             lt: 0,
             prev_trans_hash: UInt256::from([0;32]),
             prev_trans_lt: 0,
@@ -1302,23 +1302,25 @@ impl Transaction {
     }
 
     pub fn with_account_and_message(account: &Account, msg: &Message, lt: u64) -> Result<Self> {
-        Ok(
-            Transaction {
-                account_addr: account.get_id().unwrap_or_else(|| msg.int_dst_account_id().unwrap()),
-                lt: lt,
-                prev_trans_hash: UInt256::from([0;32]),
-                prev_trans_lt: 0,
-                now: 0,
-                outmsg_cnt: 0,
-                orig_status: account.status(),
-                end_status: account.status(),
-                in_msg: Some(ChildCell::with_struct(msg)?),
-                out_msgs: OutMessages::default(),
-                total_fees: CurrencyCollection::default(),
-                state_update: ChildCell::default(),
-                description: ChildCell::default(),
-            }
-        )
+        let account_addr = match account.get_id() {
+            Some(account_addr) => account_addr,
+            None => msg.int_dst_account_id().ok_or_else(|| error!("cannot resolve destination address of message"))?
+        };
+        Ok(Transaction {
+            account_addr,
+            lt,
+            prev_trans_hash: UInt256::default(),
+            prev_trans_lt: 0,
+            now: 0,
+            outmsg_cnt: 0,
+            orig_status: account.status(),
+            end_status: account.status(),
+            in_msg: Some(ChildCell::with_struct(msg)?),
+            out_msgs: OutMessages::default(),
+            total_fees: CurrencyCollection::default(),
+            state_update: ChildCell::default(),
+            description: ChildCell::default(),
+        })
     }
 
     /// Get account address of transaction
@@ -1370,9 +1372,7 @@ impl Transaction {
     }
 
     /// get total fees
-    pub fn total_fees(&self) -> &CurrencyCollection {
-        &self.total_fees
-    }
+    pub fn total_fees(&self) -> &CurrencyCollection { &self.total_fees }
 
     /// get mutable total fees
     pub fn total_fees_mut(&mut self) -> &mut CurrencyCollection {
@@ -1483,7 +1483,7 @@ impl Transaction {
         // proof for transaction and block info in block
 
         let usage_tree = UsageTree::with_root(block_root.clone());
-        let block: Block = Block::construct_from(&mut usage_tree.root_slice()).unwrap();
+        let block: Block = Block::construct_from(&mut usage_tree.root_slice())?;
 
         block.read_info()?;
 
@@ -1634,6 +1634,21 @@ impl Deserializable for Transaction {
 
 define_HashmapAugE!(Transactions, 64, u64, InRefValue<Transaction>, CurrencyCollection);
 
+impl Transactions {
+    pub fn insert(&mut self, tr: &Transaction) -> Result<()> {
+        let cell = tr.serialize()?;
+        let lt = tr.logical_time();
+        let total_fees = tr.total_fees();
+        self.setref(&lt, &cell, total_fees)
+    }
+}
+
+impl Augmentation<CurrencyCollection> for Transaction {
+    fn aug(&self) -> Result<CurrencyCollection> {
+        Ok(self.total_fees.clone())
+    }
+}
+
 /// 4.2.15. Collection of all transactions of an account.
 /// From Lite Client v11:
 /// acc_trans#5 account_addr:bits256
@@ -1678,6 +1693,14 @@ impl AccountBlock {
         })
     }
 
+    pub fn with_params(account_addr: &AccountId, transactions: &Transactions, state_update: &HashUpdate) -> Result<Self> {
+        Ok(Self{
+            account_addr: account_addr.clone(),
+            transactions: transactions.clone(),
+            state_update: ChildCell::with_struct(state_update)?,
+        })
+    }
+
     /// add transaction to block
     pub fn add_transaction(&mut self, transaction: &Transaction) -> Result<()> {
         self.add_serialized_transaction(transaction, &transaction.write_to_new_cell()?.into())
@@ -1704,7 +1727,7 @@ impl AccountBlock {
     }
 
     // get Block AccountId
-    pub fn account_id<'a>(&'a self) -> &'a AccountId {
+    pub fn account_id(&self) -> &AccountId {
         &self.account_addr
     }
 
@@ -1735,11 +1758,11 @@ impl AccountBlock {
             // otherwice it is need to calculate Hash update
             let old_hash = old_state.read_accounts()?
                 .get_serialized(self.account_addr.clone())?
-                .ok_or_else(|| BlockError::Other(format!("Account should be in old shard state {}", self.account_addr.to_hex_string())))?
+                .ok_or_else(|| BlockError::Other(format!("Account should be in old shard state {:x}", self.account_addr)))?
                 .account_cell().repr_hash();
             let new_hash = new_state.read_accounts()?
                 .get_serialized(self.account_addr.clone())?
-                .ok_or_else(|| BlockError::Other(format!("Account should be in new shard state {}", self.account_addr.to_hex_string())))?
+                .ok_or_else(|| BlockError::Other(format!("Account should be in new shard state {:x}", self.account_addr)))?
                 .account_cell().repr_hash();
             self.write_state_update(&HashUpdate::with_hashes(old_hash, new_hash))?;
         }
@@ -1818,12 +1841,6 @@ impl ShardAccountBlocks {
         ).map(|_|())
     }
 
-    /// remove AccountBlock
-    // pub fn remove(&mut self, account_id: &AccountId) -> Option<AccountBlock> {
-    //     let key = self.account_id.write_to_new_cell().unwrap().into()
-    //     self.remove(account_id key.into())
-    // }
-
     /// adds transaction to account by id from transaction
     pub fn add_transaction(&mut self, transaction: &Transaction) -> Result<()> {
         self.add_serialized_transaction(transaction, &transaction.write_to_new_cell()?.into())
@@ -1839,8 +1856,8 @@ impl ShardAccountBlocks {
                 let mut account_state_update = account_block.read_state_update()?;
                 let state_update = transaction.read_state_update()?;
                 if account_state_update.new_hash != state_update.old_hash {
-                    fail!("hash {} is not {} of next transaction {}",
-                        state_update.old_hash.to_hex_string(), account_state_update.new_hash.to_hex_string(),
+                    fail!("hash {:x} is not {:x} of next transaction {}",
+                        state_update.old_hash, account_state_update.new_hash,
                         transaction.logical_time())
                 }
                 account_state_update.new_hash = state_update.new_hash;

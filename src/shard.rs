@@ -442,6 +442,9 @@ impl ShardIdent {
         self.workchain_id() == BASE_WORKCHAIN_ID
     }
 
+    pub fn contains_address(&self, addr: &MsgAddressInt) -> Result<bool> {
+        Ok(self.workchain_id == addr.workchain_id() && self.contains_account(addr.address())?)
+    }
     pub fn contains_account(&self, mut acc_addr: AccountId) -> Result<bool> {
         Ok(
             if self.prefix == SHARD_FULL {
@@ -928,8 +931,8 @@ impl ShardStateUnsplit {
         self.master_ref.as_ref()
     }
 
-    pub fn master_ref_mut(&mut self) -> Option<&mut BlkMasterInfo> {
-        self.master_ref.as_mut()
+    pub fn master_ref_mut(&mut self) -> &mut Option<BlkMasterInfo> {
+        &mut self.master_ref
     }
 
     pub fn custom_cell(&self) -> Option<&Cell> {
