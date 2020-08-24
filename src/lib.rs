@@ -144,10 +144,14 @@ pub trait Serializable {
         Ok(cell)
     }
 
-    fn write_to_file(&self, file_name: &str) -> Result<()> {
+    fn write_to_bytes(&self) -> Result<Vec<u8>> {
         let cell = self.serialize()?;
-        let bytes = ton_types::serialize_toc(&cell)?;
-        std::fs::write(file_name, bytes)?;
+        ton_types::serialize_toc(&cell)
+    }
+
+    fn write_to_file(&self, file_name: impl AsRef<std::path::Path>) -> Result<()> {
+        let bytes = self.write_to_bytes()?;
+        std::fs::write(file_name.as_ref(), bytes)?;
         Ok(())
     }
 
@@ -171,8 +175,8 @@ pub trait Deserializable: Default {
         Self::construct_from(&mut cell.into())
     }
     /// adapter for tests
-    fn construct_from_file(file_name: &str) -> Result<Self> {
-        let bytes = std::fs::read(file_name)?;
+    fn construct_from_file(file_name: impl AsRef<std::path::Path>) -> Result<Self> {
+        let bytes = std::fs::read(file_name.as_ref())?;
         Self::construct_from_bytes(&bytes)
     }
     /// adapter for tests
