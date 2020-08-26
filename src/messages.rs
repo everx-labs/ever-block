@@ -729,13 +729,6 @@ pub struct ExternalInboundMessageHeader {
     pub import_fee: Grams,
 }
 
-impl ExternalInboundMessageHeader {
-    pub fn new(src: MsgAddressExt, dst: MsgAddressInt) -> Self {
-        let import_fee = Grams::default();
-        Self { src, dst, import_fee }
-    }
-}
-
 impl Serializable for ExternalInboundMessageHeader{
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell
@@ -1029,13 +1022,6 @@ impl Message {
     pub fn int_header_mut(&mut self) -> Option<&mut InternalMessageHeader> {
         match self.header {
             CommonMsgInfo::IntMsgInfo(ref mut header) => Some(header),
-            _ => None
-        }
-    }
-
-    pub fn ext_in_header_mut(&mut self) -> Option<&mut ExternalInboundMessageHeader> {
-        match self.header {
-            CommonMsgInfo::ExtInMsgInfo(ref mut header) => Some(header),
             _ => None
         }
     }
