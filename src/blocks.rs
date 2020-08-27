@@ -57,12 +57,8 @@ pub struct BlockIdExt {
 }
 
 impl BlockIdExt {
-    /// New empty instance of BlockIdExt structure
-    pub fn new() -> Self {
-        BlockIdExt::default()
-    }
-
-    pub fn fake_id(shard_id: ShardIdent, seq_no: u32) -> Self {
+    /// New instance of BlockIdExt structure
+    pub fn new(shard_id: ShardIdent, seq_no: u32) -> Self {
         Self::with_params(shard_id, seq_no, Default::default(), Default::default())
     }
 
@@ -354,6 +350,8 @@ impl BlockInfo {
         if let Some(prev2) = prev.prev2()? {
             let (shard1, shard2) = self.shard.split()?;
             Ok(vec![prev.prev1()?.workchain_block_id(shard1).1, prev2.workchain_block_id(shard2).1])
+        } else if self.after_split {
+            Ok(vec!(prev.prev1()?.workchain_block_id(self.shard.merge()?).1))
         } else {
             Ok(vec!(prev.prev1()?.workchain_block_id(self.shard.clone()).1))
         }

@@ -15,11 +15,11 @@ use crate::{
     define_HashmapAugE,
     error::BlockError,
     envelope_message::MsgEnvelope,
-    hashmapaug::{Augmentable, Augmentation, HashmapAugType, HashmapAugRemover},
+    hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     inbound_messages::InMsg,
     messages::{CommonMsgInfo, Message},
     miscellaneous::{IhrPendingInfo, ProcessedInfo},
-    shard::{AccountIdPrefixFull, ShardIdent},
+    shard::AccountIdPrefixFull,
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
     Serializable, Deserializable,
@@ -28,7 +28,8 @@ use std::fmt;
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
-    BuilderData, Cell, IBitstring, HashmapType, HashmapRemover, HashmapSubtree, SliceData, hm_label,
+    BuilderData, Cell, SliceData, IBitstring,
+    HashmapType, HashmapRemover, HashmapSubtree, hm_label,
 };
 
 
@@ -162,7 +163,7 @@ impl OutMsgDescr {
 define_HashmapAugE!(OutMsgQueue, 352, OutMsgQueueKey, EnqueuedMsg, MsgTime);
 impl HashmapRemover for OutMsgQueue {}
 impl HashmapSubtree for OutMsgQueue {}
-impl HashmapAugRemover<OutMsgQueueKey, EnqueuedMsg, MsgTime> for OutMsgQueue {}
+// impl HashmapAugRemover<OutMsgQueueKey, EnqueuedMsg, MsgTime> for OutMsgQueue {}
 
 type MsgTime = u64;
 
@@ -310,44 +311,6 @@ impl OutMsgQueueInfo {
 
     pub fn ihr_pending(&self) -> &IhrPendingInfo {
         &self.ihr_pending
-    }
-
-    pub fn merge_with(&mut self, other: &Self, key: &SliceData) -> Result<()> {
-        let empty_key = SliceData::default();
-        self.out_queue.merge(&other.out_queue, &empty_key)?;
-        self.proc_info.merge(&other.proc_info, &empty_key)?;
-        self.ihr_pending.merge(&other.ihr_pending, key)?;
-        Ok(())
-    }
-
-    pub fn split(&self, shard: &ShardIdent) -> Result<(OutMsgQueueInfo, OutMsgQueueInfo)> {
-        let mut left = self.clone();
-        let mut right = self.clone();
-        let split_key = shard.shard_key(true);
-        let (left_queue, right_queue) = self.out_queue.split(&split_key)?;
-        left.out_queue = left_queue;
-        right.out_queue = right_queue;
-
-        let split_key = shard.shard_key(false);
-        let (left_info, right_info) = self.proc_info.split(&split_key)?;
-        left.proc_info = left_info;
-        right.proc_info = right_info;
-        // TODO: check pending
-        Ok((left, right))
-    }
-
-    pub fn split_inplace(&mut self, shard: &ShardIdent) -> Result<Self> {
-        let (left, right) = self.split(&shard.merge()?)?;
-        let mut pfx = shard.shard_key(true);
-        let len = pfx.remaining_bits();
-        pfx.move_by(len - 1)?;
-        if pfx.get_next_bit()? {
-            *self = right;
-            Ok(left)
-        } else {
-            *self = left;
-            Ok(right)
-        }
     }
 }
 

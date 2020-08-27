@@ -22,7 +22,7 @@ use crate::{
     messages::MsgAddressInt,
     outbound_messages::OutMsgQueueInfo,
     shard_accounts::{DepthBalanceInfo, ShardAccounts},
-    types::{AddSub, ChildCell, CurrencyCollection},
+    types::{ChildCell, CurrencyCollection},
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize, IntermediateAddress,
     validators::ValidatorSet,
 };
@@ -382,6 +382,13 @@ impl ShardIdent {
         x >= y && ((parent ^ child) & (Self::negate_bits(x) << 1)) == 0
     }
     
+    pub fn intersect_with(&self, other: &Self) -> bool {
+        if self.workchain_id != other.workchain_id {
+            return false
+        }
+        Self::shard_intersects(self.shard_prefix_with_tag(), other.shard_prefix_with_tag())
+    }
+
     // 1 =           10010    11000    11100    11100    01100
     // 2 =           01100    00110    01110    11110    01110
     // z =           00100    01000    00100    00100    00100
@@ -391,14 +398,18 @@ impl ShardIdent {
     // x =           11110    11110    10010    00010    00010
     // r =           11000    10000    10000    00000    00000
     /// cheks if one shard fully includes other
-    pub fn intersect_with(&self, other: &Self) -> bool {
-        if self.workchain_id != other.workchain_id {
-            return false
-        }
-        let z = std::cmp::max(self.prefix_lower_bits(), other.prefix_lower_bits());
+    pub fn shard_intersects(x: u64, y: u64) -> bool {
+        let z = std::cmp::max(Self::lower_bits(x), Self::lower_bits(y));
         let z = Self::negate_bits(z) << 1;
-        let x = self.shard_prefix_with_tag() ^ other.shard_prefix_with_tag();
+        let x = x ^ y;
         x & z == 0
+    }
+
+    pub fn shard_intersection(x: u64, y: u64) -> u64 {
+        match Self::lower_bits(x) < Self::lower_bits(y) {
+            true => x,
+            false => y
+        }
     }
 
     /// It is copy from t-node. TODO: investigate, add comment and tests
@@ -955,61 +966,6 @@ impl ShardStateUnsplit {
             Some(custom) => Some(ChildCell::with_struct(custom)?),
             None => None
         };
-        Ok(())
-    }
-
-    pub fn split(&self) -> Result<(ShardStateUnsplit, ShardStateUnsplit)> {
-        let mut left = self.clone();
-        let mut right = self.clone();
-        let (ls, rs) = self.shard().split()?;
-        left.shard_id = ls;
-        right.shard_id = rs;
-        let split_key = self.shard_id.shard_key(false);
-        let accounts = self.read_accounts()?;
-        let (al, ar) = accounts.split(&split_key)?;
-        left.write_accounts(&al)?;
-        right.write_accounts(&ar)?;
-        left.total_balance = al.root_extra().balance().clone();
-        right.total_balance = ar.root_extra().balance().clone();
-        let info = self.read_out_msg_queue_info()?;
-        let (li, ri) = info.split(self.shard())?;
-        left.write_out_msg_queue_info(&li)?;
-        right.write_out_msg_queue_info(&ri)?;
-        // debug_assert!(self.master_ref.is_some());
-        // TODO: other
-        Ok((left, right))
-    }
-
-    pub fn merge_with(&mut self, other: &ShardStateUnsplit) -> Result<()> {
-        if &self.shard_id.sibling() != other.shard() {
-            fail!("shards {} and {} are not siblings", self.shard_id, other.shard())
-        }
-        self.shard_id = self.shard_id.merge()?;
-        let merge_key = self.shard_id.shard_key(false);
-        let mut accounts = self.read_accounts()?;
-        let other_accounts = other.read_accounts()?;
-        accounts.merge(&other_accounts, &merge_key)?;
-        let mut total_balance = self.total_balance.clone();
-        total_balance.add(&other.total_balance)?;
-        if &total_balance != accounts.root_extra().balance() {
-            fail!("sum of balance {} and {} is not equal to total balance of merged ccounts {}",
-                self.total_balance, other.total_balance, accounts.root_extra().balance())
-        }
-        self.total_balance = total_balance;
-        self.total_validator_fees.add(&other.total_validator_fees)?;
-        self.write_accounts(&accounts)?;
-
-        let mut info = self.read_out_msg_queue_info()?;
-        info.merge_with(&other.read_out_msg_queue_info()?, &merge_key)?;
-        self.write_out_msg_queue_info(&info)?;
-
-        self.gen_time = std::cmp::max(self.gen_time, other.gen_time);
-        self.gen_lt = std::cmp::max(self.gen_lt, other.gen_lt);
-
-        self.overload_history = 0;
-        self.underload_history = 0;
-
-        self.vert_seq_no = std::cmp::max(self.vert_seq_no, other.vert_seq_no);
         Ok(())
     }
 

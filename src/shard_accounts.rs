@@ -23,7 +23,7 @@ use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, IBitstring,
-    HashmapType, HashmapRemover, SliceData, hm_label,
+    HashmapType, HashmapRemover, SliceData, hm_label, HashmapSubtree,
 };
 
 
@@ -33,6 +33,7 @@ use ton_types::{
 // _ (HashmapAugE 256 ShardAccount DepthBalanceInfo) = ShardAccounts;
 define_HashmapAugE!(ShardAccounts, 256, UInt256, ShardAccount, DepthBalanceInfo);
 impl HashmapRemover for ShardAccounts {}
+impl HashmapSubtree for ShardAccounts {}
 
 impl ShardAccounts {
     pub fn insert(&mut self, split_depth: u8, account: &Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Option<AccountId>> {
@@ -60,6 +61,11 @@ impl ShardAccounts {
 
     pub fn full_balance(&self) -> &CurrencyCollection {
         &self.root_extra().balance
+    }
+
+    pub fn split_for(&mut self, split_key: &SliceData) -> Result<&DepthBalanceInfo> {
+        self.into_subtree_with_prefix(split_key, &mut 0)?;
+        self.update_root_extra()
     }
 }
 

@@ -16,7 +16,8 @@ use crate::{
     Serializable, Deserializable,
 };
 use ton_types::{
-    Result, BuilderData, Cell, SliceData, HashmapE, HashmapType, UInt256,
+    Result, BuilderData, Cell, SliceData, UInt256,
+    HashmapE, HashmapType, HashmapSubtree,
 };
 
 
@@ -104,6 +105,12 @@ impl Deserializable for ProcessedUpto {
 
 // IhrPendingInfo structure
 define_HashmapE!(IhrPendingInfo, 320, IhrPendingSince);
+
+impl IhrPendingInfo {
+    pub fn split_inplace(&mut self, split_key: &SliceData) -> Result<()> {
+        self.0.into_subtree_with_prefix(split_key, &mut 0)
+    }
+}
 
 ///
 /// IhrPendingSince structure

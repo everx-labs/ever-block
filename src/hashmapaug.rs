@@ -243,6 +243,14 @@ macro_rules! define_HashmapAugE {
 pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + Serializable, Y: Augmentable>: HashmapType {
     fn root_extra(&self) -> &Y;
     fn set_root_extra(&mut self, aug: Y);
+    fn update_root_extra(&mut self) -> Result<&Y> {
+        let aug = match self.data() {
+            Some(root) => Self::find_extra(&mut SliceData::from(root), self.bit_len())?,
+            None => Default::default()
+        };
+        self.set_root_extra(aug);
+        Ok(self.root_extra())
+    }
     fn value_aug(slice: &mut SliceData) -> Result<(X, Y)> {
         let aug = Y::construct_from(slice)?;
         let val = X::construct_from(slice)?;
