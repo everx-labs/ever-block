@@ -98,6 +98,10 @@ impl ShardHashes {
             })
         })
     }
+    pub fn iterate_shards_with_siblings_mut<F>(&self, mut _func: F) -> Result<()>
+    where F: FnMut(ShardIdent, ShardDescr, Option<ShardDescr>) -> Result<Option<ShardDescr>> {
+        unimplemented!()
+    }
     pub fn has_workchain(&self, workchain_id: i32) -> Result<bool> {
         self.get_as_slice(&workchain_id).map(|result| result.is_some())
     }
@@ -529,8 +533,8 @@ impl Augmentable for KeyMaxLt {
 // _ key:Bool blk_ref:ExtBlkRef = KeyExtBlkRef;
 #[derive(Default, Clone, Debug, Eq, PartialEq)]
 pub struct KeyExtBlkRef {
-    key: bool,
-    blk_ref: ExtBlkRef
+    pub key: bool,
+    pub blk_ref: ExtBlkRef
 }
 
 impl KeyExtBlkRef {
@@ -857,8 +861,8 @@ impl Serializable for Counters {
 /// creator_info#4 mc_blocks:Counters shard_blocks:Counters = CreatorStats;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct CreatorStats {
-    mc_blocks: Counters,
-    shard_blocks: Counters,
+    pub mc_blocks: Counters,
+    pub shard_blocks: Counters,
 }
 
 impl CreatorStats {

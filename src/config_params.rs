@@ -83,11 +83,130 @@ impl ConfigParams {
         self.config_params.set(key.into(), &value.into())?;
         Ok(())
     }
+
+    pub fn get_smc_tick_tock(&self, smc_addr: &UInt256, accounts: &ShardAccounts) -> Result<usize> {
+        let account = match accounts.get(smc_addr)? {
+            Some(shard_account) => shard_account.read_account()?,
+            None => fail!("Tick-tock smartcontract not found")
+        };
+        Ok(account.get_tick_tock().map(|tick_tock| tick_tock.as_usize()).unwrap_or_default())
+    }
+
+    pub fn special_ticktock_smartcontracts(&self, tick_tock: usize, accounts: &ShardAccounts) -> Result<Vec<(UInt256, usize)>> {
+        let mut vec = Vec::new();
+        self.fundamental_smc_addr()?.iterate_keys(|key: UInt256| {
+            let tt = self.get_smc_tick_tock(&key, accounts)?;
+            if (tick_tock & tt) != 0 {
+                vec.push((key, tt))
+            }
+            Ok(true)
+        })?;
+        Ok(vec)
+    }
+
+    //
+    // Wrappers
+    //
+    pub fn config_address(&self) -> Result<UInt256> {
+        match self.config(0)? {
+            Some(ConfigParamEnum::ConfigParam0(param)) => Ok(param.config_addr),
+            _ => fail!("no config smc address in config")
+        }
+    }
+    pub fn elector_address(&self) -> Result<UInt256> {
+        match self.config(1)? {
+            Some(ConfigParamEnum::ConfigParam1(param)) => Ok(param.elector_addr),
+            _ => fail!("no elector address in config")
+        }
+    }
+    pub fn minter_address(&self) -> Result<UInt256> {
+        let addr = match self.config(2)? {
+            Some(ConfigParamEnum::ConfigParam2(param)) => param.minter_addr,
+            _ => match self.config(0)? {
+                Some(ConfigParamEnum::ConfigParam0(param)) => param.config_addr,
+                _ => fail!("no minter address in config")
+            }
+        };
+        Ok(addr)
+    }
+    pub fn fee_collector_address(&self) -> Result<UInt256> {
+        let addr = match self.config(3)? {
+            Some(ConfigParamEnum::ConfigParam3(param)) => param.fee_collector_addr,
+            _ => match self.config(1)? {
+                Some(ConfigParamEnum::ConfigParam1(param)) => param.elector_addr,
+                _ => fail!("no fee collector address in config")
+            }
+        };
+        Ok(addr)
+    }
+    // TODO 4 dns_root_addr
+    pub fn mint_prices(&self) -> Result<ConfigParam6> {
+        match self.config(6)? {
+            Some(ConfigParamEnum::ConfigParam6(cp)) => Ok(cp),
+            _ => fail!("no config 6 (mint prices)")
+        }
+    }
+    pub fn to_mint(&self) -> Result<ExtraCurrencyCollection> {
+        match self.config(7)? {
+            Some(ConfigParamEnum::ConfigParam7(cp)) => Ok(cp.to_mint),
+            _ => fail!("no config 7 (to mint)")
+        }
+    }
     pub fn get_global_version(&self) -> Result<GlobalVersion> {
         match self.config(8)? {
             Some(ConfigParamEnum::ConfigParam8(gb)) => Ok(gb.global_version),
-            _ => fail!("no GlobalVersion in config_params")
+            _ => fail!("no global version in config")
         }
+    }
+    pub fn mandatory_params(&self) -> Result<MandatoryParams> {
+        match self.config(9)? {
+            Some(ConfigParamEnum::ConfigParam9(mp)) => Ok(mp.mandatory_params),
+            _ => fail!("no mandatory params in config")
+        }
+    }
+    // TODO 11 ConfigVotingSetup
+    pub fn workchains(&self) -> Result<Workchains> {
+        match self.config(12)? {
+            Some(ConfigParamEnum::ConfigParam12(param)) => Ok(param.workchains),
+            _ => fail!("Workchains not found in config")
+        }
+    }
+    // TODO 13 compliant pricing
+    pub fn block_create_fees(&self, masterchain: bool) -> Result<Grams> {
+        match self.config(14)? {
+            Some(ConfigParamEnum::ConfigParam14(param)) => if masterchain {
+                Ok(param.block_create_fees.masterchain_block_fee)
+            } else {
+                Ok(param.block_create_fees.basechain_block_fee)
+            }
+            _ => fail!("no block create fee parameter")
+        }
+    }
+    pub fn elector_params(&self) -> Result<ConfigParam15> {
+        match self.config(15)? {
+            Some(ConfigParamEnum::ConfigParam15(param)) => Ok(param),
+            _ => fail!("no elector params in config")
+        }
+    }
+    // TODO 16 validators count
+    // TODO 17 stakes config
+    pub fn storage_prices(&self) -> Result<ConfigParam18> {
+        match self.config(18)? {
+            Some(ConfigParamEnum::ConfigParam18(param)) => Ok(param),
+            _ => fail!("Storage prices not found")
+        }
+    }
+    pub fn gas_prices(&self, is_masterchain: bool) -> Result<GasLimitsPrices> {
+        if is_masterchain {
+            if let Some(ConfigParamEnum::ConfigParam20(param)) = self.config(20)? {
+                return Ok(param)
+            }
+        } else {
+            if let Some(ConfigParamEnum::ConfigParam21(param)) = self.config(21)? {
+                return Ok(param)
+            }
+        }
+        fail!("Gas prices not found")
     }
     pub fn block_limits(&self, masterchain: bool) -> Result<BlockLimits> {
         if masterchain {
@@ -101,53 +220,40 @@ impl ConfigParams {
         }
         fail!("BlockLimits not found")
     }
+    pub fn fwd_prices(&self, is_masterchain: bool) -> Result<MsgForwardPrices> {
+        if is_masterchain {
+            if let Some(ConfigParamEnum::ConfigParam24(param)) = self.config(24)? {
+                return Ok(param)
+            }
+        } else {
+            if let Some(ConfigParamEnum::ConfigParam25(param)) = self.config(25)? {
+                return Ok(param)
+            }
+        }
+        fail!("Forward prices not found")
+    }
     pub fn catchain_config(&self) -> Result<CatchainConfig> {
         match self.config(28)? {
             Some(ConfigParamEnum::ConfigParam28(ccc)) => Ok(ccc),
             _ => fail!("no CatchainConfig in config_params")
         }
     }
-    pub fn elector_address(&self) -> Result<UInt256> {
-        match self.config(1)? {
-            Some(ConfigParamEnum::ConfigParam1(param)) => Ok(param.elector_addr),
-            _ => fail!("no elector address in config")
+    // TODO 29 consensus config
+    pub fn fundamental_smc_addr(&self) -> Result<FundamentalSmcAddresses> {
+        match self.config(31)? {
+            Some(ConfigParamEnum::ConfigParam31(param)) => Ok(param.fundamental_smc_addr.clone()),
+            _ => fail!("fundamental_smc_addr not found in config")
         }
     }
-    pub fn elector_params(&self) -> Result<ConfigParam15> {
-        match self.config(15)? {
-            Some(ConfigParamEnum::ConfigParam15(param)) => Ok(param),
-            _ => fail!("no elector params in config")
-        }
-    }
-    pub fn fee_collector_address(&self) -> Result<UInt256> {
-        let addr = match self.config(3)? {
-            Some(ConfigParamEnum::ConfigParam3(param)) => param.fee_collector_addr,
-            _ => match self.config(1)? {
-                Some(ConfigParamEnum::ConfigParam1(param)) => param.elector_addr,
-                _ => fail!("no fee collector address in config")
+    pub fn prev_validator_set(&self) -> Result<ValidatorSet> {
+        let vset = match self.config(33)? {
+            Some(ConfigParamEnum::ConfigParam33(param)) => param.prev_temp_validators,
+            _ => match self.config(32)? {
+                Some(ConfigParamEnum::ConfigParam32(param)) => param.prev_validators,
+                _ => ValidatorSet::default()
             }
         };
-        Ok(addr)
-    }
-    pub fn minter_address(&self) -> Result<UInt256> {
-        let addr = match self.config(2)? {
-            Some(ConfigParamEnum::ConfigParam2(param)) => param.minter_addr,
-            _ => match self.config(0)? {
-                Some(ConfigParamEnum::ConfigParam0(param)) => param.config_addr,
-                _ => fail!("no minter address in config")
-            }
-        };
-        Ok(addr)
-    }
-    pub fn block_create_fees(&self, masterchain: bool) -> Result<Grams> {
-        match self.config(14)? {
-            Some(ConfigParamEnum::ConfigParam14(param)) => if masterchain {
-                Ok(param.block_create_fees.masterchain_block_fee)
-            } else {
-                Ok(param.block_create_fees.basechain_block_fee)
-            }
-            _ => fail!("no block create fee parameter")
-        }
+        Ok(vset)
     }
     pub fn validator_set(&self) -> Result<ValidatorSet> {
         let vset = match self.config(35)? {
@@ -169,66 +275,7 @@ impl ConfigParams {
         };
         Ok(vset)
     }
-    pub fn fundamental_smc_addr(&self) -> Result<FundamentalSmcAddresses> {
-        match self.config(31)? {
-            Some(ConfigParamEnum::ConfigParam31(param)) => Ok(param.fundamental_smc_addr.clone()),
-            _ => fail!("fundamental_smc_addr not found in config")
-        }
-    }
-    pub fn get_smc_tick_tock(&self, smc_addr: &UInt256, accounts: &ShardAccounts) -> Result<usize> {
-        let account = match accounts.get(smc_addr)? {
-            Some(shard_account) => shard_account.read_account()?,
-            None => fail!("Tick-tock smartcontract not found")
-        };
-        Ok(account.get_tick_tock().map(|tick_tock| tick_tock.as_usize()).unwrap_or_default())
-    }
-    pub fn special_ticktock_smartcontracts(&self, tick_tock: usize, accounts: &ShardAccounts) -> Result<Vec<(UInt256, usize)>> {
-        let mut vec = Vec::new();
-        self.fundamental_smc_addr()?.iterate_keys(|key: UInt256| {
-            let tt = self.get_smc_tick_tock(&key, accounts)?;
-            if (tick_tock & tt) != 0 {
-                vec.push((key, tt))
-            }
-            Ok(true)
-        })?;
-        Ok(vec)
-    }
-    pub fn fwd_prices(&self, is_masterchain: bool) -> Result<MsgForwardPrices> {
-        if is_masterchain {
-            if let Some(ConfigParamEnum::ConfigParam24(param)) = self.config(24)? {
-                return Ok(param)
-            }
-        } else {
-            if let Some(ConfigParamEnum::ConfigParam25(param)) = self.config(25)? {
-                return Ok(param)
-            }
-        }
-        fail!("Forward prices not found")
-    }
-    pub fn gas_prices(&self, is_masterchain: bool) -> Result<GasLimitsPrices> {
-        if is_masterchain {
-            if let Some(ConfigParamEnum::ConfigParam20(param)) = self.config(20)? {
-                return Ok(param)
-            }
-        } else {
-            if let Some(ConfigParamEnum::ConfigParam21(param)) = self.config(21)? {
-                return Ok(param)
-            }
-        }
-        fail!("Gas prices not found")
-    }
-    pub fn storage_prices(&self) -> Result<ConfigParam18> {
-        match self.config(18)? {
-            Some(ConfigParamEnum::ConfigParam18(param)) => Ok(param),
-            _ => fail!("Storage prices not found")
-        }
-    }
-    pub fn workchains(&self) -> Result<Workchains> {
-        match self.config(12)? {
-            Some(ConfigParamEnum::ConfigParam12(param)) => Ok(param.workchains),
-            _ => fail!("Workchains not found in config")
-        }
-    }
+    // TODO 39 validator signed temp keys
 }
 
 pub enum GlobalCapabilities {
@@ -2605,13 +2652,13 @@ impl Serializable for ConfigParam39 {
 
 pub enum ParamLimitIndex {
     Underload = 0,
+    Normal,
     Soft,
     Medium,
-    Hard,
-    Overload
+    Hard
 }
 
-const LIMITS_COUNT: usize = ParamLimitIndex::Hard as usize + 1;
+const LIMIT_COUNT: usize = 4;
 
 // param_limits#c3
 //     underload:#
@@ -2625,51 +2672,36 @@ const PARAM_LIMITS_TAG: u8 = 0xc3;
 
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct ParamLimits {
-    limits: [u32; LIMITS_COUNT],
+    // [ unerload , soft, (soft+hard)/2, hard ]
+    limits: [u32; LIMIT_COUNT],
 }
 
 impl ParamLimits {
+
+/*
     /// new instance of ParamLimits
     pub fn new() -> Self {
         Self::default()
     }
+*/
 
-    pub fn with_limits(underload: u32, soft_limit: u32, hard_limit: u32) -> Result<Self> {
-        if underload > soft_limit {
-            fail!(
-                BlockError::InvalidArg(
-                    "`underload` have to be less or equal `soft_limit`".to_string()
-                )
-            )
-        }
-        if soft_limit > hard_limit {
-            fail!(
-                BlockError::InvalidArg(
-                   "`soft_limit` have to be less or equal `hard_limit`".to_string()
-                )
-            )
-        }
-
-        Ok(
-            Self {
-                limits: [
-                    underload,
-                    soft_limit,
-                    Self::compute_medium_limit(soft_limit, hard_limit),
-                    hard_limit
-                ]
-            }
-        )
+    pub fn with_limits(underload: u32, soft: u32, hard: u32) -> Result<Self> {
+        let mut limits = [0u32; LIMIT_COUNT];
+        Self::set_limits(&mut limits, underload, soft, hard)?;
+        Ok(Self{limits})
     }
 
+/*
     pub fn limits(&self, index: ParamLimitIndex) -> u32 {
         self.limits[index as usize]
     }
+*/
 
     pub fn underload(&self) -> u32 {
         self.limits[ParamLimitIndex::Underload as usize]
     }
 
+/*
     pub fn set_underload(&mut self, underload: u32) -> Result<()>{
         if underload > self.soft_limit() {
             fail!(
@@ -2681,11 +2713,13 @@ impl ParamLimits {
         self.limits[ParamLimitIndex::Underload as usize] = underload;
         Ok(())
     }
+*/
 
     pub fn soft_limit(&self) -> u32 {
-        self.limits[ParamLimitIndex::Soft as usize]
+        self.limits[ParamLimitIndex::Soft as usize - 1]
     }
 
+/*
     pub fn set_soft_limit(&mut self, soft_limit: u32) -> Result<()>{
         if soft_limit > self.hard_limit() {
             fail!(
@@ -2698,11 +2732,13 @@ impl ParamLimits {
         self.update_medium_limit();
         Ok(())
     }
+*/
 
     pub fn hard_limit(&self) -> u32 {
-        self.limits[ParamLimitIndex::Hard as usize]
+        self.limits[ParamLimitIndex::Hard as usize - 1]
     }
 
+/*
     pub fn set_hard_limit(&mut self, hard_limit: u32) -> Result<()>{
         if self.limits[ParamLimitIndex::Soft as usize] > hard_limit {
             fail!(
@@ -2715,7 +2751,9 @@ impl ParamLimits {
         self.update_medium_limit();
         Ok(())
     }
+*/
 
+/*
     pub fn medium_limit(&self) -> u32 {
         self.limits[ParamLimitIndex::Medium as usize]
     }
@@ -2723,10 +2761,39 @@ impl ParamLimits {
     fn update_medium_limit(&mut self) {
         self.limits[ParamLimitIndex::Medium as usize] = Self::compute_medium_limit(self.soft_limit(), self.hard_limit());
     }
+*/
 
     fn compute_medium_limit(soft: u32, hard: u32) -> u32 {
         soft + ((hard - soft) >> 1)
     }
+
+    fn set_limits(
+        limits: &mut [u32; LIMIT_COUNT], 
+        underload: u32, 
+        soft: u32, 
+        hard: u32
+    ) -> Result<()> {
+        if underload > soft {
+            fail!(
+                BlockError::InvalidArg(
+                    "underload have to be less or equal to soft limit".to_string()
+                )
+            )
+        }
+        if soft > hard {
+            fail!(
+                BlockError::InvalidArg(
+                   "soft limit have to be less or equal to hard one".to_string()
+                )
+            )
+        }
+        limits[ParamLimitIndex::Underload as usize] = underload;
+        limits[ParamLimitIndex::Soft as usize - 1] = soft;
+        limits[ParamLimitIndex::Medium as usize - 1] = Self::compute_medium_limit(soft, hard);
+        limits[ParamLimitIndex::Hard as usize - 1] = hard;
+        Ok(())
+    }
+
 }
 
 impl Deserializable for ParamLimits {
@@ -2740,17 +2807,23 @@ impl Deserializable for ParamLimits {
                 }
             )
         }
+        let mut limits = [0u32; 3];
+        limits[0].read_from(slice)?;
+        limits[1].read_from(slice)?;
+        limits[2].read_from(slice)?;
+        Self::set_limits(&mut self.limits, limits[0], limits[1], limits[2])
+/*
         self.limits[ParamLimitIndex::Underload as usize].read_from(slice)?;
-        self.limits[ParamLimitIndex::Soft as usize].read_from(slice)?;
-        self.limits[ParamLimitIndex::Hard as usize].read_from(slice)?;
-        if self.underload() > self.soft_limit() {
+        self.limits[ParamLimitIndex::Soft as usize - 1].read_from(slice)?;
+        self.limits[ParamLimitIndex::Hard as usize - 1].read_from(slice)?;
+        if self.underload() > self.soft() {
             fail!(
                 BlockError::InvalidData(
                     "`underload` have to be less or equal `soft_limit`".to_string()
                 )
             )
         }
-        if self.soft_limit() > self.hard_limit() {
+        if self.soft() > self.hard_limit() {
             fail!(
                 BlockError::InvalidData(
                     "`soft_limit` have to be less or equal `hard_limit`".to_string()
@@ -2759,6 +2832,7 @@ impl Deserializable for ParamLimits {
         }
         self.update_medium_limit();
         Ok(())
+*/
     }
 }
 
