@@ -26,8 +26,9 @@ use crate::{
 use std::{fmt, sync::Arc};
 use ton_types::{
     error, fail, Result,
-    AccountId, UInt256,
-    BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType, UsageTree, hm_label,
+    AccountId, UInt256, UsageTree,
+    BuilderData, Cell, IBitstring, SliceData,
+    HashmapE, HashmapType, hm_label,
 };
 
 
@@ -1869,6 +1870,15 @@ impl ShardAccountBlocks {
         account_block.add_serialized_transaction(transaction, transaction_cell)?;
         self.set_serialized(account_id.clone(), &account_block.write_to_new_cell()?.into(), &transaction.total_fees())?;
         Ok(())
+    }
+
+    pub fn count_transactions(&self) -> Result<usize> {
+        let mut count = 0;
+        self.iterate_objects(|block| {
+            count += block.transaction_count()?;
+            Ok(true)
+        })?;
+        Ok(count)
     }
 
     pub fn full_transaction_fees(&self) -> &CurrencyCollection {

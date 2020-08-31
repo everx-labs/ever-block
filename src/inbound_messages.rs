@@ -21,7 +21,7 @@ use crate::{
     envelope_message::MsgEnvelope,
     error::BlockError,
     hashmapaug::{Augmentable, Augmentation, HashmapAugType},
-    messages::{CommonMsgInfo, Message},
+    messages::Message,
     transactions::Transaction,
     types::{AddSub, ChildCell, CurrencyCollection, Grams},
     Serializable, Deserializable,
@@ -327,73 +327,63 @@ impl InMsg {
 
 impl Augmentation<ImportFees> for InMsg {
     fn aug(&self) -> Result<ImportFees> {
+        let msg = self.read_message()?;
+        let header = match msg.int_header() {
+            Some(header) => header,
+            None => return Ok(ImportFees::default())
+        };
         let mut fees = ImportFees::default();
         match self {
-            InMsg::External(ref _x) => {
+            InMsg::External(_) => {
                 //println!("InMsg::External");
             }
-            InMsg::IHR(ref x) =>  {
+            InMsg::IHR(_) =>  {
                 //println!("InMsg::IHR");
-                let msg = x.read_message()?;
+                fees.fees_collected = header.ihr_fee.clone();
 
-                // fees_collected = in_msg.ihr_fees (or msg.ihr_fees, it should be equal)
-                fees.fees_collected.add(&x.ihr_fee())?;
-
-                // value_imported = msg.ihr_fee + msg.value
-                fees.value_imported.add(&msg.header().get_value().unwrap())?;
-                fees.value_imported.grams.add(&msg.header().fee()?.unwrap())?;
+                fees.value_imported = header.value.clone();
+                fees.value_imported.grams.add(&header.ihr_fee)?;
             }
-            InMsg::Immediatelly(ref x) => {
+            InMsg::Immediatelly(_) => {
                 //println!("InMsg::Immediatelly");
-                // value_imported = 0
-                // fees_collected = in_msg.fwd_fees 
-                fees.fees_collected.add(&x.fwd_fee())?;
+                fees.fees_collected = header.fwd_fee.clone();
             }
             InMsg::Final(ref x) => {
                 //println!("InMsg::Final");
                 let env = x.read_message()?;
-                let msg = env.read_message()?;
-
-                // fees_collected = envelop.fwd_fee_remaining
-                fees.fees_collected.add(&env.fwd_fee_remaining())?;
-
-                // value_imported = msg.value + msg.ihr_fee + envelop.fwd_fee_remaining
-                fees.value_imported.add(&msg.header().get_value().unwrap())?;
-                fees.value_imported.grams.add(env.fwd_fee_remaining())?;
-
-                if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
-                    fees.value_imported.grams.add(header.ihr_fee())?;
+                if env.fwd_fee_remaining() != x.fwd_fee() {
+                    fail!("fwd_fee_remaining not equal to fwd_fee")
                 }
+                fees.fees_collected = env.fwd_fee_remaining().clone();
 
+                fees.value_imported = header.value.clone();
+                fees.value_imported.grams.add(env.fwd_fee_remaining())?;
+                fees.value_imported.grams.add(&header.ihr_fee)?;
             }
             InMsg::Transit(ref x) => {
                 //println!("InMsg::Transit");
                 let env = x.read_in_message()?;
-                let msg = env.read_message()?;
-
-                // fees_collected = in_msg.transit_fee
-                fees.fees_collected.add(&x.transit_fee())?;
-
-                // value_imported = msg.value + msg.ihr_fee + envelop.fwd_fee_remaining
-                fees.value_imported.add(&msg.header().get_value().unwrap())?;
-                if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
-                    fees.value_imported.grams.add(header.ihr_fee())?;
+                if env.fwd_fee_remaining() < x.transit_fee() {
+                    fail!("fwd_fee_remaining less than transit_fee")
                 }
 
+                fees.fees_collected = x.transit_fee().clone();
+
+                fees.value_imported = header.value.clone();
+                fees.value_imported.grams.add(&header.ihr_fee)?;
+                fees.value_imported.grams.add(env.fwd_fee_remaining())?;
             }
-            InMsg::DiscardedFinal(ref x) => {
+            InMsg::DiscardedFinal(_) => {
                 //println!("InMsg::DiscardedFinal");
-                // fees_collected := in_msg.fwd_fee
-                fees.fees_collected.add(&x.fwd_fee())?;
-                // value_imported := in_msg.fwd_fee
-                fees.value_imported.grams.add(&x.fwd_fee())?;
+                fees.fees_collected = header.fwd_fee.clone();
+
+                fees.value_imported.grams = header.fwd_fee.clone();
             }
-            InMsg::DiscardedTransit(ref x) => {
+            InMsg::DiscardedTransit(_) => {
                 //println!("InMsg::DiscardedTransit");
-                // fees_collected := in_msg.fwd_fee
-                fees.fees_collected.add(&x.fwd_fee())?;
-                // value_imported := in_msg.fwd_fee
-                fees.value_imported.grams.add(&x.fwd_fee())?;
+                fees.fees_collected = header.fwd_fee.clone();
+
+                fees.value_imported.grams = header.fwd_fee.clone();
             }
             InMsg::None => fail!("wrong InMsg type")
         }
