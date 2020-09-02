@@ -683,6 +683,15 @@ impl Deserializable for bool {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct InRefValue<X: Default + Deserializable + Serializable>(pub X);
 
+impl<X: Default + Deserializable + Serializable> InRefValue<X> {
+    pub fn new(inner: X) -> InRefValue<X> {
+        InRefValue(inner)
+    }
+    pub fn inner(self) -> X {
+        self.0
+    }
+}
+
 impl<X: Default + Deserializable + Serializable> Deserializable for InRefValue<X> {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.0 = X::construct_from(&mut slice.checked_drain_reference()?.into())?;

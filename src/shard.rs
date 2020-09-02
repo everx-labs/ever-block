@@ -350,6 +350,11 @@ impl ShardIdent {
             self.shard_prefix_with_tag() == parent.unwrap().shard_prefix_with_tag()
     }
 
+    pub fn is_left_child(&self) -> bool { !self.is_right_child() }
+    pub fn is_right_child(&self) -> bool {
+        (self.prefix & (self.prefix_lower_bits() << 1)) != 0
+    }
+
     pub fn is_ancestor_for(&self, descendant: &ShardIdent) -> bool {
         descendant.prefix != SHARD_FULL &&
             self.workchain_id() == descendant.workchain_id() &&

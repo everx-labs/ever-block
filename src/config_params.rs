@@ -2859,38 +2859,45 @@ pub struct BlockLimits {
     bytes: ParamLimits,
     gas: ParamLimits,
     lt_delta: ParamLimits,
-    start_lt: u64, // This field is always zero in Telegram's implementation
+//    start_lt: u64, // This field is always zero in Telegram's implementation
 }
 
 impl BlockLimits {
+
+/*
     pub fn new() -> Self {
         Self::default()
     }
+*/
 
     pub fn with_limits(bytes: ParamLimits, gas: ParamLimits, lt_delta: ParamLimits) -> Self {
-        Self { bytes, gas, lt_delta, start_lt: 0 }
+        Self { bytes, gas, lt_delta /*, start_lt: 0*/ }
     }
 
     pub fn bytes(&self) -> &ParamLimits {
         &self.bytes
     }
 
+/*
     pub fn bytes_mut(&mut self) -> &mut ParamLimits {
         &mut self.bytes
     }
-
+*/
     pub fn gas(&self) -> &ParamLimits {
         &self.gas
     }
 
+/*
     pub fn gas_mut(&mut self) -> &mut ParamLimits {
         &mut self.gas
     }
+*/
 
     pub fn lt_delta(&self) -> &ParamLimits {
         &self.lt_delta
     }
 
+/*
     pub fn lt_delta_mut(&mut self) -> &mut ParamLimits {
         &mut self.lt_delta
     }
@@ -2898,6 +2905,16 @@ impl BlockLimits {
     pub fn start_lt(&self) -> u64 {
         self.start_lt
     }
+*/
+
+    pub fn fits(&self, level: ParamLimitIndex, bytes: u32, gas: u32, lt_delta: u32) -> bool {
+        let level = level as usize;
+        (level >= LIMIT_COUNT) ||
+        (bytes < self.bytes.limits[level]) && 
+        (gas < self.gas.limits[level]) && 
+        (lt_delta < self.lt_delta.limits[level])
+    }
+
 }
 
 impl Deserializable for BlockLimits {
