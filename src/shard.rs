@@ -923,12 +923,20 @@ impl ShardStateUnsplit {
         &self.total_balance
     }
 
+    pub fn set_total_balance(&mut self, total_balance: CurrencyCollection) {
+        self.total_balance = total_balance;
+    }
+
     pub fn total_balance_mut(&mut self) -> &mut CurrencyCollection {
         &mut self.total_balance
     }
 
     pub fn total_validator_fees(&self) -> &CurrencyCollection {
         &self.total_validator_fees
+    }
+
+    pub fn set_total_validator_fees(&mut self, total_validator_fees: CurrencyCollection) {
+        self.total_validator_fees = total_validator_fees;
     }
 
     pub fn total_validator_fees_mut(&mut self) -> &mut CurrencyCollection {
@@ -945,6 +953,10 @@ impl ShardStateUnsplit {
 
     pub fn master_ref(&self) -> Option<&BlkMasterInfo> {
         self.master_ref.as_ref()
+    }
+
+    pub fn set_master_ref(&mut self, master_ref: Option<BlkMasterInfo>) {
+        self.master_ref = master_ref;
     }
 
     pub fn master_ref_mut(&mut self) -> &mut Option<BlkMasterInfo> {
