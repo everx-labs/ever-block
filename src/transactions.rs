@@ -1523,6 +1523,15 @@ impl Transaction {
         }
         false
     }
+
+    pub fn gas_used(&self) -> Option<u64> {
+        if let Ok(description) = self.read_description() {
+            if let Some(TrComputePhase::Vm(compute_ph)) = description.compute_phase_ref() {
+                return Some(compute_ph.gas_used.0 as u64)
+            }
+        }
+        None
+    }
 }
 
 impl PartialEq for Transaction {
