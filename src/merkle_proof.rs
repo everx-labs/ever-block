@@ -22,7 +22,7 @@ use crate::{
     transactions::Transaction,
     messages::Message,
 };
-use std::cmp::max;
+use std::{cmp::max, collections::HashMap};
 use ton_types::{
     Cell, CellType, BuilderData, error, fail, IBitstring, LevelMask, SliceData, Result, 
     UsageTree, types::UInt256
@@ -100,7 +100,7 @@ impl MerkleProof {
             )
         }
 
-        let proof = Self::traverse_on_create(root, is_include, 0)?;
+        let proof = Self::create_raw(root, is_include, 0, &mut None)?;
 
         Ok(MerkleProof {
             hash: root.repr_hash(),
@@ -118,10 +118,14 @@ impl MerkleProof {
         MerkleProof::create(root, &is_include)
     }
 
-    fn traverse_on_create<F>(cell: &Cell, 
-        is_include: &F, merkle_depth: u8)
-        -> Result<BuilderData>
-        where F: Fn(UInt256) -> bool {
+    pub fn create_raw<F>(
+        cell: &Cell,
+        is_include: &F,
+        merkle_depth: u8,
+        pruned_branches: &mut Option<HashMap<UInt256, Cell>>,
+    ) -> Result<BuilderData>
+        where F: Fn(UInt256) -> bool 
+    {
 
         let child_merkle_depth = if cell.is_merkle() { 
             merkle_depth + 1 
@@ -134,9 +138,13 @@ impl MerkleProof {
         let mut child_mask = LevelMask::with_mask(0);
         for child in cell.clone_references().iter() {
             let proof_child = if is_include(child.repr_hash()) {
-                Self::traverse_on_create(child, is_include, child_merkle_depth)?
+                Self::create_raw(child, is_include, child_merkle_depth, pruned_branches)?
             } else {
-                MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?
+                let pbc = MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?;
+                if let Some(pruned_branches) = pruned_branches.as_mut() {
+                    pruned_branches.insert(child.repr_hash(), pbc.clone().into());
+                }
+                pbc
             };
             child_mask |= proof_child.level_mask();
             proof_cell.append_reference(proof_child);

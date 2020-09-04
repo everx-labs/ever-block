@@ -13,7 +13,7 @@
 
 use crate::{
     error::BlockError,
-    Serializable, Deserializable,
+    Serializable, Deserializable, MerkleProof,
 };
 use std::collections::{HashMap, HashSet};
 use ton_types::{
@@ -157,6 +157,46 @@ impl MerkleUpdate {
         }
     }
 
+    pub fn create_fast<F>(old: &Cell, new: &Cell, is_visited_old: &F) -> Result<MerkleUpdate> 
+        where F: Fn(UInt256) -> bool 
+    {
+        if old.repr_hash() == new.repr_hash() {
+            // if trees are the same
+            let hash = old.repr_hash();
+            let pruned_branch_cell = Self::make_pruned_branch_cell(old, 0)?;
+             Ok(MerkleUpdate {
+                old_hash: hash.clone(),
+                new_hash: hash,
+                old_depth: old.repr_depth(),
+                new_depth: old.repr_depth(),
+                old: pruned_branch_cell.clone().into(),
+                new: pruned_branch_cell.into(),
+            })
+        } else {
+            // * for old tree - build merkle proof using usage tree.
+            //   Need to collect all pruned branches from old tree's proof while buildung.
+            // * for new tree - build merkle proof and prune branches which were pruned in old tree's proof
+            // * if new tree contains subtree which included into old-tree but was not visited
+            //   (not included into old-usage-tree) - this subtree will be duplicated
+            //   in a merkle update's new tree. But update will be built much faster 
+            //   than using full traverse.
+
+            let mut pruned_branches = Some(HashMap::new());
+            let old_update_cell = MerkleProof::create_raw(old, &is_visited_old, 0, &mut pruned_branches)?;
+            
+            let new_update_cell = Self::traverse_new_on_create(new, &pruned_branches.unwrap());
+            
+            Ok(MerkleUpdate {
+                old_hash: old.repr_hash(),
+                new_hash: new.repr_hash(),
+                old_depth: old.repr_depth(),
+                new_depth: new.repr_depth(),
+                old: old_update_cell.into(),
+                new: new_update_cell.into(),
+            })
+        }
+    }
+
     /// Applies update to given tree of cells by returning new updated one
     pub fn apply_for(&self, old_root: &Cell) -> Result<Cell> {
 
@@ -171,9 +211,7 @@ impl MerkleUpdate {
 
             // constructed tree's hash have to coinside with self.new_hash
             if new_root.repr_hash() != self.new_hash {
-                fail!(
-                    BlockError::WrongMerkleUpdate("new bag's hash mismatch".to_string())
-                )
+                fail!(BlockError::WrongMerkleUpdate("new bag's hash mismatch".to_string()))
             }
 
             Ok(new_root)

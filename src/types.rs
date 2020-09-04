@@ -815,10 +815,10 @@ macro_rules! define_HashmapE {
                 let key = key.write_to_new_cell()?.into();
                 self.0.get(key)
             }
-            pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<()> {
+            pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {
                 let key = key.write_to_new_cell()?.into();
-                self.0.remove(key)?;
-                Ok(())
+                let leaf = self.0.remove(key)?;
+                Ok(leaf.is_some())
             }
             pub fn check_key<K: Serializable>(&self, key: &K) -> Result<bool> {
                 let key = key.write_to_new_cell()?.into();
@@ -868,6 +868,24 @@ macro_rules! define_HashmapE {
                     Ok(true)
                 })?;
                 Ok(keys)
+            }
+
+            pub fn find_leaf<K: Deserializable + Serializable>(
+                &self,
+                key: &K,
+                next: bool,
+                eq: bool,
+                signed_int: bool,
+            ) -> Result<Option<(K, $x_type)>> {
+                let key = key.write_to_new_cell()?.into();
+                if let Some((k, mut v)) = self.0.find_leaf(key, next, eq, signed_int, &mut 0)? {
+                    // BuilderData, SliceData
+                    let key = K::construct_from(&mut k.into())?;
+                    let value = <$x_type>::construct_from(&mut v)?;
+                    Ok(Some((key, value)))
+                } else {
+                    Ok(None)
+                }
             }
         }
 

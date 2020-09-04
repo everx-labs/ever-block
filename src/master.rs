@@ -731,7 +731,10 @@ impl Serializable for ShardFeeCreated {
 }
 
 pub fn umulnexps32(x : u64, k : u32, _trunc : bool) -> u64 {
-    (x as f64 * (k as f64 / -65536f64).exp()) as u64
+    (
+        (x as f64 * (k as f64 / -65536f64).exp()) // x * exp(-k / 2^16)
+        + 0.5f64 // Need to round up the number to the nearest integer
+    ) as u64
 }
 
 /// counters#_ last_updated:uint32 total:uint64 cnt2048:uint64 cnt65536:uint64 = Counters;
@@ -1421,11 +1424,11 @@ impl LibDescr {
             publishers
         }
     }
-    pub fn add_publisher(&mut self, publisher: AccountId) {
-        self.publishers.set(&publisher, &()).unwrap();
-    }
     pub fn publishers(&self) -> &Publishers {
         &self.publishers
+    }
+    pub fn publishers_mut(&mut self) -> &mut Publishers {
+        &mut self.publishers
     }
     pub fn lib(&self) -> &Cell {
         &self.lib
