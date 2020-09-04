@@ -89,10 +89,9 @@ impl Serializable for MerkleProof {
 impl MerkleProof {
 
     /// Creating of a Merkle proof which includes cells whose hashes contain in `proof_for`.
-    pub fn create<F>(root: &Cell, is_include: &F) -> Result<Self>
-        where F: Fn(UInt256) -> bool {
+    pub fn create(root: &Cell, is_include: impl Fn(&UInt256) -> bool) -> Result<Self> {
 
-        if !is_include(root.repr_hash()) {
+        if !is_include(&root.repr_hash()) {
             fail!(
                 BlockError::InvalidArg(
                     "`bag` doesn't contain any cell to include into proof".to_string()
@@ -100,7 +99,7 @@ impl MerkleProof {
             )
         }
 
-        let proof = Self::create_raw(root, is_include, 0, &mut None)?;
+        let proof = Self::create_raw(root, &is_include, 0, &mut None)?;
 
         Ok(MerkleProof {
             hash: root.repr_hash(),
@@ -112,20 +111,15 @@ impl MerkleProof {
     /// Creating of a Merkle proof which includes cells whose hashes contain in `proof_for`.
     pub fn create_by_usage_tree(root: &Cell, usage_tree: &UsageTree) -> Result<Self> {
         let visited = usage_tree.visited();
-        let is_include = |h| {
-            visited.contains(&h)
-        };
-        MerkleProof::create(root, &is_include)
+        MerkleProof::create(root, |h| visited.contains(h))
     }
 
-    pub fn create_raw<F>(
+    pub fn create_raw(
         cell: &Cell,
-        is_include: &F,
+        is_include: &impl Fn(&UInt256) -> bool,
         merkle_depth: u8,
         pruned_branches: &mut Option<HashMap<UInt256, Cell>>,
-    ) -> Result<BuilderData>
-        where F: Fn(UInt256) -> bool 
-    {
+    ) -> Result<BuilderData> {
 
         let child_merkle_depth = if cell.is_merkle() { 
             merkle_depth + 1 
@@ -137,7 +131,7 @@ impl MerkleProof {
         proof_cell.set_type(cell.cell_type());
         let mut child_mask = LevelMask::with_mask(0);
         for child in cell.clone_references().iter() {
-            let proof_child = if is_include(child.repr_hash()) {
+            let proof_child = if is_include(&child.repr_hash()) {
                 Self::create_raw(child, is_include, child_merkle_depth, pruned_branches)?
             } else {
                 let pbc = MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?;

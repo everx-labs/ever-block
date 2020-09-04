@@ -703,8 +703,8 @@ impl Serializable for ShardState {
 ///
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ShardStateSplit {
-    pub left: ShardStateUnsplit,
-    pub right: ShardStateUnsplit,
+    pub left: Cell,
+    pub right: Cell,
 }
 
 impl ShardStateSplit {
@@ -712,7 +712,7 @@ impl ShardStateSplit {
         ShardStateSplit::default()
     }
 
-    pub fn with_left_right(left: ShardStateUnsplit, right: ShardStateUnsplit) -> Self {
+    pub fn with_left_right(left: Cell, right: Cell) -> Self {
         ShardStateSplit { left, right }
     }
 }
@@ -728,10 +728,8 @@ impl Deserializable for ShardStateSplit {
                 }
             )
         }
-        self.left
-            .read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.right
-            .read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.left = cell.checked_drain_reference()?;
+        self.right = cell.checked_drain_reference()?;
         Ok(())
     }
 }
@@ -739,8 +737,8 @@ impl Deserializable for ShardStateSplit {
 impl Serializable for ShardStateSplit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u32(SHARD_STATE_SPLIT_PFX)?;
-        cell.append_reference(self.left.write_to_new_cell()?);
-        cell.append_reference(self.right.write_to_new_cell()?);
+        cell.checked_append_reference(self.left.clone())?;
+        cell.checked_append_reference(self.right.clone())?;
         Ok(())
     }
 }

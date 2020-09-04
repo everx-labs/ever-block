@@ -157,9 +157,7 @@ impl MerkleUpdate {
         }
     }
 
-    pub fn create_fast<F>(old: &Cell, new: &Cell, is_visited_old: &F) -> Result<MerkleUpdate> 
-        where F: Fn(UInt256) -> bool 
-    {
+    pub fn create_fast(old: &Cell, new: &Cell, is_visited_old: impl Fn(&UInt256) -> bool) -> Result<MerkleUpdate> {
         if old.repr_hash() == new.repr_hash() {
             // if trees are the same
             let hash = old.repr_hash();
