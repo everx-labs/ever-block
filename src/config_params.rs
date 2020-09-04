@@ -2691,6 +2691,24 @@ impl ParamLimits {
         Ok(Self{limits})
     }
 
+    pub fn classify(&self, value: u32) -> ParamLimitIndex {
+        if value >= self.limits[ParamLimitIndex::Medium as usize - 1] {
+            if value >= self.limits[ParamLimitIndex::Hard as usize - 1] {
+                ParamLimitIndex::Hard
+            } else {
+                ParamLimitIndex::Medium
+            }
+        } else if value >= self.limits[ParamLimitIndex::Underload as usize] {
+            if value >= self.limits[ParamLimitIndex::Soft as usize - 1] {
+                ParamLimitIndex::Soft
+            } else {
+                ParamLimitIndex::Normal
+            }
+        } else {
+            ParamLimitIndex::Underload
+        }
+    }
+
 /*
     pub fn limits(&self, index: ParamLimitIndex) -> u32 {
         self.limits[index as usize]
