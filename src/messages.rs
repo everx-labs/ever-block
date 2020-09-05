@@ -1370,7 +1370,7 @@ impl Message {
                 .read_message()?;
         }
 
-        MerkleProof::create_by_usage_tree(block_root, &usage_tree)
+        MerkleProof::create_by_usage_tree(block_root, usage_tree)
             .and_then(|proof| proof.write_to_new_cell())
             .map(|cell| cell.into())
     }

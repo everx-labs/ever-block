@@ -869,8 +869,7 @@ impl Account {
             // proof for account in shard state
 
             let usage_tree = UsageTree::with_root(state_root.clone());
-            let ss: ShardStateUnsplit = 
-                ShardStateUnsplit::construct_from(&mut usage_tree.root_slice())?;
+            let ss = ShardStateUnsplit::construct_from(&mut usage_tree.root_slice())?;
 
             ss
                 .read_accounts()?
@@ -884,7 +883,7 @@ impl Account {
                 )?
                 .read_account()?;
 
-            MerkleProof::create_by_usage_tree(state_root, &usage_tree)
+            MerkleProof::create_by_usage_tree(state_root, usage_tree)
                 .and_then(|proof| proof.write_to_new_cell())
                 .map(|cell| cell.into())
         }
