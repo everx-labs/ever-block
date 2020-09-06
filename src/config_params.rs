@@ -2650,6 +2650,7 @@ impl Serializable for ConfigParam39 {
     }
 }
 
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ParamLimitIndex {
     Underload = 0,
     Normal,
