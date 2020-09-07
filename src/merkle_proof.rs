@@ -22,7 +22,7 @@ use crate::{
     transactions::Transaction,
     messages::Message,
 };
-use std::{cmp::max, collections::HashMap};
+use std::{cmp::max, collections::HashSet};
 use ton_types::{
     Cell, CellType, BuilderData, error, fail, IBitstring, LevelMask, SliceData, Result, 
     UsageTree, types::UInt256
@@ -118,7 +118,7 @@ impl MerkleProof {
         cell: &Cell,
         is_include: &impl Fn(&UInt256) -> bool,
         merkle_depth: u8,
-        pruned_branches: &mut Option<HashMap<UInt256, Cell>>,
+        pruned_branches: &mut Option<HashSet<UInt256>>,
     ) -> Result<BuilderData> {
 
         let child_merkle_depth = if cell.is_merkle() { 
@@ -136,7 +136,7 @@ impl MerkleProof {
             } else {
                 let pbc = MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?;
                 if let Some(pruned_branches) = pruned_branches.as_mut() {
-                    pruned_branches.insert(child.repr_hash(), pbc.clone().into());
+                    pruned_branches.insert(child.repr_hash());
                 }
                 pbc
             };

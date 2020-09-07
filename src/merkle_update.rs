@@ -171,19 +171,14 @@ impl MerkleUpdate {
                 new: pruned_branch_cell.into(),
             })
         } else {
-            // * for old tree - build merkle proof using usage tree.
-            //   Need to collect all pruned branches from old tree's proof while buildung.
-            // * for new tree - build merkle proof and prune branches which were pruned in old tree's proof
-            // * if new tree contains subtree which included into old-tree but was not visited
-            //   (not included into old-usage-tree) - this subtree will be duplicated
-            //   in a merkle update's new tree. But update will be built much faster 
-            //   than using full traverse.
+            let mut pruned_branches = Some(HashSet::new());
+            let new_update_cell = MerkleProof::create_raw(
+                new, &|hash| !is_visited_old(hash), 0, &mut pruned_branches)?;
+            let pruned_branches = pruned_branches.unwrap();
 
-            let mut pruned_branches = Some(HashMap::new());
-            let old_update_cell = MerkleProof::create_raw(old, &is_visited_old, 0, &mut pruned_branches)?;
-            
-            let new_update_cell = Self::traverse_new_on_create(new, &pruned_branches.unwrap());
-            
+            let old_update_cell = MerkleProof::create_raw(
+                old, &|hash| !pruned_branches.contains(hash) && is_visited_old(hash), 0, &mut None)?;
+
             Ok(MerkleUpdate {
                 old_hash: old.repr_hash(),
                 new_hash: new.repr_hash(),
