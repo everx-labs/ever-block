@@ -486,8 +486,8 @@ impl Deserializable for BlkPrevInfo {
                 prev.read_from(cell)?;
             },
             BlkPrevInfo::Blocks{prev1, prev2} => {
-                prev1.read_from_reference(cell)?;
-                prev2.read_from_reference(cell)?;
+                prev1.read_from(&mut cell.checked_drain_reference()?.into())?;
+                prev2.read_from(&mut cell.checked_drain_reference()?.into())?;
             },
         }
         Ok(())
@@ -767,13 +767,16 @@ impl Deserializable for BlockExtra {
                 }
             )
         }
-        self.in_msg_descr.read_from_reference(cell)?;
-        self.out_msg_descr.read_from_reference(cell)?;
-        self.account_blocks.read_from_reference(cell)?;
+        self.in_msg_descr
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.out_msg_descr
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.account_blocks
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
         self.rand_seed.read_from(cell)?;
         self.created_by.read_from(cell)?;
         self.custom = if cell.get_next_bit()? {
-            Some(ChildCell::<McBlockExtra>::construct_from_reference(cell)?)
+            Some(ChildCell::<McBlockExtra>::construct_from(&mut cell.checked_drain_reference()?.into())?)
         } else {
             None
         };
@@ -1070,7 +1073,7 @@ impl Deserializable for BlockInfo {
 
         self.master_ref = if not_master {
             let mut bli = BlkMasterInfo::default();
-            bli.read_from_reference(cell)?;
+            bli.read_from(&mut cell.checked_drain_reference()?.into())?;
             Some(ChildCell::with_struct(&bli)?)
         } else { 
             None
@@ -1081,13 +1084,13 @@ impl Deserializable for BlockInfo {
         } else { 
             BlkPrevInfo::default_block()
         };
-        prev_ref.read_from_reference(cell)?;
+        prev_ref.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.set_prev_stuff(after_merge, &prev_ref)?;
 
         let prev_vert_ref = if vert_seq_no == 0 {
             None
         } else {
-            Some(BlkPrevInfo::construct_from_reference(cell)?)
+            Some(BlkPrevInfo::construct_from(&mut cell.checked_drain_reference()?.into())?)
         };
         self.set_vertical_stuff(vert_seqno_incr, vert_seq_no, prev_vert_ref)?;
 
@@ -1107,10 +1110,14 @@ impl Deserializable for Block {
             )
         }
         self.global_id.read_from(cell)?;
-        self.info.read_from_reference(cell)?;
-        self.value_flow.read_from_reference(cell)?;
-        self.state_update.read_from_reference(cell)?;
-        self.extra.read_from_reference(cell)?;
+        self.info
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.value_flow
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.state_update
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.extra
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
     }
 }

@@ -1018,9 +1018,11 @@ impl Deserializable for ShardStateUnsplit {
         self.gen_time.read_from(cell)?;
         self.gen_lt.read_from(cell)?;
         self.min_ref_mc_seqno.read_from(cell)?;
-        self.out_msg_queue_info.read_from_reference(cell)?;
+        self.out_msg_queue_info
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
         self.before_split = cell.get_next_bit()?;
-        self.accounts.read_from_reference(cell)?;
+        self.accounts
+            .read_from(&mut cell.checked_drain_reference()?.into())?;
 
         let ref mut cell1 = cell.checked_drain_reference()?.into();
         self.overload_history.read_from(cell1)?;
@@ -1031,7 +1033,7 @@ impl Deserializable for ShardStateUnsplit {
         self.master_ref = BlkMasterInfo::read_maybe_from(cell1)?;
 
         self.custom = if cell.get_next_bit()? {
-            let mse = ChildCell::<McStateExtra>::construct_from_reference(cell)?;
+            let mse = ChildCell::<McStateExtra>::construct_from(&mut cell.checked_drain_reference()?.into())?;
             Some(mse)
         } else {
             None

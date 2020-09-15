@@ -703,7 +703,7 @@ impl Deserializable for TransactionDescrOrdinary {
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
             let mut ap = TrActionPhase::default();
-            ap.read_from_reference(cell)?;
+            ap.read_from(&mut cell.checked_drain_reference()?.into())?;
             Option::Some(ap)
         } else {
             Option::None
@@ -778,7 +778,7 @@ impl Deserializable for TransactionDescrTickTock {
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
             let mut ap = TrActionPhase::default();
-            ap.read_from_reference(cell)?;
+            ap.read_from(&mut cell.checked_drain_reference()?.into())?;
             Option::Some(ap)
         } else {
             Option::None
@@ -828,7 +828,7 @@ impl Deserializable for TransactionDescrSplitPrepare {
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
             let mut ap = TrActionPhase::default();
-            ap.read_from_reference(cell)?;
+            ap.read_from(&mut cell.checked_drain_reference()?.into())?;
             Option::Some(ap)
         } else {
             Option::None
@@ -866,7 +866,7 @@ impl Deserializable for TransactionDescrSplitInstall {
         self.split_info.read_from(cell)?;
         self.installed = cell.get_next_bit()?;
 
-        let tr = Transaction::construct_from_reference(cell)?;
+        let tr = Transaction::construct_from(&mut cell.checked_drain_reference()?.into())?;
         self.prepare_transaction = Arc::new(tr);
 
         Ok(())
@@ -947,14 +947,14 @@ impl Deserializable for TransactionDescrMergeInstall {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.split_info.read_from(cell)?;
 
-        let tr = Transaction::construct_from_reference(cell)?;
+        let tr = Transaction::construct_from(&mut cell.checked_drain_reference()?.into())?;
         self.prepare_transaction = Arc::new(tr);
 
         self.credit_ph = TrCreditPhase::read_maybe_from(cell)?;
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
             let mut ap = TrActionPhase::default();
-            ap.read_from_reference(cell)?;
+            ap.read_from(&mut cell.checked_drain_reference()?.into())?;
             Option::Some(ap)
         } else {
             Option::None
@@ -1630,13 +1630,13 @@ impl Deserializable for Transaction {
         let ref mut cell1 = SliceData::from(cell.checked_drain_reference()?);
         if cell1.get_next_bit()? {
             let mut msg = ChildCell::default();
-            msg.read_from_reference(cell1)?;
+            msg.read_from(&mut cell1.checked_drain_reference()?.into())?;
             self.in_msg = Some(msg);
         }
         self.out_msgs.read_from(cell1)?;
         self.total_fees.read_from(cell)?; // total_fees
-        self.state_update.read_from_reference(cell)?; // ^(HASH_UPDATE Account)
-        self.description.read_from_reference(cell)?; // ^TransactionDescr
+        self.state_update.read_from(&mut cell.checked_drain_reference()?.into())?; // ^(HASH_UPDATE Account)
+        self.description.read_from(&mut cell.checked_drain_reference()?.into())?; // ^TransactionDescr
 
         Ok(())
     }
@@ -1828,7 +1828,7 @@ impl Deserializable for AccountBlock {
         trs.read_hashmap_root(slice)?;
         self.transactions = trs;
 
-        self.state_update.read_from_reference(slice)?;   // ^(HASH_UPDATE Account)
+        self.state_update.read_from(&mut slice.checked_drain_reference()?.into())?;   // ^(HASH_UPDATE Account)
         Ok(())
     }
 }

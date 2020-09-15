@@ -259,7 +259,7 @@ impl Deserializable for OutAction {
         match tag {
             ACTION_SEND_MSG => {
                 let mode = cell.get_next_byte()?;
-                let msg = Message::construct_from_reference(cell)?;
+                let msg = Message::construct_from(&mut cell.checked_drain_reference()?.into())?;
                 *self = OutAction::new_send(mode, msg);
             }
             ACTION_SET_CODE => {

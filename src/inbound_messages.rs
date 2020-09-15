@@ -471,8 +471,8 @@ impl Serializable for InMsgExternal {
 
 impl Deserializable for InMsgExternal {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
+        self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
         Ok(())
     }
 }
@@ -541,8 +541,8 @@ impl Serializable for InMsgIHR {
 
 impl Deserializable for InMsgIHR {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
+        self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.ihr_fee.read_from(cell)?;
         self.proof_created = cell.checked_drain_reference()?.clone();
         Ok(())
@@ -599,8 +599,8 @@ impl Serializable for InMsgFinal {
 
 impl Deserializable for InMsgFinal {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.in_msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
+        self.in_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.fwd_fee.read_from(cell)?;
         Ok(())
     }
@@ -656,8 +656,8 @@ impl Serializable for InMsgTransit {
 
 impl Deserializable for InMsgTransit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.in_msg.read_from_reference(cell)?;
-        self.out_msg.read_from_reference(cell)?;
+        self.in_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.transit_fee.read_from(cell)?;
         Ok(())
     }
@@ -709,7 +709,7 @@ impl Serializable for InMsgDiscardedFinal {
 
 impl Deserializable for InMsgDiscardedFinal {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.in_msg.read_from_reference(cell)?;
+        self.in_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.transaction_id.read_from(cell)?;
         self.fwd_fee.read_from(cell)?;
         Ok(())
@@ -770,7 +770,7 @@ impl Serializable for InMsgDiscardedTransit {
 
 impl Deserializable for InMsgDiscardedTransit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.in_msg.read_from_reference(cell)?;
+        self.in_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
         self.transaction_id.read_from(cell)?;
         self.fwd_fee.read_from(cell)?;
         self.proof_delivered = cell.checked_drain_reference()?.clone();
