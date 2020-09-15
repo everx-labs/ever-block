@@ -441,13 +441,13 @@ impl Deserializable for McBlockExtra {
         self.prev_blk_signatures.read_from(cell1)?;
         
         self.recover_create_msg = if cell1.get_next_bit()? {
-            Some(ChildCell::construct_from(&mut cell1.checked_drain_reference()?.into())?)
+            Some(ChildCell::construct_from_reference(cell1)?)
         } else {
             None
         };
         
         self.mint_msg = if cell1.get_next_bit()? {
-            Some(ChildCell::construct_from(&mut cell1.checked_drain_reference()?.into())?)
+            Some(ChildCell::construct_from_reference(cell1)?)
         } else {
             None
         };

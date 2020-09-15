@@ -694,7 +694,7 @@ impl<X: Default + Deserializable + Serializable> InRefValue<X> {
 
 impl<X: Default + Deserializable + Serializable> Deserializable for InRefValue<X> {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        self.0 = X::construct_from(&mut slice.checked_drain_reference()?.into())?;
+        self.0 = X::construct_from_reference(slice)?;
         Ok(())
     }
 }
@@ -979,6 +979,19 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         T::construct_from(&mut SliceData::from(self.cell.clone()))
     }
 
+    pub fn read_from_reference(&mut self, slice: &mut SliceData) -> Result<()> {
+        let cell = slice.checked_drain_reference()?;
+        // cell.data();
+        self.cell = cell;
+        Ok(())
+    }
+
+    pub fn construct_from_reference(slice: &mut SliceData) -> Result<Self> {
+        let cell = slice.checked_drain_reference()?;
+        // cell.data();
+        Ok(Self::with_cell(cell))
+    }
+
     pub fn cell(&self) -> &Cell {
         &self.cell
     }
@@ -1010,14 +1023,14 @@ impl<T: Default + Serializable + Deserializable> Serializable for ChildCell<T> {
     }
 }
 
-impl<T: Default + Clone + Serializable + Deserializable> Deserializable for ChildCell<T> {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        if !slice.is_full_cell_slice() {
-            fail!(
-                BlockError::InvalidArg("The `slice` must have zero position".to_string())
-            )
-        }
-        self.cell = slice.cell().clone();
-        Ok(())
-    }
-}
+// impl<T: Default + Clone + Serializable + Deserializable> Deserializable for ChildCell<T> {
+//     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+//         if !slice.is_full_cell_slice() {
+//             fail!(
+//                 BlockError::InvalidArg("The `slice` must have zero position".to_string())
+//             )
+//         }
+//         self.cell = slice.cell().clone();
+//         Ok(())
+//     }
+// }

@@ -168,6 +168,9 @@ pub trait Deserializable: Default {
     fn construct_from_cell(cell: Cell) -> Result<Self> {
         Self::construct_from(&mut cell.into())
     }
+    fn construct_from_reference(slice: &mut SliceData) -> Result<Self> {
+        Self::construct_from_cell(slice.checked_drain_reference()?)
+    }
     /// adapter for tests
     fn construct_from_bytes(bytes: &[u8]) -> Result<Self> {
         let cell = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(bytes))?;
@@ -189,6 +192,12 @@ pub trait Deserializable: Default {
         Ok(())
     }
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()>; 
+    fn read_from_cell(&mut self, cell: Cell) -> Result<()> {
+        self.read_from(&mut cell.into())
+    }
+    fn read_from_reference(&mut self, slice: &mut SliceData) -> Result<()> {
+        self.read_from_cell(slice.checked_drain_reference()?)
+    }
 }
 
 pub trait MaybeSerialize {

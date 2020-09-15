@@ -1012,8 +1012,7 @@ impl Serializable for ShardAccount {
 
 impl Deserializable for ShardAccount {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.account
-            .read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.account.read_from_reference(cell)?;
         self.last_trans_hash.read_from(cell)?;
         self.last_trans_lt.read_from(cell)?;
         Ok(())
