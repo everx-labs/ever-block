@@ -2379,8 +2379,8 @@ impl Deserializable for ConfigVotingSetup {
                 s: "ConfigVotingSetup".into()
             })
         }
-        self.normal_params.read_from(&mut slice.checked_drain_reference()?.into())?;
-        self.critical_params.read_from(&mut slice.checked_drain_reference()?.into())?;
+        self.normal_params.read_from_reference(slice)?;
+        self.critical_params.read_from_reference(slice)?;
 
         Ok(())
     }
@@ -2588,7 +2588,7 @@ impl Deserializable for ValidatorSignedTempKey {
             )
         }
         self.signature.read_from(slice)?;
-        self.key.read_from(&mut slice.checked_drain_reference()?.into())?;
+        self.key.read_from_reference(slice)?;
         Ok(())
     }
 }
@@ -2929,8 +2929,8 @@ impl BlockLimits {
     pub fn fits(&self, level: ParamLimitIndex, bytes: u32, gas: u32, lt_delta: u32) -> bool {
         let level = level as usize;
         (level >= LIMIT_COUNT) ||
-        (bytes < self.bytes.limits[level]) && 
-        (gas < self.gas.limits[level]) && 
+        (gas < self.gas.limits[level]) &&
+        (bytes < self.bytes.limits[level]) &&
         (lt_delta < self.lt_delta.limits[level])
     }
 

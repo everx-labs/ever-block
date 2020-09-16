@@ -497,7 +497,7 @@ impl Deserializable for BlockProof {
         self.proof_for.read_from(cell)?; 
         self.root = cell.checked_drain_reference()?.clone();
         self.signatures = if cell.get_next_bit()? {
-            Some(BlockSignatures::construct_from(&mut cell.checked_drain_reference()?.into())?)
+            Some(BlockSignatures::construct_from_reference(cell)?)
         } else {
             None
         };

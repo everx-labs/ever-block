@@ -119,7 +119,7 @@ impl Serializable for EnqueuedMsg {
 impl Deserializable for EnqueuedMsg {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.enqueued_lt.read_from(cell)?;
-        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.out_msg.read_from_reference(cell)?;
         Ok(())
     }
 }
@@ -743,8 +743,8 @@ impl Serializable for OutMsgExternal {
 
 impl Deserializable for OutMsgExternal {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.msg.read_from_reference(cell)?;
+        self.transaction.read_from_reference(cell)?;
         Ok(())
     }
 }
@@ -807,9 +807,9 @@ impl Serializable for OutMsgImmediately {
 
 impl Deserializable for OutMsgImmediately {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.reimport.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.out_msg.read_from_reference(cell)?;
+        self.transaction.read_from_reference(cell)?;
+        self.reimport.read_from_reference(cell)?;
         Ok(())
     }
 }
@@ -861,8 +861,8 @@ impl Serializable for OutMsgNew {
 
 impl Deserializable for OutMsgNew {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.transaction.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.out_msg.read_from_reference(cell)?;
+        self.transaction.read_from_reference(cell)?;
         Ok(())
     }
 }
@@ -914,8 +914,8 @@ impl Serializable for OutMsgTransit {
 
 impl Deserializable for OutMsgTransit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.imported.read_from(&mut cell.checked_drain_reference()?.into())?; 
+        self.out_msg.read_from_reference(cell)?;
+        self.imported.read_from_reference(cell)?; 
         Ok(())
     }
 }
@@ -967,8 +967,8 @@ impl Serializable for OutMsgDequeueImmediately {
 
 impl Deserializable for OutMsgDequeueImmediately {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.reimport.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.out_msg.read_from_reference(cell)?;
+        self.reimport.read_from_reference(cell)?;
         Ok(())
     }
 }
@@ -1027,7 +1027,7 @@ impl Serializable for OutMsgDequeue {
 
 impl Deserializable for OutMsgDequeue {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.out_msg.read_from_reference(cell)?;
         self.import_block_lt = cell.get_next_int(63)?;
         Ok(())
     }
@@ -1112,8 +1112,8 @@ impl Serializable for OutMsgTransitRequeued {
 
 impl Deserializable for OutMsgTransitRequeued {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from(&mut cell.checked_drain_reference()?.into())?;
-        self.imported.read_from(&mut cell.checked_drain_reference()?.into())?; 
+        self.out_msg.read_from_reference(cell)?;
+        self.imported.read_from_reference(cell)?; 
         Ok(())
     }
 }

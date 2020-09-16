@@ -527,7 +527,7 @@ impl Deserializable for MsgEnvelope {
         self.cur_addr.read_from(cell)?;
         self.next_addr.read_from(cell)?;
         self.fwd_fee_remaining.read_from(cell)?;
-        self.msg.read_from(&mut cell.checked_drain_reference()?.into())?;
+        self.msg.read_from_reference(cell)?;
         Ok(())
     }
 }
