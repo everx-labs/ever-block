@@ -1099,8 +1099,8 @@ impl Message {
         self.header
     }
 
-    pub fn state_init(&self) -> &Option<StateInit> {
-        &self.init
+    pub fn state_init(&self) -> Option<&StateInit> {
+        self.init.as_ref()
     }
 
     pub fn set_state_init(&mut self, init: StateInit) {
