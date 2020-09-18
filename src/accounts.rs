@@ -94,7 +94,7 @@ impl StorageUsed {
     }
 
     pub fn calculate_for_struct<T: Serializable>(value: &T) -> Result<StorageUsed> {
-        let root_cell = value.write_to_new_cell()?.into();
+        let root_cell = value.serialize()?;
         Ok(Self::calculate_for_cell(&root_cell))
     }
 
@@ -170,7 +170,7 @@ impl StorageUsedShort {
     }
 
     pub fn calculate_for_struct<T: Serializable>(value: &T) -> Result<StorageUsedShort> {
-        let root_cell = value.write_to_new_cell()?.into();
+        let root_cell = value.serialize()?;
         Ok(Self::calculate_for_cell(&root_cell))
     }
 
@@ -587,19 +587,68 @@ impl Account {
 
     }
 
-    #[warn(unused_variables)]
     // freeze account from active
-    pub fn freeze_account(&mut self) {
+    pub fn try_freeze(&mut self) -> Result<()> {
         if let Some(stuff) = self.stuff_mut() {
-            let state = if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
-                Some(AccountState::AccountFrozen(state_init.hash().unwrap()))
-            } else {
-                None
+            if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
+                stuff.storage.state = AccountState::AccountFrozen(state_init.hash()?)
             };
-            if state.is_some() {
-                stuff.storage.state = state.unwrap();
-            }
         }
+        Ok(())
+    }
+    /// obsolete - use try_freeze
+    pub fn freeze_account(&mut self) { self.try_freeze().unwrap() }
+    /// create freeze account - for test purposes
+    pub fn frozen(
+        addr: MsgAddressInt,
+        last_trans_lt: u64,
+        last_paid: u32,
+        state_hash: UInt256,
+        due_payment: Option<Grams>,
+        balance: CurrencyCollection
+    ) -> Self {
+        let storage = AccountStorage {
+            last_trans_lt,
+            balance,
+            state: AccountState::AccountFrozen(state_hash),
+        };
+        let bits = storage.write_to_new_cell().unwrap().length_in_bits();
+        let storage_stat = StorageInfo {
+            used: StorageUsed::with_values(1, bits as u64, 0),
+            last_paid,
+            due_payment,
+        };
+        let stuff = AccountStuff {
+            addr,
+            storage_stat,
+            storage,
+        };
+        Account::Account(stuff)
+    }
+    /// create uninit account - for test purposes
+    pub fn uninit(
+        addr: MsgAddressInt,
+        last_trans_lt: u64,
+        last_paid: u32,
+        balance: CurrencyCollection
+    ) -> Self {
+        let storage = AccountStorage {
+            last_trans_lt,
+            balance,
+            state: AccountState::AccountUninit,
+        };
+        let bits = storage.write_to_new_cell().unwrap().length_in_bits();
+        let storage_stat = StorageInfo {
+            used: StorageUsed::with_values(1, bits as u64, 0),
+            last_paid,
+            due_payment: None,
+        };
+        let stuff = AccountStuff {
+            addr,
+            storage_stat,
+            storage,
+        };
+        Account::Account(stuff)
     }
 
     // constructor only same tests
@@ -669,11 +718,7 @@ impl Account {
 
     /// Getting account ID
     pub fn get_id(&self) -> Option<AccountId> {
-        if let MsgAddressInt::AddrStd(addr) = self.get_addr()? {
-            Some(addr.address.clone())
-        } else {
-            None
-        }
+        Some(self.get_addr()?.address())
     }
 
     pub fn get_addr(&self) -> Option<&MsgAddressInt> {
@@ -775,21 +820,31 @@ impl Account {
         false
     }
 
-    /// Activate account with new StateInit
-    pub fn activate(&mut self, state: StateInit) {
+    /// Try to activate account with new StateInit
+    pub fn try_activate(&mut self, state: &StateInit) -> Result<()> {
         if let Some(stuff) = self.stuff_mut() {
             let new_state = match &stuff.storage.state {
-                AccountState::AccountUninit => AccountState::AccountActive(state),
-                AccountState::AccountFrozen(ref _acc_address) => {
-                    //TODO: calc address from code and data in 'state',
-                    //if it's equal to 'acc_address' then ok - apply new state.
-                    unimplemented!()
+                AccountState::AccountUninit => if state.hash()? == stuff.addr.get_address() {
+                    AccountState::AccountActive(state.clone())
+                } else {
+                    fail!("StateInit doesn't correspond to uninit account address")
+                }
+                AccountState::AccountFrozen(hash) => if hash == state.hash()? {
+                    AccountState::AccountActive(state.clone())
+                } else {
+                    fail!("StateInit doesn't correspond to frozen hash")
                 }
                 AccountState::AccountActive(_) => stuff.storage.state.clone(),
             };
             stuff.storage.state = new_state;
+            Ok(())
+        } else {
+            fail!("Cannot activate not existing account")
         }
     }
+
+    // obsolete - use try_activate
+    pub fn activate(&mut self, state: StateInit) { self.try_activate(&state).unwrap() }
 
     /// getting to the root of the cell with library
     pub fn libraries(&self) -> StateInitLib {
@@ -863,29 +918,29 @@ impl Account {
     }
 
     pub fn prepare_proof(&self, state_root: &Cell) -> Result<Cell> {
-        if self.is_none() {
-            fail!(BlockError::InvalidData("Account cannot be None".to_string()))
-        } else {
-            // proof for account in shard state
+        match self.get_id() {
+            Some(addr) => {
+                // proof for account in shard state
 
-            let usage_tree = UsageTree::with_root(state_root.clone());
-            let ss = ShardStateUnsplit::construct_from(&mut usage_tree.root_slice())?;
+                let usage_tree = UsageTree::with_root(state_root.clone());
+                let ss = ShardStateUnsplit::construct_from(&mut usage_tree.root_slice())?;
 
-            ss
-                .read_accounts()?
-                .get_serialized(self.get_addr().unwrap().get_address())?
-                .ok_or_else(|| 
-                    error!(
-                        BlockError::InvalidArg(
-                            "Account doesn't belong to given shard state".to_string()
+                ss
+                    .read_accounts()?
+                    .get_serialized(addr)?
+                    .ok_or_else(|| 
+                        error!(
+                            BlockError::InvalidArg(
+                                "Account doesn't belong to given shard state".to_string()
+                            )
                         )
-                    )
-                )?
-                .read_account()?;
+                    )?
+                    .read_account()?;
 
-            MerkleProof::create_by_usage_tree(state_root, usage_tree)
-                .and_then(|proof| proof.write_to_new_cell())
-                .map(|cell| cell.into())
+                MerkleProof::create_by_usage_tree(state_root, usage_tree)
+                    .and_then(|proof| proof.serialize())
+            }
+            None => fail!(BlockError::InvalidData("Account cannot be None".to_string()))
         }
     }
 }

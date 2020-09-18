@@ -255,14 +255,19 @@ pub trait MaybeDeserialize {
 
 impl<T: Deserializable> MaybeDeserialize for T {}
 
-pub trait GetRepresentationHash: Serializable {
+pub trait GetRepresentationHash: Serializable + std::fmt::Debug {
     fn hash(&self) -> Result<UInt256> {
-        let cell: Cell = self.write_to_new_cell()?.into();
-        Ok(cell.repr_hash())
+        match self.serialize() {
+            Err(err) => {
+                log::error!("err: {}, wrong hash calculation for {:?}", err, self);
+                Err(err)
+            }
+            Ok(cell) => Ok(cell.repr_hash())
+        }
     }
 }
 
-impl<T: Serializable> GetRepresentationHash for T {}
+impl<T: Serializable + std::fmt::Debug> GetRepresentationHash for T {}
 
 impl Deserializable for UInt256 {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
