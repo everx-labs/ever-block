@@ -740,7 +740,6 @@ pub fn umulnexps32(x : u64, k : u32, _trunc : bool) -> u64 {
 /// counters#_ last_updated:uint32 total:uint64 cnt2048:uint64 cnt65536:uint64 = Counters;
 #[derive(Clone, Debug, Default, Eq)]
 pub struct Counters {
-    valid: bool,
     last_updated: u32,
     total: u64,
     cnt2048: u64,
@@ -757,25 +756,14 @@ impl PartialEq for Counters {
 }
 
 impl Counters {
-    pub fn validate(&mut self) -> bool {
-        if !self.is_valid() {
-            return false
-        }
-        if self.total == 0 {
-            if (self.cnt2048 | self.cnt65536) != 0 {
-                return self.invalidate()
-            }
-        } else if self.last_updated == 0 {
-            return self.invalidate()
-        }
-        return true;
-    }
     pub fn is_valid(&self) -> bool {
-        self.valid
-    }
-    pub fn invalidate(&mut self) -> bool {
-        self.valid = false;
-        self.valid
+        if self.total == 0 && ((self.cnt2048 | self.cnt65536) != 0) {
+            false
+        } else if self.last_updated == 0 {
+            false
+        } else {
+            true
+        }
     }
     pub fn is_zero(&self) -> bool {
         self.total == 0
@@ -795,7 +783,7 @@ impl Counters {
         self.last_updated >= utime
     }
     pub fn increase_by(&mut self, count: u64, now: u32) -> bool {
-        if !self.validate() {
+        if !self.is_valid() {
             return false
         }
         let scaled = count << 32;
@@ -807,7 +795,7 @@ impl Counters {
             return true
         }
         if count > !self.total || self.cnt2048 > !scaled || self.cnt65536 > !scaled {
-            return false /* invalidate() */  // overflow
+            return false;
         }
         let dt = now.checked_sub(self.last_updated).unwrap_or_default();
         if dt != 0 {
@@ -846,7 +834,6 @@ impl Deserializable for Counters {
         self.total.read_from(slice)?;
         self.cnt2048.read_from(slice)?;
         self.cnt65536.read_from(slice)?;
-        self.valid = true;
         Ok(())
     }
 }
