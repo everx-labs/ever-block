@@ -757,13 +757,14 @@ impl PartialEq for Counters {
 
 impl Counters {
     pub fn is_valid(&self) -> bool {
-        if self.total == 0 && ((self.cnt2048 | self.cnt65536) != 0) {
-            false
+        if self.total == 0 {
+            if (self.cnt2048 | self.cnt65536) != 0 {
+                return false;
+            }
         } else if self.last_updated == 0 {
-            false
-        } else {
-            true
+            return false;
         }
+        true
     }
     pub fn is_zero(&self) -> bool {
         self.total == 0
