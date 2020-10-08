@@ -312,6 +312,16 @@ impl OutMsgQueueInfo {
     pub fn ihr_pending(&self) -> &IhrPendingInfo {
         &self.ihr_pending
     }
+
+    pub fn merge_with(&mut self, other: &Self) -> Result<bool> {
+        let mut result = self.out_queue.combine_with(&other.out_queue)?;
+        if result {
+            self.out_queue.update_root_extra()?;
+        }
+        result |= self.proc_info.combine_with(&other.proc_info)?;
+        result |= self.ihr_pending.combine_with(&other.ihr_pending)?;
+        Ok(result)
+    }
 }
 
 impl Serializable for OutMsgQueueInfo {

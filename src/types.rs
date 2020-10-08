@@ -838,6 +838,9 @@ macro_rules! define_HashmapE {
             pub fn split(&self, split_key: &SliceData) -> Result<(Self, Self)> {
                 self.0.split(split_key).map(|(left, right)| (Self(left), Self(right)))
             }
+            pub fn combine_with(&mut self, other: &Self) -> Result<bool> {
+                self.0.combine_with(&other.0)
+            }
             pub fn scan_diff<K, F>(&self, other: &Self, mut op: F) -> Result<bool>
             where K: Deserializable, F: FnMut(K, Option<$x_type>, Option<$x_type>) -> Result<bool> {
                 self.0.scan_diff(&other.0, |mut key, value1, value2| {

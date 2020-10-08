@@ -131,7 +131,7 @@ impl MerkleProof {
         proof_cell.set_type(cell.cell_type());
         let mut child_mask = LevelMask::with_mask(0);
         for child in cell.clone_references().iter() {
-            let proof_child = if is_include(&child.repr_hash()) {
+            let proof_child = if child.references_count() == 0 || is_include(&child.repr_hash()) {
                 Self::create_raw(child, is_include, child_merkle_depth, pruned_branches)?
             } else {
                 let pbc = MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?;

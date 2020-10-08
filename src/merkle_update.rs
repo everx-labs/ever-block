@@ -224,11 +224,7 @@ impl MerkleUpdate {
         // all new tree's pruned branches have to be contained in old one
         let mut known_cells = HashSet::new();
         Self::traverse_old_on_check(&self.old, &mut known_cells, &mut HashSet::new(), 0);
-        if !Self::traverse_new_on_check(&self.new, &known_cells, &mut HashSet::new(), 0) {
-            fail!(
-                BlockError::WrongMerkleUpdate("old and new trees mismatch".to_string())
-            )
-        }
+        Self::traverse_new_on_check(&self.new, &known_cells, &mut HashSet::new(), 0)?;
 
         let mut known_cells_vals = HashMap::new();
         Self::collate_old_cells(old_root, &known_cells, &mut known_cells_vals, &mut HashSet::new(), 0);
@@ -328,8 +324,8 @@ impl MerkleUpdate {
     fn traverse_old_on_create(
         old_cell: &Cell,
         new_cells: &HashMap<UInt256, Cell>,
-        pruned_branches: &mut HashMap<UInt256, Cell>)
-        -> Result<Option<BuilderData>> {
+        pruned_branches: &mut HashMap<UInt256, Cell>
+    ) -> Result<Option<BuilderData>> {
 
         let mut childs = vec!(None; old_cell.references_count());
         let mut has_pruned = false;
@@ -422,23 +418,21 @@ impl MerkleUpdate {
     }
 
     // Checks all pruned branches from new tree are exist in old tree
-    fn traverse_new_on_check(cell: &Cell, known_cells: &HashSet<UInt256>, visited: &mut HashSet<UInt256>, merkle_depth: u8) -> bool{
+    fn traverse_new_on_check(cell: &Cell, known_cells: &HashSet<UInt256>, visited: &mut HashSet<UInt256>, merkle_depth: u8) -> Result<()> {
         if visited.insert(cell.repr_hash()) {
             if cell.cell_type() == CellType::PrunedBranch {
                 if cell.level() == merkle_depth + 1 &&
                     !known_cells.contains(&cell.hash(merkle_depth as usize)) {
-                    return false;
+                    fail!("old and new trees mismatch {:x}", cell.hash(merkle_depth as usize))
                 }
             } else {
                 let child_merkle_depth = if cell.is_merkle() { merkle_depth + 1 } else { merkle_depth };
                 for child in cell.clone_references().iter() {
-                    if !Self::traverse_new_on_check(child, known_cells, visited, child_merkle_depth) {
-                        return false;
-                    }
+                    Self::traverse_new_on_check(child, known_cells, visited, child_merkle_depth)?;
                 }
             }
         }
-        true
+        Ok(())
     }
 
     fn collate_old_cells(cell: &Cell, known_cells_hashes: &HashSet<UInt256>, known_cells: &mut HashMap<UInt256, Cell>, visited: &mut HashSet<UInt256>, merkle_depth: u8) {
