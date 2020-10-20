@@ -176,8 +176,13 @@ impl MerkleUpdate {
                 new, &|hash| !is_visited_old(hash), 0, &mut pruned_branches)?;
             let pruned_branches = pruned_branches.unwrap();
 
+            let mut used_paths_cells = HashSet::new();
+            if Self::collect_used_paths_cells(old, &is_visited_old, &pruned_branches, &mut used_paths_cells) {
+                used_paths_cells.insert(old.repr_hash());
+            }
+
             let old_update_cell = MerkleProof::create_raw(
-                old, &|hash| !pruned_branches.contains(hash) && is_visited_old(hash), 0, &mut None)?;
+                old, &|hash| used_paths_cells.contains(hash), 0, &mut None)?;
 
             Ok(MerkleUpdate {
                 old_hash: old.repr_hash(),
@@ -187,6 +192,33 @@ impl MerkleUpdate {
                 old: old_update_cell.into(),
                 new: new_update_cell.into(),
             })
+        }
+    }
+
+    fn collect_used_paths_cells(
+        cell: &Cell,
+        is_visited_old: &impl Fn(&UInt256) -> bool,
+        pruned_branches: &HashSet<UInt256>,
+        used_paths_cells: &mut HashSet<UInt256>
+    ) -> bool {
+        if pruned_branches.contains(&cell.repr_hash()) {
+            true
+        } else if is_visited_old(&cell.repr_hash()) {
+            let mut collect = false;
+            for r in cell.clone_references() {
+                collect |= Self::collect_used_paths_cells(
+                    &r,
+                    is_visited_old,
+                    pruned_branches,
+                    used_paths_cells
+                );
+            }
+            if collect {
+                used_paths_cells.insert(cell.repr_hash());
+            }
+            collect
+        } else {
+            false
         }
     }
 

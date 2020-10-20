@@ -30,6 +30,7 @@ use std::{
     cmp::Ordering,
     io::{Cursor, Write},
     fmt::{self, Display, Formatter},
+    str::FromStr
 };
 use ton_types::{
     error, fail, Result,
@@ -134,6 +135,52 @@ impl Display for BlockIdExt {
             self.seq_no,
             self.root_hash.to_hex_string(),
             self.file_hash.to_hex_string())
+    }
+}
+
+impl FromStr for BlockIdExt {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        // 0:1800000000000000, 1203696, rh 59b6e56610aa5df5e8ee4cc5f1081cd5d08473f10e0899f7763d580b2a635f90, fh 1b4d177339538562d10166d87823783b7e747ee80d85d033459928fd0605a126
+        let mut parts = s.split(',');
+        let shard_parts = parts
+            .next()
+            .ok_or_else(|| error!("Can't read shard ident from {}", s))?
+            .trim();
+        let mut shard_parts = shard_parts.split(':');
+        let workchain_id: i32 = shard_parts
+            .next()
+            .ok_or_else(|| error!("Can't read workchain_id from {}", s))?
+            .trim()
+            .parse()
+            .map_err(|e| error!("Can't read workchain_id from {}: {}", s, e))?;
+        let shard = u64::from_str_radix(
+            shard_parts.next().ok_or_else(|| error!("Can't read shard from {}", s))?.trim(),
+            16
+        ).map_err(|e| error!("Can't read shard from {}: {}", s, e))?;
+        let seq_no: u32 = parts
+            .next()
+            .ok_or_else(|| error!("Can't read seq_no from {}", s))?
+            .trim()
+            .parse()
+            .map_err(|e| error!("Can't read seq_no from {}: {}", s, e))?;
+        let root_hash = UInt256::from_str(parts
+            .next()
+            .ok_or_else(|| error!("Can't read root_hash from {}", s))?
+            .trim_start_matches(" rh ")
+        ).map_err(|e| error!("Can't read root_hash from {}: {}", s, e))?;
+        let file_hash = UInt256::from_str(parts
+            .next()
+            .ok_or_else(|| error!("Can't read file_hash from {}", s))?
+            .trim_start_matches(" fh ")
+        ).map_err(|e| error!("Can't read file_hash from {}: {}", s, e))?;
+        Ok(Self::with_params(
+            ShardIdent::with_tagged_prefix(workchain_id, shard)?,
+            seq_no,
+            root_hash,
+            file_hash,
+        ))
     }
 }
 
