@@ -142,8 +142,8 @@ impl FromStr for BlockIdExt {
     type Err = failure::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        // 0:1800000000000000, 1203696, rh 59b6e56610aa5df5e8ee4cc5f1081cd5d08473f10e0899f7763d580b2a635f90, fh 1b4d177339538562d10166d87823783b7e747ee80d85d033459928fd0605a126
-        let mut parts = s.split(',');
+        // (0:1800000000000000, 1203696, rh 59b6e56610aa5df5e8ee4cc5f1081cd5d08473f10e0899f7763d580b2a635f90, fh 1b4d177339538562d10166d87823783b7e747ee80d85d033459928fd0605a126)
+        let mut parts = s.trim_start_matches('(').trim_end_matches(')').split(',');
         let shard_parts = parts
             .next()
             .ok_or_else(|| error!("Can't read shard ident from {}", s))?
