@@ -1281,10 +1281,9 @@ impl Message {
     /// Is message an internal?
     /// 
     pub fn is_internal(&self) -> bool {
-        if let CommonMsgInfo::IntMsgInfo(ref _header) = self.header {
-            true
-        } else {
-            false
+        match self.header {
+            CommonMsgInfo::IntMsgInfo(_) => true,
+            _ => false
         }
     }
 
@@ -1294,6 +1293,16 @@ impl Message {
     pub fn is_inbound_external(&self) -> bool {
         match self.header {
             CommonMsgInfo::ExtInMsgInfo(_) => true,
+            _ => false
+        }
+    }
+
+    ///
+    /// Is message an external outbound?
+    /// 
+    pub fn is_outbound_external(&self) -> bool {
+        match self.header {
+            CommonMsgInfo::ExtOutMsgInfo(_) => true,
             _ => false
         }
     }

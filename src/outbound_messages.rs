@@ -382,16 +382,16 @@ impl Default for OutMsg {
 
 impl OutMsg {
     /// Create External
-    pub fn external(msg: &Message, tr: &Transaction) -> Result<OutMsg> {
-        Ok(OutMsg::External(OutMsgExternal::with_params(msg, tr)?))
+    pub fn external(msg: &Message, tr_cell: Cell) -> Result<OutMsg> {
+        Ok(OutMsg::External(OutMsgExternal::with_params(msg, tr_cell)?))
     }
     /// Create Ordinary internal message
-    pub fn new(env: &MsgEnvelope, tr: &Transaction) -> Result<OutMsg> {
-        Ok(OutMsg::New(OutMsgNew::with_params(env, tr)?))
+    pub fn new(env: &MsgEnvelope, tr_cell: Cell) -> Result<OutMsg> {
+        Ok(OutMsg::New(OutMsgNew::with_params(env, tr_cell)?))
     }
     /// Create Immediately internal message
-    pub fn immediately(env: &MsgEnvelope, tr: &Transaction, reimport: &InMsg) -> Result<OutMsg> {
-        Ok(OutMsg::Immediately(OutMsgImmediately::with_params(env, tr, reimport)?))
+    pub fn immediately(env: &MsgEnvelope, tr_cell: Cell, reimport: &InMsg) -> Result<OutMsg> {
+        Ok(OutMsg::Immediately(OutMsgImmediately::with_params(env, tr_cell, reimport)?))
     }
     /// Create Transit internal message
     pub fn transit(env: &MsgEnvelope, imported: &InMsg, requeue: bool) -> Result<OutMsg> {
@@ -717,11 +717,11 @@ pub struct OutMsgExternal {
 }
 
 impl OutMsgExternal {
-    pub fn with_params(msg: &Message, tr: &Transaction) -> Result<Self> {
+    pub fn with_params(msg: &Message, tr_cell: Cell) -> Result<Self> {
         Ok(
             OutMsgExternal {
                 msg: ChildCell::with_struct(msg)?,
-                transaction: ChildCell::with_struct(tr)?,
+                transaction: ChildCell::with_cell(tr_cell),
             }
         )
     }
@@ -771,11 +771,11 @@ pub struct OutMsgImmediately {
 }
 
 impl OutMsgImmediately {
-    pub fn with_params(env: &MsgEnvelope, tr: &Transaction, reimport: &InMsg) -> Result<Self> {
+    pub fn with_params(env: &MsgEnvelope, tr_cell: Cell, reimport: &InMsg) -> Result<Self> {
         Ok(
             OutMsgImmediately{
                 out_msg: ChildCell::with_struct(env)?,
-                transaction: ChildCell::with_struct(tr)?,
+                transaction: ChildCell::with_cell(tr_cell),
                 reimport: ChildCell::with_struct(reimport)?,
             }
         )
@@ -835,11 +835,11 @@ pub struct OutMsgNew {
 }
 
 impl OutMsgNew {
-    pub fn with_params(env: &MsgEnvelope, tr: &Transaction) -> Result<Self> {
+    pub fn with_params(env: &MsgEnvelope, tr_cell: Cell) -> Result<Self> {
         Ok(
             OutMsgNew {
                 out_msg: ChildCell::with_struct(env)?,
-                transaction: ChildCell::with_struct(tr)?,
+                transaction: ChildCell::with_cell(tr_cell),
             }
         )
     }
