@@ -368,7 +368,7 @@ impl ShardIdent {
     }
 
     pub fn negate_bits(prefix: u64) -> u64 {
-        !prefix + 1
+        (!prefix).wrapping_add(1)
     }
 
     // pub fn is_ancestor_prefix(prefix: u64, descendant: u64) -> bool {
