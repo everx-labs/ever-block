@@ -19,7 +19,7 @@ use crate::{
     error::BlockError,
     hashmapaug::{Augmentable, HashmapAugType, TraverseNextStep},
     inbound_messages::InMsg,
-    shard::{ShardIdent},
+    shard::{ShardIdent, SHARD_FULL},
     signature::CryptoSignaturePair,
     types::{CurrencyCollection, InRefValue, ChildCell},
     validators::ValidatorInfo,
@@ -217,6 +217,8 @@ impl ShardHashes {
         descr.root_hash = zerostate_root_hash;
         descr.file_hash = zerostate_file_hash;
         descr.min_ref_mc_seqno = !0;
+        descr.next_validator_shard = SHARD_FULL;
+        descr.min_ref_mc_seqno = 0;
         let tree = BinTree::with_item(&descr);
 
         self.set(&workchain_id, &InRefValue(tree))

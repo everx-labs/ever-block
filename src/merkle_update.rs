@@ -177,7 +177,8 @@ impl MerkleUpdate {
             let pruned_branches = pruned_branches.unwrap();
 
             let mut used_paths_cells = HashSet::new();
-            if Self::collect_used_paths_cells(old, &is_visited_old, &pruned_branches, &mut used_paths_cells) {
+            if Self::collect_used_paths_cells(old, &is_visited_old, &pruned_branches, 
+                &mut HashSet::new(), &mut used_paths_cells) {
                 used_paths_cells.insert(old.repr_hash());
             }
 
@@ -199,27 +200,41 @@ impl MerkleUpdate {
         cell: &Cell,
         is_visited_old: &impl Fn(&UInt256) -> bool,
         pruned_branches: &HashSet<UInt256>,
+        visited_pruned_branches: &mut HashSet<UInt256>,
         used_paths_cells: &mut HashSet<UInt256>
     ) -> bool {
-        if pruned_branches.contains(&cell.repr_hash()) {
+        let repr_hash = cell.repr_hash();
+
+        if used_paths_cells.contains(&repr_hash) {
+            return false;
+        }
+
+        let is_pruned = if pruned_branches.contains(&repr_hash) {
+            if visited_pruned_branches.contains(&repr_hash) {
+                return false;
+            }
+            visited_pruned_branches.insert(repr_hash.clone());
             true
-        } else if is_visited_old(&cell.repr_hash()) {
-            let mut collect = false;
+        } else {
+            false
+        };
+
+        let mut collect = false;
+        if is_visited_old(&repr_hash) {
             for r in cell.clone_references() {
                 collect |= Self::collect_used_paths_cells(
                     &r,
                     is_visited_old,
                     pruned_branches,
+                    visited_pruned_branches,
                     used_paths_cells
                 );
             }
             if collect {
-                used_paths_cells.insert(cell.repr_hash());
+                used_paths_cells.insert(repr_hash);
             }
-            collect
-        } else {
-            false
         }
+        collect | is_pruned
     }
 
     /// Applies update to given tree of cells by returning new updated one
