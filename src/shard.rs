@@ -356,8 +356,7 @@ impl ShardIdent {
     }
 
     pub fn is_ancestor_for(&self, descendant: &ShardIdent) -> bool {
-        descendant.prefix != SHARD_FULL &&
-            self.workchain_id() == descendant.workchain_id() &&
+        self.workchain_id() == descendant.workchain_id() &&
             Self::is_ancestor(self.prefix, descendant.prefix)
     }
 
