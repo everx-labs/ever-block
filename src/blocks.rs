@@ -1327,6 +1327,9 @@ impl TopBlockDescrSet {
     pub fn count(&self, max: usize) -> Result<usize> {
         self.collection.count(max)
     }
+    pub fn collection(&self) -> &TopBlockDescrCollection {
+        &self.collection
+    }
 }
 
 const TOPBLOCK_DESCR_SET_TAG: u32 = 0x4ac789f3;
