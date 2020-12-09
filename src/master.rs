@@ -1406,6 +1406,12 @@ pub struct LibDescr {
 }
 
 impl LibDescr {
+    pub fn new(lib: Cell) -> Self {
+        Self {
+            lib,
+            publishers: Publishers::default()
+        }
+    }
     pub fn from_lib_data_by_publisher(lib: Cell, publisher: AccountId) -> Self {
         let mut publishers = Publishers::default();
         publishers.set(&publisher, &()).unwrap();

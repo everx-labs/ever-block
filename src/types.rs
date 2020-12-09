@@ -329,6 +329,11 @@ impl From<u64> for Grams {
         Self(value as u128)
     }
 }
+impl From<i64> for Grams {
+    fn from(value: i64) -> Self {
+        Self(value as u128)
+    }
+}
 impl From<u32> for Grams {
     fn from(value: u32) -> Self {
         Self(value as u128)
@@ -392,6 +397,12 @@ macro_rules! define_NumberN_up32bit {
                     f,
                     "vui{}[value = {}]", $N, self.0
                 )
+            }
+        }
+
+        impl From<i64> for $varname {
+            fn from(value: i64) -> Self {
+                Self(value as u32)
             }
         }
     };
