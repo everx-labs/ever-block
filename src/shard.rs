@@ -267,7 +267,7 @@ impl ShardIdent {
     pub fn with_prefix_slice(workchain_id: i32, mut shard_prefix_slice: SliceData) -> Result<Self> {
         let mut shard_pfx_bits = 0;
         let mut shard_prefix = 0;
-        while let Ok(bit) = shard_prefix_slice.get_next_bit_int() {
+        while let Some(bit) = shard_prefix_slice.get_next_bit_opt() {
             shard_pfx_bits += 1;
             shard_prefix = shard_prefix | ((bit as u64) << 64 - shard_pfx_bits)
         }

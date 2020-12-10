@@ -66,7 +66,7 @@ impl ConfigParams {
     pub fn config(&self, index: u32) -> Result<Option<ConfigParamEnum>> {
         let key = index.write_to_new_cell().unwrap();
         if let Ok(Some(slice)) = self.config_params.get(key.into()) {
-            if let Ok(cell) = slice.reference(0) {
+            if let Some(cell) = slice.reference_opt(0) {
                 return Ok(Some(ConfigParamEnum::construct_from_slice_and_number(&mut cell.into(), index)?));
             }
         }

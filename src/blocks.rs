@@ -1312,7 +1312,7 @@ pub struct TopBlockDescrSet {
 impl TopBlockDescrSet {
     pub fn get_top_block_descr(&self, shard: &ShardIdent) -> Result<Option<TopBlockDescr>> {
         match self.collection.0.get(shard.full_key_with_tag()?)? {
-            Some(slice) => TopBlockDescr::construct_from(&mut slice.reference(0)?.into()).map(|r| Some(r)),
+            Some(slice) => TopBlockDescr::construct_from_cell(slice.reference(0)?).map(|r| Some(r)),
             None => Ok(None)
         }
     }

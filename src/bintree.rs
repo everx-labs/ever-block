@@ -33,8 +33,8 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
                 // fork doesn't have two refs - bad data
                 fail!(BlockError::InvalidData("Fork doesn't have two refs".to_string()))
             }
-            match key.get_next_bit_int() {
-                Ok(x) => cursor = cursor.reference(x).expect("There must be at least two links").into(),
+            match key.get_next_bit_opt() {
+                Some(x) => cursor = cursor.reference(x)?.into(),
                 _ => return Ok(None)
             }
         }
@@ -53,8 +53,8 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
                 // fork doesn't have two refs - bad data
                 fail!(BlockError::InvalidData("Fork doesn't have two refs".to_string()))
             }
-            match key.get_next_bit_int() {
-                Ok(x) => cursor = cursor.reference(x).expect("There must be at least two links").into(),
+            match key.get_next_bit_opt() {
+                Some(x) => cursor = cursor.reference(x)?.into(),
                 _ => return Ok(None) // key is shorter nothing to return
             }
         }
@@ -80,7 +80,7 @@ where F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable
 {
     if *bits != 1 || children.len() < 2 {
         Ok(false)
-    } else if let Ok(x) = key.get_next_bit_int() {
+    } else if let Some(x) = key.get_next_bit_opt() {
         let mut child = BuilderData::from(&children.remove(x));
         let result = child.update_cell(internal_merge, (key, merger));
         children.insert(x, child.into());
@@ -110,7 +110,7 @@ where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
         if children.len() < 2 {
             return Ok(false)
         }
-        if let Ok(x) = key.get_next_bit_int() {
+        if let Some(x) = key.get_next_bit_opt() {
             let mut child = BuilderData::from(&children.remove(x));
             let result = child.update_cell(internal_split, (key, splitter));
             children.insert(x, child.into());
@@ -146,7 +146,7 @@ where F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
         if children.len() < 2 {
             return Ok(false)
         }
-        if let Ok(x) = key.get_next_bit_int() {
+        if let Some(x) = key.get_next_bit_opt() {
             let mut child = BuilderData::from(&children.remove(x));
             let result = child.update_cell(internal_update, (key, mutator));
             children.insert(x, child.into());
@@ -362,9 +362,9 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
                 // fork doesn't have two refs - bad data
                 return Ok(None)
             }
-            match key.get_next_bit_int() {
-                Ok(x) => cursor = cursor.reference(x).expect("There must be at least two links").into(),
-                Err(_) => return Ok(None)
+            match key.get_next_bit_opt() {
+                Some(x) => cursor = cursor.reference(x)?.into(),
+                None => return Ok(None)
             }
         }
         if key.is_empty() {
@@ -405,7 +405,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
     fn internal_split_next(
         data: &mut Vec<u8>, bits: &mut usize, children: &mut Vec<Cell>, (mut key, value, aug): (SliceData, &X, &Y)
     ) -> Result<bool> {
-        if let Ok(x) = key.get_next_bit_int() {
+        if let Some(x) = key.get_next_bit_opt() {
             let mut cursor = children[x].clone().into();
             if Self::internal_split(&mut cursor, key, value, aug)? {
                children[x] = cursor.into_cell();

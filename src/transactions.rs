@@ -1515,7 +1515,7 @@ impl Transaction {
         if let Some(created_lt) = msg.lt() {
             if (created_lt > self.lt) && (created_lt <= self.lt + self.outmsg_cnt as u64) {
                 if let Ok(Some(msg_slice)) = self.out_msgs.get_as_slice(&U15::from_lt(created_lt - self.lt - 1)) {
-                    if let Ok(cell) = msg_slice.reference(0) {
+                    if let Some(cell) = msg_slice.reference_opt(0) {
                         return &cell.repr_hash() == hash
                     }
                 }

@@ -81,8 +81,8 @@ pub use self::config_params::*;
 
 use std::{collections::HashMap, hash::Hash};
 use ton_types::{
-    error, fail, Result,
-    AccountId, ExceptionCode, UInt256,
+    fail, Result,
+    AccountId, UInt256,
     BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
 };
 
@@ -245,10 +245,9 @@ impl<T: Serializable> MaybeSerialize for Option<T> {
 
 pub trait MaybeDeserialize {
     fn read_maybe_from<T: Deserializable + Default> (slice: &mut SliceData) -> Result<Option<T>> {
-        match slice.get_next_bit_int() {
-            Ok(1) => Ok(Some(T::construct_from(slice)?)),
-            Ok(0) => Ok(None),
-            _ => fail!(ExceptionCode::CellUnderflow)
+        match slice.get_next_bit_int()? {
+            1 => Ok(Some(T::construct_from(slice)?)),
+            _ => Ok(None)
         }
     }
 }
