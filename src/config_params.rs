@@ -439,6 +439,7 @@ pub enum ConfigParamEnum {
     ConfigParam10(ConfigParam10),
     ConfigParam11(ConfigParam11),
     ConfigParam12(ConfigParam12),
+    ConfigParam13(ConfigParam13),
     ConfigParam14(ConfigParam14),
     ConfigParam15(ConfigParam15),
     ConfigParam16(ConfigParam16),
@@ -490,6 +491,7 @@ impl ConfigParamEnum {
             10 => { read_config!(ConfigParam10, ConfigParam10, slice) },
             11 => { read_config!(ConfigParam11, ConfigParam11, slice) },
             12 => { read_config!(ConfigParam12, ConfigParam12, slice) },
+            13 => { read_config!(ConfigParam13, ConfigParam13, slice) },
             14 => { read_config!(ConfigParam14, ConfigParam14, slice) },
             15 => { read_config!(ConfigParam15, ConfigParam15, slice) },
             16 => { read_config!(ConfigParam16, ConfigParam16, slice) },
@@ -530,6 +532,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam10(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(10)},
             ConfigParamEnum::ConfigParam11(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(11)},
             ConfigParamEnum::ConfigParam12(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(12)},
+            ConfigParamEnum::ConfigParam13(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(13)},
             ConfigParamEnum::ConfigParam14(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(14)},
             ConfigParamEnum::ConfigParam15(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(15)},
             ConfigParamEnum::ConfigParam16(ref c) => { cell.append_reference(c.write_to_new_cell()?); Ok(16)},
@@ -2446,6 +2449,28 @@ impl Deserializable for ConfigParam12 {
 impl Serializable for ConfigParam12 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.workchains.write_to(cell)?;
+        Ok(())
+    }
+}
+
+///
+/// ConfigParam 13 struct
+/// 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ConfigParam13 {
+    pub cell: Cell,
+}
+
+impl Deserializable for ConfigParam13 {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        self.cell = slice.into_cell();
+        Ok(())
+    }
+}
+
+impl Serializable for ConfigParam13 {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        cell.append_builder(&BuilderData::from(&self.cell))?;
         Ok(())
     }
 }
