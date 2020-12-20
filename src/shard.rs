@@ -17,11 +17,11 @@ use crate::{
     config_params::CatchainConfig,
     error::BlockError,
     envelope_message::FULL_BITS,
-    hashmapaug::HashmapAugType,
+    hashmapaug::{Augmentation, HashmapAugType},
     master::{BlkMasterInfo, LibDescr, McStateExtra},
     messages::MsgAddressInt,
     outbound_messages::OutMsgQueueInfo,
-    shard_accounts::{DepthBalanceInfo, ShardAccounts},
+    shard_accounts::ShardAccounts,
     types::{ChildCell, CurrencyCollection},
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize, IntermediateAddress,
     validators::ValidatorSet,
@@ -893,10 +893,9 @@ impl ShardStateUnsplit {
     }
     
     pub fn insert_account(&mut self, account_id: &UInt256, acc: &ShardAccount) -> Result<()> {
-        // TODO: split depth
-        let depth_balance_info = DepthBalanceInfo::new(0, acc.read_account()?.get_balance().unwrap())?;
+        let account = acc.read_account()?;
         let mut accounts = self.read_accounts()?;
-        accounts.set(account_id, acc, &depth_balance_info)?;
+        accounts.set(account_id, acc, &account.aug()?)?;
         self.write_accounts(&accounts)
     }
 
