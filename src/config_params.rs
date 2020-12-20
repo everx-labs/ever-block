@@ -14,7 +14,7 @@
 use ton_types::{
     BuilderData, Cell, error,
     fail,
-    HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256,
+    HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256, HashmapIterator,
 };
 
 use crate::{
@@ -1664,6 +1664,15 @@ _ fundamental_smc_addr:(HashmapE 256 True) = ConfigParam 31;
 */
 
 define_HashmapE!{FundamentalSmcAddresses, 256, ()}
+
+impl IntoIterator for &FundamentalSmcAddresses {
+    type Item = <HashmapIterator<HashmapE> as std::iter::Iterator>::Item;
+    type IntoIter = HashmapIterator<HashmapE>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
 
 ///
 /// ConfigParam 31;

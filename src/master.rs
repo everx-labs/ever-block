@@ -656,27 +656,38 @@ impl OldMcBlocksInfo {
     }
 
     pub fn check_block(&self, id: &BlockIdExt) -> Result<()> {
+        self.check_key_block(id, None)
+    }
+
+    pub fn check_key_block(&self, id: &BlockIdExt, is_key_opt: Option<bool>) -> Result<()> {
         if !id.shard().is_masterchain() {
             fail!(BlockError::InvalidData("Given id does not belong masterchain".to_string()));
         }
         let found_id = self
             .get(&id.seq_no())?
-            .ok_or_else(|| error!("Block with given seq_no {} is not found", id.seq_no()))?
-            .blk_ref;
-        
-        if found_id.root_hash != *id.root_hash() {
+            .ok_or_else(|| error!("Block with given seq_no {} is not found", id.seq_no()))?;
+
+        if found_id.blk_ref.root_hash != *id.root_hash() {
             fail!(
                 "Given block has invalid root hash: found {}, expected {}",
-                found_id.root_hash.to_hex_string(),
+                found_id.blk_ref.root_hash.to_hex_string(),
                 id.root_hash().to_hex_string()
             )
         }
-        if found_id.file_hash != *id.file_hash() {
+        if found_id.blk_ref.file_hash != *id.file_hash() {
             fail!(
                 "Given block has invalid file hash: found {}, expected {}",
-                found_id.file_hash.to_hex_string(),
+                found_id.blk_ref.file_hash.to_hex_string(),
                 id.file_hash().to_hex_string()
             )
+        }
+        if let Some(is_key) = is_key_opt {
+            if is_key != found_id.key {
+                fail!(
+                    "Given block has key flag set to: {}, expected {}",
+                    found_id.key, is_key
+                )
+            }
         }
         Ok(())
     }
