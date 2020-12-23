@@ -1241,9 +1241,7 @@ impl ShardDescr {
         }
     }
     pub fn fsm_equal(&self, other: &Self) -> bool {
-        self.is_fsm_none() == other.is_fsm_none()
-            && self.is_fsm_split() == other.is_fsm_split()
-            && self.is_fsm_merge() == other.is_fsm_merge()
+        self.split_merge_at == other.split_merge_at
     }
     pub fn is_fsm_merge(&self) -> bool {
         match self.split_merge_at {
