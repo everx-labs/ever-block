@@ -11,6 +11,7 @@
 * limitations under the License.
 */
 
+use std::convert::TryInto;
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::marker::PhantomData;
@@ -108,7 +109,7 @@ macro_rules! define_VarIntegerN {
             pub fn write_to_cell(value: &BigInt) -> Result<BuilderData> {
                 let len = Self::get_len(value);
                 if len >= $N {
-                    fail!(ExceptionCode::RangeCheckError)
+                    fail!("serialization of {} error {} >= {}", stringify!($varname), len, $N)
                 }
 
                 let mut cell = BuilderData::default();
@@ -121,7 +122,7 @@ macro_rules! define_VarIntegerN {
             pub fn read_from_cell(cell: &mut SliceData) -> Result<BigInt> {
                 let len = cell.get_next_int(Self::get_len_len())? as usize;
                 if len >= $N {
-                    fail!(ExceptionCode::RangeCheckError)
+                    fail!("deserialization of {} error {} >= {}", stringify!($varname), len, $N)
                 }
                 Ok(BigInt::from_bytes_be(Sign::Plus, &cell.get_next_bytes(len)?))
             }
@@ -219,7 +220,11 @@ macro_rules! define_VarIntegerN {
             fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
                 let bits = 8 - ($N as u8).leading_zeros();
                 let bytes = slice.get_next_int(bits as usize)?;
-                self.0 = slice.get_next_int(bytes as usize * 8)? as $tt;
+                let max = std::mem::size_of::<$tt>();
+                let mut bytes = slice.get_next_bytes(bytes as usize)?;
+                bytes.reverse();
+                bytes.resize_with(max, || 0);
+                self.0 = <$tt>::from_le_bytes(bytes.as_slice().try_into()?);
                 Ok(())
             }
         }
