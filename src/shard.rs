@@ -995,6 +995,29 @@ impl ShardStateUnsplit {
             config.catchain_config()?
         ))
     }
+
+    pub fn update_config_smc(&mut self) -> Result<()> {
+        let config = self.read_custom()?
+            .ok_or_else(|| error!("masterchain state must contain config"))?
+            .config;
+        let mut accounts = self.read_accounts()?;
+        let mut shard_config_smc = accounts.get(&config.config_addr)?
+            .ok_or_else(|| error!("config SMC isn't present"))?;
+        let mut config_smc = shard_config_smc.read_account()?;
+        let data = config_smc.get_data()
+            .ok_or_else(|| error!("config SMC doesn't contain data"))?;
+        let mut data = SliceData::from(data);
+        data.checked_drain_reference()
+            .map_err(|_| error!("config SMC data doesn't contain reference with old config"))?;
+        let mut builder = BuilderData::from_slice(&data);
+        let cell = config.config_params.data()
+            .ok_or_else(|| error!("configs musn't be empty"))?;
+        builder.prepend_reference(BuilderData::from(cell));
+        config_smc.set_data(builder.into());
+        shard_config_smc.write_account(&config_smc)?;
+        accounts.set(&config.config_addr, &shard_config_smc, &config_smc.aug()?)?;
+        self.write_accounts(&accounts)
+    }
 }
 
 impl Deserializable for ShardStateUnsplit {
