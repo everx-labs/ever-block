@@ -25,7 +25,7 @@ use crate::{
     validators::ValidatorInfo,
     Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
-use std::fmt;
+use std::{collections::HashMap, fmt};
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
@@ -136,6 +136,29 @@ impl ShardHashes {
             })?;
         }
         Ok(vec)
+    }
+    pub fn get_new_shards(&self) -> Result<HashMap<ShardIdent, Vec<BlockIdExt>>> {
+        let mut new_shards = HashMap::new();
+        self.iterate_shards(|shard, descr| {
+            let block_id = BlockIdExt {
+                shard_id: shard.clone(),
+                seq_no: descr.seq_no,
+                root_hash: descr.root_hash,
+                file_hash: descr.file_hash,
+            };
+            if descr.before_split {
+                let (l,r) = shard.split()?;
+                new_shards.insert(l, vec![block_id.clone()]);
+                new_shards.insert(r, vec![block_id]);
+            } else if descr.before_merge {
+                let p = shard.merge()?;
+                new_shards.entry(p).or_insert_with(|| vec![]).push(block_id)
+            } else {
+                new_shards.insert(shard, vec![block_id]);
+            }
+            Ok(true)
+        })?;
+        Ok(new_shards)
     }
     pub fn calc_shard_cc_seqno(&self, shard: &ShardIdent) -> Result<u32> {
         if shard.is_masterchain() {
