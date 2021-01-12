@@ -587,6 +587,33 @@ impl Account {
 
     }
 
+    ///
+    /// Create initialized account from "constructor internal message"
+    ///
+    pub fn from_message(msg: &Message) -> Option<Self> {
+        let hdr = msg.int_header()?;
+        if !hdr.value().grams.is_zero() {
+            let mut storage = AccountStorage::default();
+            storage.balance = hdr.value().clone();
+            if let Some(init) = msg.state_init() {
+                if init.code.is_none() {
+                    return None
+                }
+                storage.state = AccountState::AccountActive(init.clone());
+            } else if hdr.bounce {
+                return None
+            }
+            let mut account = Account::Account(AccountStuff {
+                addr: hdr.dst.clone(),
+                storage_stat: StorageInfo::default(),
+                storage
+            });
+            account.update_storage_stat().ok()?;
+            return Some(account)
+        }
+        None
+    }
+
     // freeze account from active
     pub fn try_freeze(&mut self) -> Result<()> {
         if let Some(stuff) = self.stuff_mut() {
@@ -676,18 +703,16 @@ impl Account {
     }
 
     pub fn stuff(&self) -> Option<&AccountStuff> {
-        if let Account::Account(stuff) = self {
-            Some(stuff)
-        } else {
-            None
+        match self {
+            Account::Account(stuff) => Some(stuff),
+            Account::AccountNone => None
         }
     }
 
     fn stuff_mut(&mut self) -> Option<&mut AccountStuff> {
-        if let Account::Account(ref mut stuff) = self {
-            Some(stuff)
-        } else {
-            None
+        match self {
+            Account::Account(stuff) => Some(stuff),
+            Account::AccountNone => None
         }
     }
 

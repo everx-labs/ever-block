@@ -344,6 +344,9 @@ impl ShardIdent {
     }
 
     pub fn is_parent_for(&self, child: &ShardIdent) -> bool {
+        if child.is_full() {
+            return false
+        }
         let parent = child.merge();
         self.workchain_id() == child.workchain_id() &&
             parent.is_ok() &&
