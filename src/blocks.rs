@@ -1131,7 +1131,7 @@ impl Deserializable for BlockInfo {
         prev_ref.read_from_reference(cell)?;
         self.set_prev_stuff(after_merge, &prev_ref)?;
 
-        let prev_vert_ref = if vert_seq_no == 0 {
+        let prev_vert_ref = if vert_seqno_incr == 0 {
             None
         } else {
             Some(BlkPrevInfo::construct_from_reference(cell)?)
