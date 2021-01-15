@@ -70,6 +70,19 @@ impl AccountIdPrefixFull {
         self.workchain_id == MASTERCHAIN_ID
     }
 
+    pub fn workchain_id(&self) -> i32 {
+        self.workchain_id
+    }
+
+    pub fn shard_key(&self, include_workchain: bool) -> SliceData {
+        let mut cell = BuilderData::new();
+        if include_workchain {
+            cell.append_i32(self.workchain_id).unwrap();
+        }
+        cell.append_u64(self.prefix).unwrap();
+        cell.into()
+    }
+
     /// Constructs AccountIdPrefixFull prefix for specified address.
     /// Returns Err in a case of insufficient bits (less than 64) in the address slice.
     pub fn prefix(address: &MsgAddressInt) -> Result<Self> {
@@ -579,7 +592,10 @@ impl ShardIdent {
     }
 
     pub fn prefix_len(&self) -> u8 {
-        63 - self.prefix.trailing_zeros() as u8
+        match self.prefix {
+            0 => 64, 
+            prefix => 63 - prefix.trailing_zeros() as u8
+        }
     }
 }
 
@@ -997,6 +1013,22 @@ impl ShardStateUnsplit {
             config.validator_set()?,
             config.catchain_config()?
         ))
+    }
+
+    pub fn update_smc(&mut self, addr: &UInt256, code: Option<&Cell>, data: Option<&Cell>) -> Result<()> {
+        let mut accounts = self.read_accounts()?;
+        let mut shard_smc = accounts.get(addr)?
+            .ok_or_else(|| error!("SMC {:x} isn't present", addr))?;
+        let mut smc = shard_smc.read_account()?;
+        if let Some(code) = code {
+            smc.set_code(code.clone());
+        }
+        if let Some(data) = data {
+            smc.set_data(data.clone());
+        }
+        shard_smc.write_account(&smc)?;
+        accounts.set(addr, &shard_smc, &smc.aug()?)?;
+        self.write_accounts(&accounts)
     }
 
     pub fn update_config_smc(&mut self) -> Result<()> {

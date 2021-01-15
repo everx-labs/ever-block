@@ -15,7 +15,7 @@ use crate::{
     error::BlockError,
     hashmapaug::{HashmapAugType, Augmentation},
     merkle_proof::MerkleProof,
-    messages::{AnycastInfo, CommonMsgInfo, Message, MsgAddressInt, SimpleLib, StateInit, StateInitLib, TickTock},
+    messages::{AnycastInfo, Message, MsgAddressInt, SimpleLib, StateInit, StateInitLib, TickTock},
     types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
     shard::{ShardIdent, ShardStateUnsplit},
     shard_accounts::DepthBalanceInfo,
@@ -551,40 +551,6 @@ impl Account {
             storage_stat: StorageInfo::default(),
             storage: AccountStorage::with_balance(Default::default()),
         })
-    }
-
-    ///
-    /// Create initialized account from "constructor message"
-    ///
-    pub fn with_message(msg: &Message) -> Result<Self> {
-        match msg.state_init() {
-            //code must be present in constructor message
-            Some(init) if init.code.is_some() => {
-                let mut storage = AccountStorage::default();
-                let mut address = MsgAddressInt::default();
-                match msg.header() {
-                    CommonMsgInfo::IntMsgInfo(ref header) => {
-                        storage.balance = header.value.clone();
-                        address = header.dst.clone();
-                    },
-                    CommonMsgInfo::ExtInMsgInfo(ref header) => {
-                        address = header.dst.clone();
-                    },
-                    _ => (),
-                }
-                storage.state = AccountState::AccountActive(init.clone());
-                Ok(Account::Account(AccountStuff {
-                    addr: address,
-                    storage_stat: StorageInfo::default(),
-                    storage
-                }))
-            }
-            Some(_) => fail!(BlockError::InvalidData(format!("code field must present in \
-                StateInit in the constructor message {} while creating account", msg.hash()?.to_hex_string()))),
-            None => fail!(BlockError::InvalidData(format!("stateInit must present in constructor message {} \
-                while creating account", msg.hash()?.to_hex_string())))
-        }
-
     }
 
     ///
