@@ -19,7 +19,7 @@ use crate::{
     error::BlockError,
     hashmapaug::{Augmentable, HashmapAugType, TraverseNextStep},
     inbound_messages::InMsg,
-    shard::{ShardIdent, SHARD_FULL},
+    shard::{AccountIdPrefixFull, ShardIdent, SHARD_FULL},
     signature::CryptoSignaturePair,
     types::{CurrencyCollection, InRefValue, ChildCell},
     validators::ValidatorInfo,
@@ -110,6 +110,16 @@ impl ShardHashes {
             let shard_id = shard.shard_key(false);
             if let Some((key, descr)) = bintree.find(shard_id)? {
                 let shard = ShardIdent::with_prefix_slice(shard.workchain_id(), key)?;
+                return Ok(Some(McShardRecord::from_shard_descr(shard, descr)))
+            }
+        }
+        Ok(None)
+    }
+    pub fn find_shard_by_prefix(&self, prefix: &AccountIdPrefixFull) -> Result<Option<McShardRecord>> {
+        if let Some(InRefValue(bintree)) = self.get(&prefix.workchain_id())? {
+            let shard_id = prefix.shard_key(false);
+            if let Some((key, descr)) = bintree.find(shard_id)? {
+                let shard = ShardIdent::with_prefix_slice(prefix.workchain_id(), key)?;
                 return Ok(Some(McShardRecord::from_shard_descr(shard, descr)))
             }
         }
