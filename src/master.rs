@@ -136,15 +136,16 @@ impl ShardHashes {
     }
     pub fn get_neighbours(&self, shard: &ShardIdent) -> Result<Vec<McShardRecord>> {
         let mut vec = Vec::new();
-        if let Some(InRefValue(bintree)) = self.get(&shard.workchain_id())? {
+        self.iterate_with_keys(|workchain_id: i32, InRefValue(bintree)| {
             bintree.iterate(|prefix, shard_descr| {
-                let shard_ident = ShardIdent::with_prefix_slice(shard.workchain_id(), prefix)?;
+                let shard_ident = ShardIdent::with_prefix_slice(workchain_id, prefix)?;
                 if shard.is_neighbor_for(&shard_ident) {
                     vec.push(McShardRecord::from_shard_descr(shard_ident, shard_descr));
                 }
                 Ok(true)
             })?;
-        }
+            Ok(true)
+        })?;
         Ok(vec)
     }
     pub fn get_new_shards(&self) -> Result<HashMap<ShardIdent, Vec<BlockIdExt>>> {
