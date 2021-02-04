@@ -872,7 +872,7 @@ macro_rules! define_HashmapE {
                 let mut other_tree = $varname(HashmapE::with_bit_len($bit_len));
                 self.iterate_with_keys(&mut |key : K, value| {
                     if op(&key, &value)? {
-                        other_tree.set(&key, &value).unwrap();
+                        other_tree.set(&key, &value)?;
                     };
                     return Ok(true);
                 })?;
@@ -961,9 +961,9 @@ impl Display for UnixTime32 {
 	}
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Eq)]
 pub struct ChildCell<T: Default + Serializable + Deserializable> {
-    cell: Cell,
+    cell: Option<Cell>,
     phantom: PhantomData<T>
 }
 
@@ -971,62 +971,78 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
 
     pub fn with_cell(cell: Cell) -> Self {
         Self {
-            cell,
+            cell: Some(cell),
             phantom: PhantomData
         }
     }
     pub fn with_struct(s: &T) -> Result<Self> {
         Ok(
             ChildCell {
-                cell: s.serialize()?,
+                cell: Some(s.serialize()?),
                 phantom: PhantomData
             }
         )
     }
 
     pub fn write_struct(&mut self, s: &T) -> Result<()> {
-        self.cell = s.serialize()?;
+        self.cell = Some(s.serialize()?);
         Ok(())
     }
 
     pub fn read_struct(&self) -> Result<T> {
-        if self.cell.cell_type() == CellType::PrunedBranch {
-            fail!(
-                BlockError::PrunedCellAccess(std::any::type_name::<T>().into())
-            )
+        match self.cell.clone() {
+            Some(cell) => {
+                if cell.cell_type() == CellType::PrunedBranch {
+                    fail!(
+                        BlockError::PrunedCellAccess(std::any::type_name::<T>().into())
+                    )
+                }
+                T::construct_from(&mut SliceData::from(cell.clone()))
+            }
+            None => Ok(T::default())
         }
-        T::construct_from(&mut SliceData::from(self.cell.clone()))
     }
 
     pub fn read_from_reference(&mut self, slice: &mut SliceData) -> Result<()> {
-        let cell = slice.checked_drain_reference()?;
-        // cell.data();
-        self.cell = cell;
+        self.cell = Some(slice.checked_drain_reference()?);
         Ok(())
     }
 
     pub fn construct_from_reference(slice: &mut SliceData) -> Result<Self> {
         let cell = slice.checked_drain_reference()?;
-        // cell.data();
         Ok(Self::with_cell(cell))
     }
 
-    pub fn cell(&self) -> &Cell {
-        &self.cell
+    pub fn cell(&self)-> Cell {
+        match self.cell.as_ref() {
+            Some(cell) => cell.clone(),
+            None => T::default().serialize().unwrap()
+        }
     }
 
     pub fn set_cell(&mut self, cell: Cell) {
-        self.cell = cell;
+        self.cell = Some(cell);
     }
 
     pub fn hash(&self) -> UInt256 {
-        self.cell.repr_hash()
+        match self.cell.as_ref() {
+            Some(cell) => cell.repr_hash(),
+            None => T::default().serialize().unwrap().repr_hash()
+        }
     }
 }
 
-impl<T: Default + Serializable + Deserializable + Clone> Default for ChildCell<T> {
-    fn default() -> Self { 
-        ChildCell::with_struct(&T::default()).unwrap()
+impl<T: Default + Serializable + Deserializable> PartialEq for ChildCell<T> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.cell == other.cell {
+            return true
+        }
+        match (self.cell.as_ref(), other.cell.as_ref()) {
+            (Some(cell), Some(other)) => cell.eq(other),
+            (None, Some(cell)) |
+            (Some(cell), None) => cell.eq(&T::default().serialize().unwrap()),
+            (None, None) => true
+        }
     }
 }
 
@@ -1037,19 +1053,10 @@ impl<T: Default + Serializable + Deserializable> Serializable for ChildCell<T> {
                 BlockError::InvalidArg("The `builder` must be empty".to_string())
             )
         }
-        *builder = BuilderData::from(&self.cell);
+        *builder = match self.cell.as_ref() {
+            Some(cell) => BuilderData::from(cell),
+            None => T::default().write_to_new_cell()?
+        };
         Ok(())
     }
 }
-
-// impl<T: Default + Clone + Serializable + Deserializable> Deserializable for ChildCell<T> {
-//     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-//         if !slice.is_full_cell_slice() {
-//             fail!(
-//                 BlockError::InvalidArg("The `slice` must have zero position".to_string())
-//             )
-//         }
-//         self.cell = slice.cell().clone();
-//         Ok(())
-//     }
-// }

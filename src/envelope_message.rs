@@ -439,7 +439,7 @@ impl MsgEnvelope {
     ///
     /// Read message cell from envelope
     ///
-    pub fn message_cell(&self) -> &Cell {
+    pub fn message_cell(&self)-> Cell {
         self.msg.cell()
     }
 

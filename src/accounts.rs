@@ -1038,7 +1038,7 @@ impl ShardAccount {
         &mut self.last_trans_lt
     }
 
-    pub fn account_cell(&self) -> &Cell {
+    pub fn account_cell(&self) -> Cell {
         self.account.cell()
     }
 

@@ -2363,7 +2363,7 @@ impl ConfigVotingSetup {
         self.normal_params.write_struct(value)
     }
 
-    pub fn normal_params_cell(&self) -> &Cell {
+    pub fn normal_params_cell(&self)-> Cell {
         self.normal_params.cell()
     }
 
@@ -2375,7 +2375,7 @@ impl ConfigVotingSetup {
         self.critical_params.write_struct(value)
     }
 
-    pub fn critical_params_cell(&self) -> &Cell {
+    pub fn critical_params_cell(&self)-> Cell {
         self.critical_params.cell()
     }
 }

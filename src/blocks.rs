@@ -380,7 +380,7 @@ impl BlockInfo {
     }
 
     pub fn after_merge(&self) -> bool { self.after_merge }
-    pub fn prev_ref_cell(&self) -> &Cell {
+    pub fn prev_ref_cell(&self)-> Cell {
         self.prev_ref.cell()
     }
     pub fn read_prev_ref(&self) -> Result<BlkPrevInfo> {
@@ -605,7 +605,7 @@ impl Block {
         self.info.write_struct(value)
     }
 
-    pub fn info_cell(&self) -> &Cell {
+    pub fn info_cell(&self)-> Cell {
         self.info.cell()
     }
 
@@ -617,7 +617,7 @@ impl Block {
         self.value_flow.write_struct(value)
     }
 
-    pub fn value_flow_cell(&self) -> &Cell {
+    pub fn value_flow_cell(&self)-> Cell {
         self.value_flow.cell()
     }
 
@@ -629,7 +629,7 @@ impl Block {
         self.state_update.write_struct(value)
     }
 
-    pub fn state_update_cell(&self) -> &Cell {
+    pub fn state_update_cell(&self)-> Cell {
         self.state_update.cell()
     }
 
@@ -641,7 +641,7 @@ impl Block {
         self.extra.write_struct(value)
     }
 
-    pub fn extra_cell(&self) -> &Cell {
+    pub fn extra_cell(&self)-> Cell {
         self.extra.cell()
     }
 
@@ -731,7 +731,7 @@ impl BlockExtra {
         self.in_msg_descr.write_struct(value)
     }
 
-    pub fn in_msg_descr_cell(&self) -> &Cell {
+    pub fn in_msg_descr_cell(&self)-> Cell {
         self.in_msg_descr.cell()
     }
 
@@ -743,7 +743,7 @@ impl BlockExtra {
         self.out_msg_descr.write_struct(value)
     }
 
-    pub fn out_msg_descr_cell(&self) -> &Cell {
+    pub fn out_msg_descr_cell(&self)-> Cell {
         self.out_msg_descr.cell()
     }
 
@@ -755,7 +755,7 @@ impl BlockExtra {
         self.account_blocks.write_struct(value)
     }
 
-    pub fn account_blocks_cell(&self) -> &Cell {
+    pub fn account_blocks_cell(&self)-> Cell {
         self.account_blocks.cell()
     }
 
@@ -792,7 +792,7 @@ impl BlockExtra {
         Ok(())
     }
 
-    pub fn custom_cell(&self) -> Option<&Cell> {
+    pub fn custom_cell(&self) -> Option<Cell> {
         self.custom.as_ref().map(|c| c.cell())
     }
 

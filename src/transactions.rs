@@ -1410,7 +1410,7 @@ impl Transaction {
         Ok(())
     }
 
-    pub fn in_msg_cell(&self) -> Option<&Cell> {
+    pub fn in_msg_cell(&self) -> Option<Cell> {
         self.in_msg.as_ref().map(|c| c.cell())
     }
 
@@ -1450,7 +1450,7 @@ impl Transaction {
         self.state_update.write_struct(value)
     }
 
-    pub fn state_update_cell(&self) -> &Cell {
+    pub fn state_update_cell(&self)-> Cell {
         self.state_update.cell()
     }
 
@@ -1462,7 +1462,7 @@ impl Transaction {
         self.description.write_struct(value)
     }
 
-    pub fn description_cell(&self) -> &Cell {
+    pub fn description_cell(&self)-> Cell {
         self.description.cell()
     }
 

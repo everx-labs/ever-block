@@ -244,7 +244,7 @@ pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: 
     Ok(())
 }
 
-fn check_transaction_id(given_id: Option<UInt256>, tr_cell: Option<&Cell>) -> Result<()> {
+fn check_transaction_id(given_id: Option<UInt256>, tr_cell: Option<Cell>) -> Result<()> {
     let existing_id = tr_cell.map(|c| c.repr_hash());
     match (given_id, existing_id) {
         (None, Some(_)) => {
