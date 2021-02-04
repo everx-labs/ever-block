@@ -89,7 +89,7 @@ impl EnqueuedMsg {
         self.enqueued_lt
     }
 
-    pub fn out_msg_cell(&self) -> &Cell {
+    pub fn out_msg_cell(&self)-> Cell {
         self.out_msg.cell()
     }
 
@@ -461,7 +461,7 @@ impl OutMsg {
     ///
     /// the function returns the message envelop (if exists)
     ///
-    pub fn out_message_cell(&self) -> Option<&Cell> {
+    pub fn out_message_cell(&self) -> Option<Cell> {
         match self {
             OutMsg::External(_) => None,
             OutMsg::Immediately(ref x) => Some(x.out_message_cell()),
@@ -549,7 +549,7 @@ impl OutMsg {
         }
     }
 
-    pub fn transaction_cell(&self) -> Option<&Cell> {
+    pub fn transaction_cell(&self) -> Option<Cell> {
         match self {
             OutMsg::External(ref x) => Some(x.transaction_cell()),
             OutMsg::Immediately(ref x) => Some(x.transaction_cell()),
@@ -577,7 +577,7 @@ impl OutMsg {
         }
     }
 
-    pub fn reimport_cell(&self) -> Option<&Cell> {
+    pub fn reimport_cell(&self) -> Option<Cell> {
         match self {
             OutMsg::Immediately(ref x) => Some(x.reimport_message_cell()),
             OutMsg::Transit(ref x) => Some(x.imported_cell()),
@@ -730,7 +730,7 @@ impl OutMsgExternal {
         self.msg.read_struct()
     }
 
-    pub fn message_cell(&self) -> &Cell {
+    pub fn message_cell(&self)-> Cell {
         self.msg.cell()
     }
 
@@ -738,7 +738,7 @@ impl OutMsgExternal {
         self.transaction.read_struct()
     }
 
-    pub fn transaction_cell(&self) -> &Cell {
+    pub fn transaction_cell(&self)-> Cell {
         self.transaction.cell()
     }
 }
@@ -785,7 +785,7 @@ impl OutMsgImmediately {
         self.out_msg.read_struct()
     }
 
-    pub fn out_message_cell(&self) -> &Cell {
+    pub fn out_message_cell(&self)-> Cell {
         self.out_msg.cell()
     }
 
@@ -793,7 +793,7 @@ impl OutMsgImmediately {
         self.transaction.read_struct()
     }
 
-    pub fn transaction_cell(&self) -> &Cell {
+    pub fn transaction_cell(&self)-> Cell {
         self.transaction.cell()
     }
 
@@ -801,7 +801,7 @@ impl OutMsgImmediately {
         self.reimport.read_struct()
     }
 
-    pub fn reimport_message_cell(&self) -> &Cell {
+    pub fn reimport_message_cell(&self)-> Cell {
         self.reimport.cell()
     }
 }
@@ -848,7 +848,7 @@ impl OutMsgNew {
         self.out_msg.read_struct()
     }
 
-    pub fn out_message_cell(&self) -> &Cell {
+    pub fn out_message_cell(&self)-> Cell {
         self.out_msg.cell()
     }
 
@@ -856,7 +856,7 @@ impl OutMsgNew {
         self.transaction.read_struct()
     }
 
-    pub fn transaction_cell(&self) -> &Cell {
+    pub fn transaction_cell(&self)-> Cell {
         self.transaction.cell()
     }
 }
@@ -901,7 +901,7 @@ impl OutMsgTransit {
         self.out_msg.read_struct()
     }
 
-    pub fn out_message_cell(&self) -> &Cell {
+    pub fn out_message_cell(&self)-> Cell {
         self.out_msg.cell()
     }
 
@@ -909,7 +909,7 @@ impl OutMsgTransit {
         self.imported.read_struct()
     }
 
-    pub fn imported_cell(&self) -> &Cell {
+    pub fn imported_cell(&self)-> Cell {
         self.imported.cell()
     }
 }
@@ -954,7 +954,7 @@ impl OutMsgDequeueImmediately {
         self.out_msg.read_struct()
     }
 
-    pub fn out_message_cell(&self) -> &Cell {
+    pub fn out_message_cell(&self)-> Cell {
         self.out_msg.cell()
     }
 
@@ -962,7 +962,7 @@ impl OutMsgDequeueImmediately {
         self.reimport.read_struct()
     }
 
-    pub fn reimport_message_cell(&self) -> &Cell {
+    pub fn reimport_message_cell(&self)-> Cell {
         self.reimport.cell()
     }
 }
@@ -1010,7 +1010,7 @@ impl OutMsgDequeue {
         self.out_msg.read_struct()
     }
 
-    pub fn out_message_cell(&self) -> &Cell {
+    pub fn out_message_cell(&self)-> Cell {
         self.out_msg.cell()
     }
 
@@ -1099,7 +1099,7 @@ impl OutMsgTransitRequeued {
         self.out_msg.read_struct()
     }
 
-    pub fn out_message_cell(&self) -> &Cell {
+    pub fn out_message_cell(&self)-> Cell {
         self.out_msg.cell()
     }
 
@@ -1107,7 +1107,7 @@ impl OutMsgTransitRequeued {
         self.imported.read_struct()
     }
 
-    pub fn imported_cell(&self) -> &Cell {
+    pub fn imported_cell(&self)-> Cell {
         self.imported.cell()
     }
 }

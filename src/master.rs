@@ -440,7 +440,7 @@ impl McBlockExtra {
         self.recover_create_msg = value.map(|v| ChildCell::with_struct(v)).transpose()?;
         Ok(())
     }
-    pub fn recover_create_msg_cell(&self) -> Option<&Cell> {
+    pub fn recover_create_msg_cell(&self) -> Option<Cell> {
         self.recover_create_msg.as_ref().map(|mr| mr.cell())
     }
 
@@ -451,7 +451,7 @@ impl McBlockExtra {
         self.mint_msg = value.map(|v| ChildCell::with_struct(v)).transpose()?;
         Ok(())
     }
-    pub fn mint_msg_cell(&self) -> Option<&Cell> {
+    pub fn mint_msg_cell(&self) -> Option<Cell> {
         self.mint_msg.as_ref().map(|mr| mr.cell())
     }
 }

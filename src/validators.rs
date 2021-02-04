@@ -188,6 +188,7 @@ impl ValidatorDescr {
         }
     }
 
+    // TODO: to be deleted
     pub fn compute_node_id_short(&self) -> UInt256 {
         let mut hasher = Sha256::new();
         let magic = [0xc6, 0xb4, 0x13, 0x48]; // magic 0x4813b4c6 from original node's code

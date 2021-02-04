@@ -209,7 +209,7 @@ impl InMsg {
     /// Transaction exist only in External, IHR, Immediatlly and Final inbound messages.
     /// For other messages function returned None
     ///
-    pub fn transaction_cell(&self) -> Option<&Cell> {
+    pub fn transaction_cell(&self) -> Option<Cell> {
         match self {
             InMsg::External(ref x) => Some(x.transaction_cell()),
             InMsg::IHR(ref x) => Some(x.transaction_cell()),
@@ -261,7 +261,7 @@ impl InMsg {
     ///
     /// Get in envelope message cell
     ///
-    pub fn in_msg_envelope_cell(&self) -> Option<&Cell> {
+    pub fn in_msg_envelope_cell(&self) -> Option<Cell> {
         match self {
             InMsg::External(_) => None,
             InMsg::IHR(_) => None,
@@ -293,7 +293,7 @@ impl InMsg {
     ///
     /// Get out envelope message cell
     ///
-    pub fn out_msg_envelope_cell(&self) -> Option<&Cell> {
+    pub fn out_msg_envelope_cell(&self) -> Option<Cell> {
         match self {
             InMsg::External(_) => None,
             InMsg::IHR(_) => None,
@@ -448,7 +448,7 @@ impl InMsgExternal {
         self.msg.read_struct()
     }
 
-    pub fn message_cell(&self) -> &Cell {
+    pub fn message_cell(&self)-> Cell {
         self.msg.cell()
     }
 
@@ -456,7 +456,7 @@ impl InMsgExternal {
         self.transaction.read_struct()
     }
 
-    pub fn transaction_cell(&self) -> &Cell {
+    pub fn transaction_cell(&self)-> Cell {
         self.transaction.cell()
     }
 }
@@ -507,7 +507,7 @@ impl InMsgIHR {
         self.msg.read_struct()
     }
 
-    pub fn message_cell(&self) -> &Cell {
+    pub fn message_cell(&self)-> Cell {
         self.msg.cell()
     }
 
@@ -515,7 +515,7 @@ impl InMsgIHR {
         self.transaction.read_struct()
     }
 
-    pub fn transaction_cell(&self) -> &Cell {
+    pub fn transaction_cell(&self)-> Cell {
         self.transaction.cell()
     }
 
@@ -523,7 +523,7 @@ impl InMsgIHR {
         &self.ihr_fee
     }
 
-    pub fn proof_created(&self) -> &Cell {
+    pub fn proof_created(&self)-> &Cell {
         &self.proof_created
     }
 }
@@ -571,7 +571,7 @@ impl InMsgFinal {
         self.in_msg.read_struct()
     }
 
-    pub fn message_cell(&self) -> &Cell {
+    pub fn message_cell(&self)-> Cell {
         self.in_msg.cell()
     }
 
@@ -579,7 +579,7 @@ impl InMsgFinal {
         self.transaction.read_struct()
     }
 
-    pub fn transaction_cell(&self) -> &Cell {
+    pub fn transaction_cell(&self)-> Cell {
         self.transaction.cell()
     }
 
@@ -628,7 +628,7 @@ impl InMsgTransit {
         self.in_msg.read_struct()
     }
 
-    pub fn in_message_cell(&self) -> &Cell {
+    pub fn in_message_cell(&self)-> Cell {
         self.in_msg.cell()
     }
 
@@ -636,7 +636,7 @@ impl InMsgTransit {
         self.out_msg.read_struct()
     }
 
-    pub fn out_message_cell(&self) -> &Cell {
+    pub fn out_message_cell(&self)-> Cell {
         self.out_msg.cell()
     }
 
@@ -685,7 +685,7 @@ impl InMsgDiscardedFinal {
         self.in_msg.read_struct()
     }
 
-    pub fn message_cell(&self) -> &Cell {
+    pub fn message_cell(&self)-> Cell {
         self.in_msg.cell()
     }
 
@@ -741,7 +741,7 @@ impl InMsgDiscardedTransit {
         self.in_msg.read_struct()
     }
 
-    pub fn message_cell(&self) -> &Cell {
+    pub fn message_cell(&self)-> Cell {
         self.in_msg.cell()
     }
 
@@ -753,7 +753,7 @@ impl InMsgDiscardedTransit {
         &self.fwd_fee
     }
 
-    pub fn proof_delivered(&self) -> &Cell {
+    pub fn proof_delivered(&self)-> &Cell {
         &self.proof_delivered
     }
 }

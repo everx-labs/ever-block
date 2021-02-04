@@ -68,15 +68,15 @@ macro_rules! define_HashmapAugE {
                 }).unwrap();
             }
             /// Constructs new HashmapAugE for bit_len keys
-            pub fn with_bit_len(bit_len: usize) -> Self {
+            pub fn new() -> Self {
                 Self {
                     extra: Default::default(),
-                    bit_len,
+                    bit_len: $bit_len,
                     data: None,
                 }
             }
             /// Deserialization from SliceData - just clone and set window
-            pub fn with_data(bit_len: usize, slice: &mut SliceData) -> Result<Self> {
+            pub fn with_data(slice: &mut SliceData) -> Result<Self> {
                 let data = match slice.get_next_bit()? {
                     true => Some(slice.checked_drain_reference()?),
                     false => None
@@ -84,26 +84,26 @@ macro_rules! define_HashmapAugE {
                 let extra = <$y_type>::construct_from(slice)?;
                 Ok(Self {
                     extra,
-                    bit_len,
+                    bit_len: $bit_len,
                     data
                 })
             }
             /// Constructs from cell, extracts total aug
-            pub fn with_hashmap(bit_len: usize, data: Option<Cell>) -> Result<Self> {
+            pub fn with_hashmap(data: Option<Cell>) -> Result<Self> {
                 let extra = match data {
-                    Some(ref root) => Self::find_extra(&mut root.into(), bit_len)?,
+                    Some(ref root) => Self::find_extra(&mut root.into(), $bit_len)?,
                     None => Default::default()
                 };
                 Ok(Self {
                     extra,
-                    bit_len,
+                    bit_len: $bit_len,
                     data,
                 })
             }
             /// split map by key
             pub fn split(&self, key: &SliceData) -> Result<(Self, Self)> {
                 let (left, right) = self.hashmap_split(key)?;
-                Ok((Self::with_hashmap(self.bit_len(), left)?, Self::with_hashmap(self.bit_len(), right)?))
+                Ok((Self::with_hashmap(left)?, Self::with_hashmap(right)?))
             }
             /// merge maps
             pub fn merge(&mut self, other: &Self, key: &SliceData) -> Result<()> {
@@ -224,7 +224,7 @@ macro_rules! define_HashmapAugE {
 
         impl Deserializable for $varname {
             fn read_from(&mut self, slice: &mut SliceData) -> Result<()>{
-                *self = $varname::with_data($bit_len, slice)?;
+                *self = $varname::with_data(slice)?;
                 Ok(())
             }
         }
@@ -260,6 +260,11 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         let aug = Y::construct_from(slice)?;
         let val = X::construct_from(slice)?;
         Ok((aug, val))
+    }
+    fn key_value_aug(key: BuilderData, mut slice: SliceData) -> Result<(K, X, Y)> {
+        let key = K::construct_from(&mut key.into())?;
+        let (val, aug) = Self::value_aug(&mut slice)?;
+        Ok((key, val, aug))
     }
     fn get_serialized_raw(&self, key: SliceData) -> Leaf {
         self.hashmap_get(key, &mut 0)
@@ -400,7 +405,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
             cell.checked_append_references_and_data(&SliceData::from(root))?;
             Ok(())
         } else {
-            fail!(BlockError::InvalidData("no reference".to_string()))
+            fail!("no reference in HashmapAug with bit len {}", self.bit_len())
         }
     }
     /// deserialize not empty root

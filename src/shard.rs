@@ -883,7 +883,7 @@ impl ShardStateUnsplit {
         self.min_ref_mc_seqno = value
     }
 
-    pub fn out_msg_queue_info_cell(&self) -> &Cell {
+    pub fn out_msg_queue_info_cell(&self)-> Cell {
         self.out_msg_queue_info.cell()
     }
 
@@ -978,7 +978,7 @@ impl ShardStateUnsplit {
         &mut self.master_ref
     }
 
-    pub fn custom_cell(&self) -> Option<&Cell> {
+    pub fn custom_cell(&self) -> Option<Cell> {
         self.custom.as_ref().map(|c| c.cell())
     }
 
