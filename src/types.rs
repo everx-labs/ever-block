@@ -202,6 +202,13 @@ macro_rules! define_VarIntegerN {
         #[derive( Eq, Hash, Clone, Debug, Default, Ord, PartialEq, PartialOrd)]
         pub struct $varname(pub $tt);
 
+        impl $varname {
+            pub const fn default() -> Self { Self::new() }
+            pub const fn new() -> Self {
+                $varname(0)
+            }
+        }
+
         impl Serializable for $varname {
             fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
                 let bits = 8 - ($N as u8).leading_zeros();
@@ -270,29 +277,28 @@ impl AddSub for Grams {
 }
 
 impl Grams {
-    pub fn shr(mut self, shr: u8) -> Self {
+    pub const fn shr(mut self, shr: u8) -> Self {
         self.0 >>= shr as usize;
         self
     }
 
-    // to be deleted
     pub fn value(&self) -> BigInt {
-        BigInt::from(self.0 as i128)
+        BigInt::from(self.0)
     }
 
-    pub fn zero() -> Self {
+    pub const fn zero() -> Self {
         Self(0)
     }
 
-    pub fn one() -> Self {
+    pub const fn one() -> Self {
         Self(1)
     }
 
-    pub fn sgn(&self) -> bool {
+    pub const fn sgn(&self) -> bool {
         false
     }
 
-    pub fn is_zero(&self) -> bool {
+    pub const fn is_zero(&self) -> bool {
         self.0 == 0
     }
 }
@@ -450,8 +456,9 @@ impl Augmentable for CurrencyCollection {
 }
 
 impl CurrencyCollection {
-    pub fn new() -> Self {
-        Self::from_grams(Default::default())
+    pub const fn default() -> Self { Self::new() }
+    pub const fn new() -> Self {
+        Self::from_grams(Grams::default())
     }
 
     pub fn get_other(&self, key: u32) -> Result<Option<VarUInteger32>> {
@@ -476,10 +483,10 @@ impl CurrencyCollection {
         Self::from_grams(Grams(grams.into()))
     }
 
-    pub fn from_grams(grams: Grams) -> Self {
+    pub const fn from_grams(grams: Grams) -> Self {
         CurrencyCollection {
             grams,
-            other: Default::default()
+            other: ExtraCurrencyCollection::default()
         }
     }
 
@@ -717,7 +724,7 @@ impl<X: Default + Deserializable + Serializable> Deserializable for InRefValue<X
 
 impl<X: Default + Deserializable + Serializable> Serializable for InRefValue<X> {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference(self.0.write_to_new_cell()?);
+        cell.checked_append_reference(self.0.serialize()?)?;
         Ok(())
     }
 }
@@ -743,8 +750,14 @@ macro_rules! define_HashmapE {
 
         #[allow(dead_code)]
         impl $varname {
+            /// default const constructor
+            pub const fn default() -> Self { Self::new() }
+            /// default const constructor
+            pub const fn new() -> Self {
+                Self(HashmapE::with_hashmap($bit_len, None))
+            }
             /// constructor with HashmapE root
-            pub fn with_hashmap(data: Option<Cell>) -> Self {
+            pub const fn with_hashmap(data: Option<Cell>) -> Self {
                 Self(HashmapE::with_hashmap($bit_len, data))
             }
             pub fn root(&self) -> Option<&Cell> {
@@ -823,12 +836,14 @@ macro_rules! define_HashmapE {
                 Ok(())
             }
             pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {
-                let key = key.write_to_new_cell()?.into();
-                self.0.get(key)?
+                self.get_as_slice(key)?
                     .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             }
             pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
                 let key = key.write_to_new_cell()?.into();
+                self.get_raw(key)
+            }
+            pub fn get_raw(&self, key: SliceData) -> Result<Option<SliceData>> {
                 self.0.get(key)
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {
@@ -932,6 +947,10 @@ macro_rules! define_HashmapE {
 pub struct UnixTime32(pub u32);
 
 impl UnixTime32 {
+    pub const fn default() -> Self { Self::new() }
+    pub const fn new() -> Self {
+        Self(0)
+    }
     pub fn now() -> Self {
         UnixTime32 { 0: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as u32 }
     }
@@ -968,6 +987,12 @@ pub struct ChildCell<T: Default + Serializable + Deserializable> {
 }
 
 impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
+    pub fn default() -> Self {
+        Self {
+            cell: None,
+            phantom: PhantomData
+        }
+    }
 
     pub fn with_cell(cell: Cell) -> Self {
         Self {
