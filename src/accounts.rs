@@ -21,10 +21,9 @@ use crate::{
     shard_accounts::DepthBalanceInfo,
     GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
 };
-use std::fmt;
+use std::{collections::HashSet, fmt};
 use ton_types::{
     error, fail, Result,
-    BagOfCells,
     UInt256, AccountId, BuilderData, Cell, IBitstring, SliceData, UsageTree,
 };
 
@@ -81,11 +80,16 @@ pub struct StorageUsed {
 }
 
 impl StorageUsed {
-    pub fn new() -> Self {
-        Default::default()
+    pub const fn default() -> Self { Self::new() }
+    pub const fn new() -> Self {
+        Self {
+            cells: VarUInteger7::default(),
+            bits: VarUInteger7::default(),
+            public_cells: VarUInteger7::default(),
+        }
     }
 
-    pub fn with_values(cells: u64, bits: u64, public_cells: u64) -> Self {
+    pub const fn with_values(cells: u64, bits: u64, public_cells: u64) -> Self {
         StorageUsed {
             cells: VarUInteger7(cells),
             bits: VarUInteger7(bits),
@@ -95,22 +99,19 @@ impl StorageUsed {
 
     pub fn calculate_for_struct<T: Serializable>(value: &T) -> Result<StorageUsed> {
         let root_cell = value.serialize()?;
-        Ok(Self::calculate_for_cell(&root_cell))
+        let mut used = Self::default();
+        used.calculate_for_cell(&mut HashSet::new(), &root_cell);
+        Ok(used)
     }
 
-    pub fn calculate_for_cell(root_cell: &Cell) -> StorageUsed {
-
-        let boc = BagOfCells::with_root(root_cell);
-        let mut cells: u64 = 0;
-        let mut bits: u64 = 0;
-        let mut _public_cells: u64 = 0; // TODO
-
-        for (_, cell) in boc.cells().iter() {
-            cells += 1;
-            bits += cell.bit_length() as u64;
+    fn calculate_for_cell(&mut self, hashes: &mut HashSet<UInt256>, cell: &Cell) {
+        if hashes.insert(cell.repr_hash()) {
+            self.cells.0 += 1;
+            self.bits.0 += cell.bit_length() as u64;
+            for i in 0..cell.references_count() {
+                self.calculate_for_cell(hashes, &cell.reference(i).unwrap())
+            }
         }
-
-        StorageUsed::with_values(cells, bits, _public_cells)
     }
 }
 
@@ -158,8 +159,12 @@ pub struct StorageUsedShort {
 }
 
 impl StorageUsedShort {
-    pub fn new() -> Self {
-        Default::default()
+    pub const fn default() -> Self { Self::new() }
+    pub const fn new() -> Self {
+        Self {
+            cells: VarUInteger7::default(),
+            bits: VarUInteger7::default(),
+        }
     }
 
     pub fn with_values(cells: u64, bits: u64) -> Self {
@@ -171,28 +176,24 @@ impl StorageUsedShort {
 
     pub fn calculate_for_struct<T: Serializable>(value: &T) -> Result<StorageUsedShort> {
         let root_cell = value.serialize()?;
-        Ok(Self::calculate_for_cell(&root_cell))
+        let mut used = Self::default();
+        used.calculate_for_cell(&mut HashSet::new(), &root_cell);
+        Ok(used)
     }
 
-    pub fn calculate_for_cell(root_cell: &Cell) -> StorageUsedShort {
-
-        let boc = BagOfCells::with_root(root_cell);
-        let mut cells: u64 = 0;
-        let mut bits: u64 = 0;
-
-        for (_, cell) in boc.cells().iter() {
-            cells += 1;
-            bits += cell.bit_length() as u64;
+    fn calculate_for_cell(&mut self, hashes: &mut HashSet<UInt256>, cell: &Cell) {
+        if hashes.insert(cell.repr_hash()) {
+            self.cells.0 += 1;
+            self.bits.0 += cell.bit_length() as u64;
+            for i in 0..cell.references_count() {
+                self.calculate_for_cell(hashes, &cell.reference(i).unwrap())
+            }
         }
-
-        StorageUsedShort::with_values(cells, bits)
     }
 
     /// append cell and bits count into
     pub fn append(&mut self, root_cell: &Cell) {
-        let addition = Self::calculate_for_cell(root_cell);
-        self.cells.0 += addition.cells.0;
-        self.bits.0 += addition.bits.0;
+        Self::calculate_for_cell(self, &mut HashSet::new(), root_cell);
     }
 }
 
@@ -236,7 +237,16 @@ pub struct StorageInfo {
 }
 
 impl StorageInfo {
-    pub fn with_values(last_paid: u32, due_payment: Option<Grams>) -> Self {
+    pub const fn default() -> Self { Self::new() }
+    pub const fn new() -> Self {
+        StorageInfo {
+            used: StorageUsed::default(),
+            last_paid: 0,
+            due_payment: None,
+        }
+    }
+
+    pub const fn with_values(last_paid: u32, due_payment: Option<Grams>) -> Self {
         StorageInfo {
             used: StorageUsed::default(),
             last_paid,
@@ -344,7 +354,7 @@ pub struct AccountStorage {
 }
 
 impl AccountStorage {
-    pub fn with_balance(balance: CurrencyCollection) -> Self {
+    pub const fn with_balance(balance: CurrencyCollection) -> Self {
         AccountStorage {
             last_trans_lt: 0,
             balance,
@@ -480,6 +490,16 @@ pub struct AccountStuff {
     pub storage: AccountStorage,
 }
 
+impl AccountStuff {
+    pub fn default() -> Self {
+        Self {
+            addr: MsgAddressInt::default(),
+            storage_stat: StorageInfo::default(),
+            storage: AccountStorage::default(),
+        }
+    }
+}
+
 impl Serializable for AccountStuff {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         let mut storage_stat = self.storage_stat.clone();
@@ -510,14 +530,15 @@ pub enum Account {
 
 impl PartialEq for Account {
     fn eq(&self, other: &Account) -> bool {
-        if let Some(stuff1) = self.stuff() {
-            if let Some(stuff2) = other.stuff() {
-                return stuff1.addr == stuff2.addr
+        match (self.stuff(), other.stuff()) {
+            (Some(stuff1), Some(stuff2)) => {
+                stuff1.addr == stuff2.addr
                     && stuff1.storage_stat == stuff2.storage_stat
-                    && stuff1.storage == stuff2.storage;
+                    && stuff1.storage == stuff2.storage
             }
+            (None, None) => true,
+            _ => false
         }
-        self.is_none() && other.is_none()
     }
 }
 
@@ -527,12 +548,16 @@ impl Account {
     ///
     /// Create new empty instance of account
     ///
-    pub fn new() -> Self {
+    pub const fn default() -> Self { Self::new() }
+    ///
+    /// Create new empty instance of account
+    ///
+    pub const fn new() -> Self {
         Account::AccountNone
     }
 
     ///
-    /// create unintialize account, only with address and balance
+    /// create unintialized account, only with address and balance
     ///
     pub fn with_address_and_ballance(addr: &MsgAddressInt, balance: &CurrencyCollection) -> Self {
         Account::Account(AccountStuff {
@@ -545,11 +570,11 @@ impl Account {
     ///
     /// Create unintialize account with zero balance
     ///
-    pub fn with_address(addr: &MsgAddressInt) -> Self {
+    pub const fn with_address(addr: MsgAddressInt) -> Self {
         Account::Account(AccountStuff {
-            addr: addr.clone(),
+            addr,
             storage_stat: StorageInfo::default(),
-            storage: AccountStorage::with_balance(Default::default()),
+            storage: AccountStorage::with_balance(CurrencyCollection::default()),
         })
     }
 
@@ -585,13 +610,13 @@ impl Account {
         if let Some(stuff) = self.stuff_mut() {
             if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
                 stuff.storage.state = AccountState::AccountFrozen(state_init.hash()?)
-            };
+            }
         }
         Ok(())
     }
     /// obsolete - use try_freeze
     pub fn freeze_account(&mut self) { self.try_freeze().unwrap() }
-    /// create freeze account - for test purposes
+    /// create frozen account - for test purposes
     pub fn frozen(
         addr: MsgAddressInt,
         last_trans_lt: u64,
@@ -692,7 +717,7 @@ impl Account {
     /// getting statistic using storage for calculate storage/transfer fee
     pub fn get_storage_stat(&self) -> Result<StorageUsed> {
         if let Some(stuff) = self.stuff() {
-            Ok(StorageUsed::calculate_for_struct(&stuff.storage)?)
+            StorageUsed::calculate_for_struct(&stuff.storage)
         } else {
             Ok(StorageUsed::new())
         }
@@ -701,7 +726,7 @@ impl Account {
     /// getting statistic using storage short for calculate storage/transfer fee
     pub fn get_storage_stat_short(&self) -> Result<StorageUsedShort> {
         if let Some(stuff) = self.stuff() {
-            Ok(StorageUsedShort::calculate_for_struct(&stuff.storage)?)
+            StorageUsedShort::calculate_for_struct(&stuff.storage)
         } else {
             Ok(StorageUsedShort::new())
         }
@@ -715,6 +740,7 @@ impl Account {
     pub fn get_addr(&self) -> Option<&MsgAddressInt> {
         self.stuff().map(|s| &s.addr)
     }
+
     /// Get copy of account's AccountState.
     /// Return None if account is empty (AccountNone)
     pub fn state(&self) -> Option<&AccountState> {
@@ -865,10 +891,20 @@ impl Account {
             stuff.storage_stat.last_paid = last_paid;
         }
     }
+    /// getting due payment
+    pub fn due_payment(&self) -> Option<&Grams> {
+        self.stuff().and_then(|s| s.storage_stat.due_payment.as_ref())
+    }
+    /// setting due payment
+    pub fn set_due_payment(&mut self, due_payment: Option<Grams>) {
+        self.stuff_mut().map(|s| s.storage_stat.due_payment = due_payment);
+    }
+
     /// getting balance of the account
     pub fn balance(&self) -> Option<&CurrencyCollection> {
         self.stuff().map(|s| &s.storage.balance)
     }
+
     /// deprecated: getting balance of the account
     pub fn get_balance(&self) -> Option<&CurrencyCollection> { self.balance() }
 
@@ -898,7 +934,7 @@ impl Account {
         self.state_init().and_then(|s| s.split_depth.clone())
     }
 
-    pub fn last_tr_time(&mut self) -> Option<u64> {
+    pub fn last_tr_time(&self) -> Option<u64> {
         self.stuff().map(|stuff| stuff.storage.last_trans_lt)
     }
 
@@ -951,7 +987,7 @@ impl Augmentation<DepthBalanceInfo> for Account {
 
 impl Default for Account {
     fn default() -> Self {
-        Account::AccountNone
+        Account::default()
     }
 }
 
@@ -1098,7 +1134,7 @@ pub fn generate_test_account() -> Account {
     let library = SliceData::new(vec![0b00111111, 0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11110100]);
     stinit.set_library_code(library.into_cell(), true).unwrap();
 
-    let mut balance = CurrencyCollection::new();
+    let mut balance = CurrencyCollection::default();
     balance.grams = Grams(100000000000u64.into());
     balance.set_other(1, 100).unwrap();
     balance.set_other(2, 200).unwrap();

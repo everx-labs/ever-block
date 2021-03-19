@@ -165,7 +165,7 @@ impl HashmapRemover for OutMsgQueue {}
 impl HashmapSubtree for OutMsgQueue {}
 // impl HashmapAugRemover<OutMsgQueueKey, EnqueuedMsg, MsgTime> for OutMsgQueue {}
 
-type MsgTime = u64;
+pub type MsgTime = u64;
 
 impl Augmentable for MsgTime {
     fn calc(&mut self, other: &Self) -> Result<()> {
