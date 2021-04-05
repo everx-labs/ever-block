@@ -78,9 +78,8 @@ impl ConfigParams {
 
         let mut value = BuilderData::new();
         let index = config.write_to_cell(&mut value)?;
-        let mut key = BuilderData::default();
-        key.append_u32(index).unwrap();
-        self.config_params.set(key.into(), &value.into())?;
+        let key = index.write_to_new_cell()?;
+        self.config_params.set_builder(key.into(), &value)?;
         Ok(())
     }
 

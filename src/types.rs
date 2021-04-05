@@ -820,8 +820,8 @@ macro_rules! define_HashmapE {
             }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
-                let value = value.write_to_new_cell()?.into();
-                self.0.set(key, &value)?;
+                let value = value.write_to_new_cell()?;
+                self.0.set_builder(key, &value)?;
                 Ok(())
             }
             pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell) -> Result<()> {
@@ -831,8 +831,8 @@ macro_rules! define_HashmapE {
             }
             pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
                 let key = key.write_to_new_cell()?.into();
-                let value = SliceData::new_empty();
-                self.0.set(key, &value)?;
+                let value = BuilderData::default();
+                self.0.set_builder(key, &value)?;
                 Ok(())
             }
             pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {

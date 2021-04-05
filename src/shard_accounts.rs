@@ -41,7 +41,7 @@ impl ShardAccounts {
             Some(acc_id) => {
                 let depth_balance_info = DepthBalanceInfo::new(split_depth, account.get_balance().unwrap())?;
                 let sh_account = ShardAccount::with_params(account, last_trans_hash, last_trans_lt)?;
-                self.set_serialized(acc_id.clone(), &sh_account.write_to_new_cell()?.into(), &depth_balance_info).unwrap();
+                self.set_builder_serialized(acc_id.clone(), &sh_account.write_to_new_cell()?, &depth_balance_info).unwrap();
                 Ok(Some(acc_id))
             }
             _ => Ok(None)

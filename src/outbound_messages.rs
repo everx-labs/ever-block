@@ -144,7 +144,7 @@ impl OutMsgDescr {
     /// insert or replace existion record
     /// use to improve speed
     pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, exported: &CurrencyCollection ) -> Result<()> {
-        if self.set_serialized(key.clone(), msg_slice, exported).is_ok() {
+        if self.set_builder_serialized(key.clone(), &BuilderData::from_slice(msg_slice), exported).is_ok() {
             Ok(())
         } else {
             fail!(BlockError::Other("Error insert serialized message".to_string()))
