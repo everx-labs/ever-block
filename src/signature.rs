@@ -311,7 +311,7 @@ impl BlockSignaturesPure {
     pub fn add_sigpair(&mut self, signature: CryptoSignaturePair) {
         self.sig_count += 1;
         let key = (self.sig_count as u16).write_to_new_cell().unwrap();
-        self.signatures.set(key.into(), &signature.write_to_new_cell().unwrap().into()).unwrap();
+        self.signatures.set_builder(key.into(), &signature.write_to_new_cell().unwrap()).unwrap();
     }
 
     pub fn signatures(&self) -> &HashmapE {

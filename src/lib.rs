@@ -96,7 +96,7 @@ where
         let mut dictionary = HashmapE::with_bit_len(bit_len);
         for (key, value) in self.iter() {
             let key = key.write_to_new_cell()?;
-            dictionary.set(key.into(), &value.write_to_new_cell()?.into())?;
+            dictionary.set_builder(key.into(), &value.write_to_new_cell()?)?;
         }
         dictionary.write_to(cell)
     }

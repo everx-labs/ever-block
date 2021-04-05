@@ -1844,9 +1844,9 @@ impl ShardAccountBlocks {
     /// insert new AccountBlock or replace existing
     // TODO: will be removed when acc_id as slice and set as type
     pub fn insert(&mut self, account_block: &AccountBlock) -> Result<()> {
-        self.set_serialized(
+        self.set_builder_serialized(
             account_block.account_addr.clone(),
-            &account_block.write_to_new_cell()?.into(),
+            &account_block.write_to_new_cell()?,
             &account_block.total_fee()
         ).map(|_|())
     }
@@ -1877,7 +1877,7 @@ impl ShardAccountBlocks {
         };
         // append transaction to AccountBlock
         account_block.add_serialized_transaction(transaction, transaction_cell)?;
-        self.set_serialized(account_id.clone(), &account_block.write_to_new_cell()?.into(), &transaction.total_fees())?;
+        self.set_builder_serialized(account_id.clone(), &account_block.write_to_new_cell()?, &transaction.total_fees())?;
         Ok(())
     }
 

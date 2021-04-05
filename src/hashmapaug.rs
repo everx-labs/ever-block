@@ -137,11 +137,17 @@ macro_rules! define_HashmapAugE {
                 data: &SliceData
             ) -> Result<BuilderData> {
                 let mut builder = hm_label(&key, max)?;
-                // automatically adds reference with data if space is not enought
-                if builder.checked_append_references_and_data(data).is_err() {
-                    let reference = BuilderData::from_slice(data);
-                    builder.append_reference(reference);
-                }
+                builder.checked_append_references_and_data(data)?;
+                Ok(builder)
+            }
+            fn make_cell_with_label_and_builder(
+                key: SliceData, 
+                max: usize, 
+                _is_leaf: bool, 
+                data: &BuilderData
+            ) -> Result<BuilderData> {
+                let mut builder = hm_label(&key, max)?;
+                builder.append_builder(data)?;
                 Ok(builder)
             }
             fn make_fork(key: &SliceData, bit_len: usize, mut left: Cell, mut right: Cell, swap: bool) -> Result<(BuilderData, SliceData)> {
@@ -331,14 +337,14 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
     fn set(&mut self, key: &K, value: &X, aug: &Y) -> Result<()> {
         let key = key.write_to_new_cell()?;
         let value = value.write_to_new_cell()?;
-        self.set_serialized(key.into(), &value.into(), aug)?;
+        self.set_builder_serialized(key.into(), &value, aug)?;
         Ok(())
     }
     /// sets item to hashmapaug as ref
     fn setref(&mut self, key: &K, value: &Cell, aug: &Y) -> Result<()> {
         let key = key.write_to_new_cell()?;
         let value = value.write_to_new_cell()?;
-        self.set_serialized(key.into(), &value.into(), aug)?;
+        self.set_builder_serialized(key.into(), &value, aug)?;
         Ok(())
     }
 
@@ -488,6 +494,10 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
     }
     /// Puts element to the tree
     fn set_serialized(&mut self, key: SliceData, leaf: &SliceData, extra: &Y) -> Result<Option<SliceData>> {
+        self.set_builder_serialized(key, &BuilderData::from_slice(leaf), extra)
+    }
+    /// Puts element to the tree
+    fn set_builder_serialized(&mut self, key: SliceData, leaf: &BuilderData, extra: &Y) -> Result<Option<SliceData>> {
         let bit_len = self.bit_len();
         Self::check_key_fail(bit_len, &key)?;
         // ahme_empty$0 {n:#} {X:Type} {Y:Type} extra:Y = HashmapAugE n X Y;
@@ -499,7 +509,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
             result
         } else {
             self.set_root_extra(extra.clone());
-            *self.data_mut() = Some(Self::make_cell_with_label_and_data(
+            *self.data_mut() = Some(Self::make_cell_with_label_and_builder(
                 key, bit_len, true, &Self::combine(extra, leaf)?
             )?.into());
             None
@@ -511,7 +521,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         slice: &mut SliceData,
         bit_len: usize,
         mut key: SliceData,
-        leaf: &SliceData,
+        leaf: &BuilderData,
         extra: &Y
     ) -> AugResult<Y> {
         let next_index = key.get_next_bit_int()?;
@@ -540,7 +550,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         cell: &mut Cell,
         bit_len: usize,
         key: SliceData,
-        leaf: &SliceData,
+        leaf: &BuilderData,
         extra: &Y
     ) -> AugResult<Y> {
         let result;
@@ -551,7 +561,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
             Y::skip(&mut slice)?; // skip extra
             let res_extra = extra.clone();
             result = Ok((Some(slice), res_extra));
-            Self::make_cell_with_label_and_data(
+            Self::make_cell_with_label_and_builder(
                 key, bit_len, true, &Self::combine(extra, leaf)?
             )?
         } else if label.is_empty() {
@@ -598,7 +608,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         prefix: SliceData,
         mut label: SliceData,
         mut key: SliceData,
-        leaf: &SliceData,
+        leaf: &BuilderData,
         extra: &Y
     ) -> Result<Y> {
         key.shrink_data(1..);
@@ -619,7 +629,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         let mut fork_extra = Y::construct_from(slice)?;
         fork_extra.calc(extra)?;
         // Leaf for fork
-        let another_cell = Self::make_cell_with_label_and_data(key, length, true, &Self::combine(extra, leaf)?)?;
+        let another_cell = Self::make_cell_with_label_and_builder(key, length, true, &Self::combine(extra, leaf)?)?;
         if !label_bit {
             builder.append_reference(existing_cell);
             builder.append_reference(another_cell);
@@ -632,10 +642,10 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         Ok(fork_extra)
     }
     // Combines extra with leaf
-    fn combine(extra: &Y, leaf: &SliceData) -> Result<SliceData> {
+    fn combine(extra: &Y, leaf: &BuilderData) -> Result<BuilderData> {
         let mut builder = extra.write_to_new_cell()?;
-        builder.checked_append_references_and_data(&leaf)?;
-        Ok(builder.into())
+        builder.append_builder(leaf)?;
+        Ok(builder)
     }
     // Gets label then get_extra
     fn find_extra(slice: &mut SliceData, bit_len: usize) -> Result<Y> {
