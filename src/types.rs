@@ -106,7 +106,7 @@ macro_rules! define_VarIntegerN {
             }
 
             // Interface to write value with type rule
-            pub fn write_to_cell(value: &BigInt) -> Result<BuilderData> {
+            fn write_to_cell(value: &BigInt) -> Result<BuilderData> {
                 let len = Self::get_len(value);
                 if len >= $N {
                     fail!("serialization of {} error {} >= {}", stringify!($varname), len, $N)
@@ -119,7 +119,7 @@ macro_rules! define_VarIntegerN {
                 Ok(cell)
             }
 
-            pub fn read_from_cell(cell: &mut SliceData) -> Result<BigInt> {
+            fn read_from_cell(cell: &mut SliceData) -> Result<BigInt> {
                 let len = cell.get_next_int(Self::get_len_len())? as usize;
                 if len >= $N {
                     fail!("deserialization of {} error {} >= {}", stringify!($varname), len, $N)
@@ -203,9 +203,12 @@ macro_rules! define_VarIntegerN {
         pub struct $varname(pub $tt);
 
         impl $varname {
-            pub const fn default() -> Self { Self::new() }
-            pub const fn new() -> Self {
-                $varname(0)
+            pub const fn default() -> Self { $varname(0) }
+            pub const fn new() -> Self { $varname(0) }
+            pub fn get_len(&self) -> usize {
+                let bits = 8 - ($N as u8).leading_zeros();
+                let bytes = ((0 as $tt).leading_zeros() / 8 - self.0.leading_zeros() / 8) as usize;
+                bits as usize + bytes * 8
             }
         }
 
@@ -479,8 +482,8 @@ impl CurrencyCollection {
         self.other.0.clone()
     }
 
-    pub fn with_grams(grams: u64) -> Self {
-        Self::from_grams(Grams(grams.into()))
+    pub const fn with_grams(grams: u64) -> Self {
+        Self::from_grams(Grams(grams as u128))
     }
 
     pub const fn from_grams(grams: Grams) -> Self {

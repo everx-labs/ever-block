@@ -374,10 +374,13 @@ impl Default for TrBouncePhase {
 }
 
 impl TrBouncePhase {
-    pub fn ok(msg_size: StorageUsedShort, msg_fees: Grams, fwd_fees: Grams) -> Self {
+    pub const fn default() -> Self {
+        TrBouncePhase::Negfunds
+    }
+    pub const fn ok(msg_size: StorageUsedShort, msg_fees: Grams, fwd_fees: Grams) -> Self {
         TrBouncePhase::Ok(TrBouncePhaseOk::with_params(msg_size, msg_fees, fwd_fees))
     }
-    pub fn no_funds(msg_size: StorageUsedShort, req_fwd_fees: Grams) -> Self {
+    pub const fn no_funds(msg_size: StorageUsedShort, req_fwd_fees: Grams) -> Self {
         TrBouncePhase::Nofunds(TrBouncePhaseNofunds::with_params(msg_size, req_fwd_fees))
     }
 }
@@ -433,20 +436,20 @@ impl Deserializable for TrBouncePhase {
 }
 
 impl TrBouncePhaseOk {
-    pub fn with_params(msg_size: StorageUsedShort, msg_fees: Grams, fwd_fees: Grams) -> Self {
+    pub const fn with_params(msg_size: StorageUsedShort, msg_fees: Grams, fwd_fees: Grams) -> Self {
         TrBouncePhaseOk {
-            msg_size: msg_size,
-            msg_fees: msg_fees,
-            fwd_fees: fwd_fees,
+            msg_size,
+            msg_fees,
+            fwd_fees,
         }
     }
 }
 
 impl TrBouncePhaseNofunds {
-    pub fn with_params(msg_size: StorageUsedShort, req_fwd_fees: Grams) -> Self {
+    pub const fn with_params(msg_size: StorageUsedShort, req_fwd_fees: Grams) -> Self {
         TrBouncePhaseNofunds {
-            msg_size: msg_size,
-            req_fwd_fees: req_fwd_fees,
+            msg_size,
+            req_fwd_fees,
         }
     }
 }
@@ -1292,7 +1295,7 @@ impl Transaction {
             prev_trans_lt: 0,
             now: 0,
             outmsg_cnt: 0,
-            orig_status: orig_status,
+            orig_status,
             end_status: AccountStatus::AccStateActive,
             in_msg: None,
             out_msgs: OutMessages::default(),

@@ -20,6 +20,7 @@ use ed25519::signature::{Signature, Signer, Verifier};
 use sha2::Digest;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::io::{Write, Read, Cursor};
 use ton_types::{
     BuilderData, Cell, error, fail, Result, SliceData,
@@ -111,14 +112,14 @@ impl SignedBlock {
 
 		let mut hasher = sha2::Sha256::new();
 		hasher.input(combined_data.as_slice());
-		let combined_hash = hasher.result().to_vec().into();
+		let combined_hash: [u8; 32] = hasher.result().into();
 		
 		let mut result = SignedBlock {
-			block: block,
+			block,
 			block_repr_hash: block_root.repr_hash(),
 			block_serialize_hash: serlz_hash.into(),
-			combined_hash: combined_hash,
-			serialized_block: serialized_block,
+			combined_hash: combined_hash.into(),
+			serialized_block,
 			signatures: HashMap::<u64, BlockSignature>::new() };
 
 		result.add_signature(key);
@@ -191,8 +192,8 @@ impl SignedBlock {
 		if (repr_hash_cell.bit_length() < SHA256_SIZE * 8) || (cell.bit_length() < SHA256_SIZE * 8) {
 		    fail!(ExceptionCode::CellUnderflow)
 		}
-		let block_repr_hash = repr_hash_cell.data()[..SHA256_SIZE].to_vec();
-		let serlz_hash = cell.data()[..SHA256_SIZE].to_vec();
+		let block_repr_hash: [u8; 32] = repr_hash_cell.data()[..SHA256_SIZE].try_into()?;
+		let serlz_hash: [u8; 32] = cell.data()[..SHA256_SIZE].try_into()?;
 		let mut signatures = HashMap::<u64, BlockSignature>::new();
 		signatures.read_from(&mut cell.reference(1)?.into())?;
 
@@ -211,25 +212,25 @@ impl SignedBlock {
 		}
 
 		let mut hasher = sha2::Sha256::new();
-		hasher.input(block_repr_hash.as_slice());
-		hasher.input(serlz_hash.as_slice());
-		let combined_hash = hasher.result().to_vec().into();
+		hasher.input(&block_repr_hash);
+		hasher.input(&serlz_hash);
+		let combined_hash = From::<[u8; 32]>::from(hasher.result().into());
 
 		Ok(SignedBlock {
-			block: block,
+			block,
 			block_repr_hash: block_repr_hash.into(), 
 			block_serialize_hash: serlz_hash.into(),
-			combined_hash: combined_hash,
+			combined_hash,
 			serialized_block: serialized_block_cur.into_inner(),
-			signatures: signatures })
+			signatures })
 	}
 
-	fn calc_merkle_hash(data: &[u8]) -> Result<Vec<u8>> {
+	fn calc_merkle_hash(data: &[u8]) -> Result<[u8; 32]> {
 		let l = data.len();
 		if l <= 256 {
 			let mut hasher = sha2::Sha256::new();
 			hasher.input(data);
-			Ok(hasher.result().to_vec())
+			Ok(hasher.result().into())
 		} else {
 			let n = Self::largest_power_of_two_less_than(l);
 			let data1_hash = Self::calc_merkle_hash(&data[..n])?;
@@ -240,7 +241,7 @@ impl SignedBlock {
 			data_for_hash[8 + SHA256_SIZE..].copy_from_slice(&data2_hash);
 			let mut hasher = sha2::Sha256::new();
 			hasher.input(&data_for_hash[..]);
-			Ok(hasher.result().to_vec())
+			Ok(hasher.result().into())
 		}
 	}
 

@@ -414,8 +414,8 @@ impl MsgEnvelope {
     /// calc prefixes with routing info
     pub fn calc_cur_next_prefix(&self) -> Result<(AccountIdPrefixFull, AccountIdPrefixFull)> {
         let msg = self.read_message()?;
-        let src_prefix = AccountIdPrefixFull::prefix(&msg.src().unwrap_or_default())?;
-        let dst_prefix = AccountIdPrefixFull::prefix(&msg.dst().unwrap_or_default())?;
+        let src_prefix = msg.src_ref().map(|address| AccountIdPrefixFull::prefix(address)).transpose()?.unwrap_or_default();
+        let dst_prefix = msg.dst_ref().map(|address| AccountIdPrefixFull::prefix(address)).transpose()?.unwrap_or_default();
 
         let cur_prefix  = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.cur_addr)?;
         let next_prefix = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.next_addr)?;
@@ -535,8 +535,8 @@ impl Deserializable for MsgEnvelope {
 // prepare for testing purposes
 pub fn prepare_test_env_message(src_prefix: u64, dst_prefix: u64, bits: u8, at: u32, lt: u64) -> Result<(Message, MsgEnvelope)> {
     let shard = ShardIdent::with_prefix_len(bits, 0, src_prefix)?;
-    let src = UInt256::from(src_prefix.to_be_bytes().to_vec());
-    let dst = UInt256::from(dst_prefix.to_be_bytes().to_vec());
+    let src = UInt256::from_le_bytes(&src_prefix.to_be_bytes());
+    let dst = UInt256::from_le_bytes(&dst_prefix.to_be_bytes());
     let src = MsgAddressInt::with_standart(None, 0, src.into())?;
     let dst = MsgAddressInt::with_standart(None, 0, dst.into())?;
 

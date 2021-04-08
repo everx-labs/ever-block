@@ -277,7 +277,7 @@ impl Deserializable for OutAction {
                 mode.read_from(cell)?;
                 match mode & 1 {
                     0 => {
-                        let hash = cell.get_next_bytes(32)?.into();
+                        let hash = cell.get_next_hash()?;
                         *self = OutAction::new_change_library(mode, None, Some(hash));
                     }
                     _ => {

@@ -191,7 +191,10 @@ pub trait Deserializable: Default {
         Self::construct_from(slice)?;
         Ok(())
     }
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()>; 
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        *self = Self::construct_from(slice)?;
+        Ok(())
+    }
     fn read_from_cell(&mut self, cell: Cell) -> Result<()> {
         self.read_from(&mut cell.into())
     }
@@ -269,9 +272,8 @@ pub trait GetRepresentationHash: Serializable + std::fmt::Debug {
 impl<T: Serializable + std::fmt::Debug> GetRepresentationHash for T {}
 
 impl Deserializable for UInt256 {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        *self = UInt256::from(cell.get_next_bytes(32)?);
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_hash()
     }
 }
 

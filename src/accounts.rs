@@ -88,9 +88,12 @@ impl StorageUsed {
             public_cells: VarUInteger7::default(),
         }
     }
+    pub const fn bits(&self) -> u64 { self.bits.0 }
+    pub const fn cells(&self) -> u64 { self.cells.0 }
+    pub const fn public_cells(&self) -> u64 { self.public_cells.0 }
 
     pub const fn with_values(cells: u64, bits: u64, public_cells: u64) -> Self {
-        StorageUsed {
+        Self {
             cells: VarUInteger7(cells),
             bits: VarUInteger7(bits),
             public_cells: VarUInteger7(public_cells),
@@ -166,11 +169,13 @@ impl StorageUsedShort {
             bits: VarUInteger7::default(),
         }
     }
+    pub const fn bits(&self) -> u64 { self.bits.0 }
+    pub const fn cells(&self) -> u64 { self.cells.0 }
 
-    pub fn with_values(cells: u64, bits: u64) -> Self {
-        StorageUsedShort {
-            cells: cells.into(),
-            bits: bits.into(),
+    pub const fn with_values(cells: u64, bits: u64) -> Self {
+        Self {
+            cells: VarUInteger7(cells),
+            bits: VarUInteger7(bits),
         }
     }
 
@@ -253,6 +258,9 @@ impl StorageInfo {
             due_payment,
         }
     }
+    pub const fn used(&self) -> &StorageUsed { &self.used }
+    pub const fn last_paid(&self) -> u32 { self.last_paid }
+    pub const fn due_payment(&self) -> Option<&Grams> { self.due_payment.as_ref() }
 }
 
 impl Serializable for StorageInfo {
@@ -354,12 +362,47 @@ pub struct AccountStorage {
 }
 
 impl AccountStorage {
-    pub const fn with_balance(balance: CurrencyCollection) -> Self {
-        AccountStorage {
+    /// Construct empty account storage
+    pub const fn default() -> Self {
+        Self {
             last_trans_lt: 0,
-            balance,
+            balance: CurrencyCollection::default(),
             state: AccountState::AccountUninit,
         }
+    }
+    /// Construct storage for uninit account
+    pub fn unint(balance: CurrencyCollection) -> Self {
+        Self::with_params(0, balance, AccountState::AccountUninit)
+    }
+    /// Construct storage for active account
+    pub fn active(last_trans_lt: u64, balance: CurrencyCollection, state_init: StateInit) -> Self {
+        Self::with_params(last_trans_lt, balance, AccountState::AccountActive(state_init))
+    }
+    /// Construct storage for frozen account
+    pub fn frozen(last_trans_lt: u64, balance: CurrencyCollection, state_hash: UInt256) -> Self {
+        Self::with_params(last_trans_lt, balance, AccountState::AccountFrozen(state_hash))
+    }
+    /// Construct storage for uninit account with balance
+    pub fn with_balance(balance: CurrencyCollection) -> Self { Self::unint(balance) }
+
+    fn with_params(last_trans_lt: u64, balance: CurrencyCollection, state: AccountState) -> Self {
+        Self {
+            last_trans_lt,
+            balance,
+            state,
+        }
+    }
+    pub const fn last_trans_lt(&self) -> u64 {
+        self.last_trans_lt
+    }
+    pub const fn balance(&self) -> &CurrencyCollection {
+        &self.balance
+    }
+    pub fn set_balance(&mut self, balance: CurrencyCollection) {
+        self.balance = balance;
+    }
+    pub const fn state(&self) -> &AccountState {
+        &self.state
     }
 }
 
@@ -374,12 +417,15 @@ impl Serializable for AccountStorage {
 }
 
 impl Deserializable for AccountStorage {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.last_trans_lt.read_from(cell)?; //last_trans_lt:uint64
-        self.balance.read_from(cell)?; //balance:CurrencyCollection
-        self.state.read_from(cell)?; //state:AccountState
-
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let last_trans_lt = Deserializable::construct_from(slice)?; //last_trans_lt:uint64
+        let balance = CurrencyCollection::construct_from(slice)?; //balance:CurrencyCollection
+        let state = Deserializable::construct_from(slice)?; //state:AccountState
+        Ok(Self {
+            last_trans_lt,
+            balance,
+            state,
+        })
     }
 }
 
@@ -457,23 +503,20 @@ impl Serializable for AccountState {
 }
 
 impl Deserializable for AccountState {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        if cell.get_next_bit()? {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        Ok(if slice.get_next_bit()? {
             // if state Active
             let mut state = StateInit::default();
-            state.read_from(cell)?; // StateInit
-            *self = AccountState::with_state(state);
-        } else if cell.get_next_bit()? {
+            state.read_from(slice)?; // StateInit
+            AccountState::with_state(state)
+        } else if slice.get_next_bit()? {
             // if state frozen
-            let mut hash = [0; 32];
-            let sha256 = cell.get_next_bytes(32)?; // hash
-            hash.copy_from_slice(&sha256[0..32]);
-            *self = AccountState::with_hash(UInt256::from(hash));
+            let hash = slice.get_next_hash()?;
+            AccountState::with_hash(hash)
         } else {
             // uninit
-            *self = AccountState::AccountUninit; // else state Uninit
-        }
-        Ok(())
+            AccountState::AccountUninit // else state Uninit
+        })
     }
 }
 
@@ -498,17 +541,33 @@ impl AccountStuff {
             storage: AccountStorage::default(),
         }
     }
+    pub fn addr(&self) -> &MsgAddressInt {
+        &self.addr
+    }
+    pub fn storage_stat(&self) -> &StorageInfo {
+        &self.storage_stat
+    }
+    pub fn storage(&self) -> &AccountStorage {
+        &self.storage
+    }
+    pub fn set_data(&mut self, data: Cell) {
+        if let AccountState::AccountActive(ref mut state_init) = self.storage.state {
+            state_init.data = Some(data)
+        }
+    }
+    fn update_storage_stat(&mut self) -> Result<()> {
+        self.storage_stat.used = StorageUsed::calculate_for_struct(&self.storage)?;
+        Ok(())
+    }
 }
 
 impl Serializable for AccountStuff {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        self.addr.write_to(builder)?;
         let mut storage_stat = self.storage_stat.clone();
         storage_stat.used = StorageUsed::calculate_for_struct(&self.storage)?;
-
-        self.addr.write_to(builder)?;
         storage_stat.write_to(builder)?;
         self.storage.write_to(builder)?;
-
         Ok(())
     }
 }
@@ -574,7 +633,7 @@ impl Account {
         Account::Account(AccountStuff {
             addr,
             storage_stat: StorageInfo::default(),
-            storage: AccountStorage::with_balance(CurrencyCollection::default()),
+            storage: AccountStorage::default(),
         })
     }
 
@@ -625,14 +684,10 @@ impl Account {
         due_payment: Option<Grams>,
         balance: CurrencyCollection
     ) -> Self {
-        let storage = AccountStorage {
-            last_trans_lt,
-            balance,
-            state: AccountState::AccountFrozen(state_hash),
-        };
-        let bits = storage.write_to_new_cell().unwrap().length_in_bits();
+        let storage = AccountStorage::frozen(last_trans_lt, balance, state_hash);
+        let used = StorageUsed::calculate_for_struct(&storage).unwrap();
         let storage_stat = StorageInfo {
-            used: StorageUsed::with_values(1, bits as u64, 0),
+            used,
             last_paid,
             due_payment,
         };
@@ -650,11 +705,7 @@ impl Account {
         last_paid: u32,
         balance: CurrencyCollection
     ) -> Self {
-        let storage = AccountStorage {
-            last_trans_lt,
-            balance,
-            state: AccountState::AccountUninit,
-        };
+        let storage = AccountStorage::with_params(last_trans_lt, balance, AccountState::AccountUninit);
         let bits = storage.write_to_new_cell().unwrap().length_in_bits();
         let storage_stat = StorageInfo {
             used: StorageUsed::with_values(1, bits as u64, 0),
@@ -708,29 +759,13 @@ impl Account {
     }
 
     pub fn update_storage_stat(&mut self) -> Result<()> {
-        if let Some(stuff) = self.stuff_mut() {
-            stuff.storage_stat.used = StorageUsed::calculate_for_struct(&stuff.storage)?;
+        match self.stuff_mut() {
+            Some(stuff) => stuff.update_storage_stat(),
+            None => Ok(())
         }
-        Ok(())
     }
 
     /// getting statistic using storage for calculate storage/transfer fee
-    pub fn get_storage_stat(&self) -> Result<StorageUsed> {
-        if let Some(stuff) = self.stuff() {
-            StorageUsed::calculate_for_struct(&stuff.storage)
-        } else {
-            Ok(StorageUsed::new())
-        }
-    }
-
-    /// getting statistic using storage short for calculate storage/transfer fee
-    pub fn get_storage_stat_short(&self) -> Result<StorageUsedShort> {
-        if let Some(stuff) = self.stuff() {
-            StorageUsedShort::calculate_for_struct(&stuff.storage)
-        } else {
-            Ok(StorageUsedShort::new())
-        }
-    }
 
     /// Getting account ID
     pub fn get_id(&self) -> Option<AccountId> {
@@ -1144,11 +1179,7 @@ pub fn generate_test_account() -> Account {
     balance.set_other(6, 600).unwrap();
     balance.set_other(7, 10000100).unwrap();
 
-    let acc_st = AccountStorage {
-        last_trans_lt: 0,
-        balance: balance,
-        state: AccountState::with_state(stinit),
-    };
+    let acc_st = AccountStorage::active(0, balance, stinit);
     let addr = MsgAddressInt::with_standart(Some(anc), 0, acc_id).unwrap();
     let mut account = Account::with_storage(&addr, &st_info, &acc_st);
     account.update_storage_stat().unwrap();

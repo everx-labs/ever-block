@@ -712,12 +712,11 @@ pub struct BlockExtra {
 
 impl BlockExtra {
     pub fn new() -> BlockExtra {
-        let rand_seed: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
         BlockExtra {
             in_msg_descr: ChildCell::default(),
             out_msg_descr: ChildCell::default(),
             account_blocks: ChildCell::default(),
-            rand_seed: UInt256::from(rand_seed),
+            rand_seed: UInt256::rand(),
             created_by: UInt256::default(), // TODO: Need to fill?
             custom: None,
         }
