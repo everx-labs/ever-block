@@ -619,10 +619,10 @@ impl InternalMessageHeader {
             bounce: false,
             bounced: false,
             src: MsgAddressIntOrNone::Some(src),
-            dst: dst,
-            value: value, 
-            ihr_fee: Default::default(),
-            fwd_fee: Default::default(),
+            dst,
+            value,
+            ihr_fee: Grams::default(),
+            fwd_fee: Grams::default(),
             created_lt: 0,  // Logical Time will be set on BlockBuilder
             created_at: UnixTime32::default(),  // UNIX time too
         }
@@ -665,6 +665,12 @@ impl InternalMessageHeader {
             MsgAddressIntOrNone::Some(ref addr) => Ok(addr),
             MsgAddressIntOrNone::None => fail!("incorrect source address")
         }
+    }
+    pub fn set_src(&mut self, src: MsgAddressInt) {
+        self.src = MsgAddressIntOrNone::Some(src)
+    }
+    pub fn set_dst(&mut self, dst: MsgAddressInt) {
+        self.dst = dst
     }
 }
 
@@ -781,10 +787,19 @@ impl ExtOutMessageHeader {
     pub fn with_addresses(src: MsgAddressInt, dst: MsgAddressExt) -> ExtOutMessageHeader {
         ExtOutMessageHeader {
             src: MsgAddressIntOrNone::Some(src),
-            dst: dst,
+            dst,
             created_lt: 0, // Logical Time will be set on block builder
             created_at: UnixTime32::default(), // UNIX time too
         }
+    }
+    pub fn src(&self) -> Option<&MsgAddressInt> {
+        match self.src {
+            MsgAddressIntOrNone::Some(ref src) => Some(src),
+            MsgAddressIntOrNone::None => None
+        }
+    }
+    pub fn set_src(&mut self, src: MsgAddressInt) {
+        self.src = MsgAddressIntOrNone::Some(src);
     }
 }
 
@@ -1056,11 +1071,24 @@ impl Message {
     ///
     /// Create new instance of external Message with inbound header
     ///
-    pub fn with_ext_in_header(h: ExternalInboundMessageHeader) -> Message{
+    pub fn with_ext_in_header(h: ExternalInboundMessageHeader) -> Message {
         Message {
             header: CommonMsgInfo::ExtInMsgInfo(h),
             init: None,
             body: None,
+            body_to_ref: None,
+            init_to_ref: None,
+        }
+    }
+
+    ///
+    /// Create new instance of external Message with inbound header and body
+    ///
+    pub fn with_ext_in_header_and_body(h: ExternalInboundMessageHeader, body: SliceData) -> Message {
+        Message {
+            header: CommonMsgInfo::ExtInMsgInfo(h),
+            init: None,
+            body: Some(body),
             body_to_ref: None,
             init_to_ref: None,
         }
@@ -1159,19 +1187,26 @@ impl Message {
     /// For outbound external messages, function returns None
     ///
     pub fn int_dst_account_id(&self) -> Option<AccountId> {
-        self.dst().and_then(|addr| {
-            if let MsgAddressInt::AddrStd(std) = addr {
-                Some(std.address)
-            } else {
-                None
-            }
-        }) 
+        match self.dst() {
+            Some(MsgAddressInt::AddrStd(std)) => Some(std.address.clone()),
+            _ => None
+        }
     }
 
     ///
     /// Get source internal address.
     ///
-    pub fn src(&self) -> Option<MsgAddressInt> {
+    pub fn src(&self) -> Option<MsgAddressInt> { self.src_ref().cloned() }
+
+    ///
+    /// Get destination internal address.
+    ///
+    pub fn dst(&self) -> Option<MsgAddressInt> { self.dst_ref().cloned() }
+
+    ///
+    /// Get reference to source internal address.
+    ///
+    pub fn src_ref(&self) -> Option<&MsgAddressInt> {
         let addr1 = match self.header() {
             CommonMsgInfo::IntMsgInfo(ref imi)      => &imi.src,
             CommonMsgInfo::ExtOutMsgInfo(ref eimi)  => &eimi.src,
@@ -1179,21 +1214,21 @@ impl Message {
         };
         match addr1 {
             MsgAddressIntOrNone::None => None,
-            MsgAddressIntOrNone::Some(ref addr) => Some(addr.clone())
+            MsgAddressIntOrNone::Some(ref addr) => Some(addr)
         }
     }
 
     ///
-    /// Get destination internal address.
+    /// Get reference destination internal address.
     ///
-    pub fn dst(&self) -> Option<MsgAddressInt> {
+    pub fn dst_ref(&self) -> Option<&MsgAddressInt> {
         match self.header {
-            CommonMsgInfo::IntMsgInfo(ref header) => Some(header.dst.clone()),
-            CommonMsgInfo::ExtInMsgInfo(ref header) => Some(header.dst.clone()),
+            CommonMsgInfo::IntMsgInfo(ref header) => Some(&header.dst),
+            CommonMsgInfo::ExtInMsgInfo(ref header) => Some(&header.dst),
             _ => None,
         }
     }
-    
+
     ///
     /// Get value transmitted by the message
     /// Set Logical Time and UNIX time for
@@ -1219,6 +1254,17 @@ impl Message {
             }
             CommonMsgInfo::ExtOutMsgInfo(ref mut header) => {
                 header.src = address;
+            }
+            _ => ()
+        };
+    }
+    pub fn set_src_address(&mut self, src: MsgAddressInt) {
+        match self.header {
+            CommonMsgInfo::IntMsgInfo(ref mut header) => {
+                header.src = MsgAddressIntOrNone::Some(src);
+            }
+            CommonMsgInfo::ExtOutMsgInfo(ref mut header) => {
+                header.src = MsgAddressIntOrNone::Some(src);
             }
             _ => ()
         };
@@ -1536,7 +1582,18 @@ impl Deserializable for Message {
 
 impl InternalMessageHeader {
     pub fn new() -> Self {
-        Default::default()
+        InternalMessageHeader {
+            ihr_disabled: false,
+            bounce: false,
+            bounced: false,
+            src: MsgAddressIntOrNone::None,
+            dst: MsgAddressInt::default(),
+            value: CurrencyCollection::default(), 
+            ihr_fee: Grams::default(),
+            fwd_fee: Grams::default(),
+            created_lt: 0,
+            created_at: UnixTime32(0),
+        }
     }
 }
 

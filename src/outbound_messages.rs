@@ -216,11 +216,9 @@ impl OutMsgQueueKey {
     // Note! msg == env.read_message()?
     pub fn with_msg_envelope(env: &MsgEnvelope, msg: &Message) -> Result<Self> {
         debug_assert_eq!(&env.read_message()?, msg);
-        let src = msg.src().unwrap_or_default();
-        let dst = msg.dst().unwrap_or_default();
-        let src_prefix  = AccountIdPrefixFull::prefix(&src)?;
-        let dest_prefix = AccountIdPrefixFull::prefix(&dst)?;
-        let next_hop = src_prefix.interpolate_addr_intermediate(&dest_prefix, &env.next_addr())?;
+        let src_prefix = msg.src_ref().map(|address| AccountIdPrefixFull::prefix(address)).transpose()?.unwrap_or_default();
+        let dst_prefix = msg.dst_ref().map(|address| AccountIdPrefixFull::prefix(address)).transpose()?.unwrap_or_default();
+        let next_hop = src_prefix.interpolate_addr_intermediate(&dst_prefix, &env.next_addr())?;
         Ok(Self::with_account_prefix(&next_hop, env.message_cell().repr_hash()))
     }
 

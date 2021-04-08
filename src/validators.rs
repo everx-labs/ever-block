@@ -194,7 +194,7 @@ impl ValidatorDescr {
         let magic = [0xc6, 0xb4, 0x13, 0x48]; // magic 0x4813b4c6 from original node's code
         hasher.input(&magic);
         hasher.input(self.public_key.key_bytes());
-        UInt256::from(hasher.result().as_slice())
+        From::<[u8; 32]>::from(hasher.result().into())
     }
 }
 

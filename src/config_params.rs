@@ -1182,7 +1182,7 @@ impl ConfigParam18 {
     pub fn insert(&mut self, sp: &StoragePrices) -> Result<()> {
         let index = match self.map.0.get_max(false, &mut 0)? {
             Some((key, _value)) => SliceData::from(key).get_next_u32()? + 1,
-            None => 1
+            None => 0
         };
         self.map.set(&index, sp)
     }
@@ -1254,6 +1254,7 @@ impl GasLimitsPrices {
     pub fn new() -> Self {
         Self::default()
     }
+
     /// Calculate gas fee by gas used value
     pub fn calc_gas_fee(&self, gas_used: u64) -> u128 {
         // There is a flat_gas_limit value which is the minimum gas value possible and has fixed price.
@@ -1285,6 +1286,15 @@ impl GasLimitsPrices {
         let res = ((value - self.flat_gas_price as u128) << 16) / (self.gas_price as u128);
         self.flat_gas_limit + res as u64
     }
+
+    /// Calculate max gas threshold
+    pub fn calc_max_gas_threshold(&self) -> u128 {
+        let mut result = self.flat_gas_price as u128;
+        if self.gas_limit > self.flat_gas_limit {
+            result += (self.gas_price as u128) * ((self.gas_limit - self.flat_gas_limit) as u128) >> 16;
+        }
+        result
+    }
 }
 
 const GAS_PRICES_TAG: u8 = 0xDD;
@@ -1293,7 +1303,6 @@ const GAS_FLAT_PFX_TAG: u8 = 0xD1;
 
 impl Deserializable for GasLimitsPrices {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.max_gas_threshold = 0;
         self.flat_gas_limit = 0;
         self.flat_gas_price = 0;
         self.special_gas_limit = 0;
@@ -1332,10 +1341,7 @@ impl Deserializable for GasLimitsPrices {
                 }
             }
         }
-        self.max_gas_threshold = self.flat_gas_price as u128;
-        if self.gas_limit > self.flat_gas_limit {
-            self.max_gas_threshold += (self.gas_price as u128) * ((self.gas_limit - self.flat_gas_limit) as u128) >> 16;
-        }
+        self.max_gas_threshold = self.calc_max_gas_threshold();
         Ok(())
     }
 }

@@ -56,6 +56,12 @@ impl Default for AccountIdPrefixFull {
 }
 
 impl AccountIdPrefixFull {
+    pub const fn default() -> Self {
+        Self {
+            workchain_id: INVALID_WORKCHAIN_ID,
+            prefix: 0,
+        }
+    }
     /// Tests address for validity (workchain_id != 0x80000000)
     pub fn is_valid(&self) -> bool {
         self.workchain_id != INVALID_WORKCHAIN_ID
