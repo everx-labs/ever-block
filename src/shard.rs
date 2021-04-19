@@ -479,6 +479,10 @@ impl ShardIdent {
         self.workchain_id() == BASE_WORKCHAIN_ID
     }
 
+    pub fn is_standard_workchain(&self) -> bool {
+        self.workchain_id() >= BASE_WORKCHAIN_ID && self.workchain_id() <= 255
+    }
+
     pub fn contains_address(&self, addr: &MsgAddressInt) -> Result<bool> {
         Ok(self.workchain_id == addr.workchain_id() && self.contains_account(addr.address())?)
     }

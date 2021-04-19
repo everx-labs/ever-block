@@ -13,9 +13,9 @@
 
 use crate::{
     error::BlockError,
-    messages::{InternalMessageHeader, Message, MsgAddressInt},
+    messages::Message,
     shard::{AccountIdPrefixFull, ShardIdent},
-    types::{AddSub, ChildCell, CurrencyCollection, Grams},
+    types::{AddSub, ChildCell, Grams},
     Serializable, Deserializable,
 };
 use std::cmp::Ordering;
@@ -50,28 +50,31 @@ pub enum IntermediateAddress {
 }
 
 impl IntermediateAddress {
+    pub const fn default() -> Self {
+        IntermediateAddress::Regular(IntermediateAddressRegular::default())
+    }
     pub fn use_src_bits(use_src_bits: u8) -> Result<Self> {
-        Ok(IntermediateAddress::Regular(
-            IntermediateAddressRegular::with_use_src_bits(use_src_bits)?
-        ))
+        let ia = IntermediateAddressRegular::with_use_src_bits(use_src_bits)?;
+        Ok(IntermediateAddress::Regular(ia))
     }
 
     pub fn use_dest_bits(use_dest_bits: u8) -> Result<Self> {
-        Ok(IntermediateAddress::Regular(
-            IntermediateAddressRegular::with_use_dest_bits(use_dest_bits)?
-        ))
+        let ia = IntermediateAddressRegular::with_use_dest_bits(use_dest_bits)?;
+        Ok(IntermediateAddress::Regular(ia))
     }
 
     pub fn full_src() -> Self {
-        IntermediateAddress::Regular(
-            IntermediateAddressRegular::with_use_dest_bits(0).unwrap()
-        )
+        let src = IntermediateAddressRegular::with_use_dest_bits(0).unwrap();
+        IntermediateAddress::Regular(src)
     }
 
     pub fn full_dest() -> Self {
-        IntermediateAddress::Regular(
-            IntermediateAddressRegular::with_use_src_bits(0).unwrap()
-        )
+        let dest = IntermediateAddressRegular::with_use_src_bits(0).unwrap();
+        IntermediateAddress::Regular(dest)
+    }
+    pub fn any_masterchain() -> Self {
+        let master = IntermediateAddressSimple::with_addr(-1, 0x8000000000000000);
+        IntermediateAddress::Simple(master)
     }
     ///
     /// Get workchain_id
@@ -175,13 +178,20 @@ pub struct IntermediateAddressRegular {
 
 impl Default for IntermediateAddressRegular {
     fn default() -> Self {
-        IntermediateAddressRegular::with_use_src_bits(0).unwrap()
+        IntermediateAddressRegular {
+            use_dest_bits: 0
+        }
     }
 }
 
 pub static FULL_BITS: u8 = 96;
 
 impl IntermediateAddressRegular {
+    pub const fn default() -> Self {
+        IntermediateAddressRegular {
+            use_dest_bits: 0
+        }
+    }
     pub fn with_use_src_bits(use_src_bits: u8) -> Result<Self> {
         if use_src_bits > FULL_BITS {
             fail!(BlockError::InvalidArg(format!("use_src_bits must be <= {}", FULL_BITS)))
@@ -248,22 +258,25 @@ pub struct IntermediateAddressSimple{
 }
 
 impl IntermediateAddressSimple {
-    pub fn new() -> Self {
-        Default::default()
+    pub const fn default() -> Self {
+        Self {
+            workchain_id: 0,
+            addr_pfx: 0
+        }
     }
 
-    pub fn with_addr(workchain_id: i8, addr_pfx: u64) -> Self {
+    pub const fn with_addr(workchain_id: i8, addr_pfx: u64) -> Self {
         Self {
             workchain_id,
             addr_pfx,
         }
     }
 
-    pub fn workchain_id(&self) -> i8 {
+    pub const fn workchain_id(&self) -> i8 {
         self.workchain_id
     }
 
-    pub fn addr_pfx(&self) -> u64 {
+    pub const fn addr_pfx(&self) -> u64 {
         self.addr_pfx
     }
 
@@ -305,22 +318,25 @@ pub struct IntermediateAddressExt{
 }
 
 impl IntermediateAddressExt {
-    pub fn new() -> Self {
-        Default::default()
+    pub const fn default() -> Self {
+        Self {
+            workchain_id: 0,
+            addr_pfx: 0
+        }
     }
 
-    pub fn with_addr(workchain_id: i32, addr_pfx: u64) -> Self {
+    pub const fn with_addr(workchain_id: i32, addr_pfx: u64) -> Self {
         Self {
             workchain_id,
             addr_pfx,
         }
     }
 
-    pub fn workchain_id(&self) -> i32 {
+    pub const fn workchain_id(&self) -> i32 {
         self.workchain_id
     }
 
-    pub fn addr_pfx(&self) -> u64 {
+    pub const fn addr_pfx(&self) -> u64 {
         self.addr_pfx
     }
 
@@ -368,16 +384,19 @@ impl MsgEnvelope {
     /// Create Envelope with message and remainig_fee
     ///
     pub fn with_message_and_fee(msg: &Message, fwd_fee_remaining: Grams) -> Result<Self> {
-        Ok(MsgEnvelope {
-            cur_addr: IntermediateAddress::full_dest(),
-            next_addr: IntermediateAddress::full_dest(),
+        Ok(Self::with_routing(
+            msg.serialize()?,
             fwd_fee_remaining,
-            msg: ChildCell::with_struct(msg)?,
-        })
+            IntermediateAddress::full_dest(),
+            IntermediateAddress::full_dest()
+        ))
     }
 
+    ///
+    /// Create Envelope with message and remainig_fee and routing settings
+    ///
     pub fn with_routing(
-        msg: Cell,
+        msg_cell: Cell,
         fwd_fee_remaining: Grams,
         cur_addr: IntermediateAddress,
         next_addr: IntermediateAddress
@@ -386,7 +405,7 @@ impl MsgEnvelope {
             cur_addr,
             next_addr,
             fwd_fee_remaining,
-            msg: ChildCell::with_cell(msg),
+            msg: ChildCell::with_cell(msg_cell),
         }
     }
 
@@ -395,12 +414,10 @@ impl MsgEnvelope {
     ///
     pub fn hypercube_routing(msg: &Message, src_shard: &ShardIdent, fwd_fee_remaining: Grams) -> Result<Self> {
         let msg_cell = msg.serialize()?;
-        let src = msg.src().ok_or_else(|| error!("Message {} is not internal or have bad \
-            source address", msg_cell.repr_hash().to_hex_string()))?;
-        let dst = msg.dst().ok_or_else(|| error!("Message {} is not internal or have bad \
-            destination address", msg_cell.repr_hash().to_hex_string()))?;
-        let src_prefix = AccountIdPrefixFull::prefix(&src)?;
-        let dst_prefix = AccountIdPrefixFull::prefix(&dst)?;
+        let src = msg.src_ref().ok_or_else(|| error!("source address of message {:x} is invalid", msg_cell.repr_hash()))?;
+        let src_prefix = AccountIdPrefixFull::prefix(src)?;
+        let dst = msg.dst_ref().ok_or_else(|| error!("destination address of message {:x} is invalid", msg_cell.repr_hash()))?;
+        let dst_prefix = AccountIdPrefixFull::prefix(dst)?;
         let ia = IntermediateAddress::full_src();
         let route_info = src_prefix.perform_hypercube_routing(&dst_prefix, src_shard, &ia)?;
         Ok(MsgEnvelope {
@@ -414,8 +431,10 @@ impl MsgEnvelope {
     /// calc prefixes with routing info
     pub fn calc_cur_next_prefix(&self) -> Result<(AccountIdPrefixFull, AccountIdPrefixFull)> {
         let msg = self.read_message()?;
-        let src_prefix = msg.src_ref().map(|address| AccountIdPrefixFull::prefix(address)).transpose()?.unwrap_or_default();
-        let dst_prefix = msg.dst_ref().map(|address| AccountIdPrefixFull::prefix(address)).transpose()?.unwrap_or_default();
+        let src = msg.src_ref().ok_or_else(|| error!("source address of message {:x} is invalid", self.message_hash()))?;
+        let src_prefix = AccountIdPrefixFull::prefix(src)?;
+        let dst = msg.dst_ref().ok_or_else(|| error!("destination address of message {:x} is invalid", self.message_hash()))?;
+        let dst_prefix = AccountIdPrefixFull::prefix(dst)?;
 
         let cur_prefix  = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.cur_addr)?;
         let next_prefix = src_prefix.interpolate_addr_intermediate(&dst_prefix, &self.next_addr)?;
@@ -437,10 +456,17 @@ impl MsgEnvelope {
     }
 
     ///
-    /// Read message cell from envelope
+    /// Return message cell from envelope
     ///
     pub fn message_cell(&self)-> Cell {
         self.msg.cell()
+    }
+
+    ///
+    /// Return message hash from envelope
+    ///
+    pub fn message_hash(&self)-> UInt256 {
+        self.msg.cell().repr_hash()
     }
 
     ///
@@ -492,7 +518,7 @@ impl MsgEnvelope {
         let msg = self.read_message()?;
         debug_assert!(msg.is_internal(), "Message with hash {} is not internal",
             self.message_cell().repr_hash().to_hex_string());
-        if let (Some(src), Some(dst)) = (msg.src(), msg.dst()) {
+        if let (Some(src), Some(dst)) = (msg.src_ref(), msg.dst_ref()) {
             return Ok(src.get_workchain_id() == dst.get_workchain_id())
         }
         fail!("Message with hash {} has wrong type of src/dst address",
@@ -530,27 +556,4 @@ impl Deserializable for MsgEnvelope {
         self.msg.read_from_reference(cell)?;
         Ok(())
     }
-}
-
-// prepare for testing purposes
-pub fn prepare_test_env_message(src_prefix: u64, dst_prefix: u64, bits: u8, at: u32, lt: u64) -> Result<(Message, MsgEnvelope)> {
-    let shard = ShardIdent::with_prefix_len(bits, 0, src_prefix)?;
-    let src = UInt256::from_le_bytes(&src_prefix.to_be_bytes());
-    let dst = UInt256::from_le_bytes(&dst_prefix.to_be_bytes());
-    let src = MsgAddressInt::with_standart(None, 0, src.into())?;
-    let dst = MsgAddressInt::with_standart(None, 0, dst.into())?;
-
-    // let src_prefix = AccountIdPrefixFull::prefix(&src).unwrap();
-    // let dst_prefix = AccountIdPrefixFull::prefix(&dst).unwrap();
-    // let ia = IntermediateAddress::full_src();
-    // let route_info = src_prefix.perform_hypercube_routing(&dst_prefix, &shard, &ia)?.unwrap();
-    // let cur_prefix  = src_prefix.interpolate_addr_intermediate(&dst_prefix, &route_info.0)?;
-    // let next_prefix = src_prefix.interpolate_addr_intermediate(&dst_prefix, &route_info.1)?;
-
-    let hdr = InternalMessageHeader::with_addresses(src, dst, CurrencyCollection::with_grams(1_000_000_000));
-    let mut msg = Message::with_int_header(hdr);
-    msg.set_at_and_lt(at, lt);
-
-    let env = MsgEnvelope::hypercube_routing(&msg, &shard, Grams::from(1_000_000))?;
-    Ok((msg , env))
 }

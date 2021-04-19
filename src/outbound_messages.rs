@@ -213,21 +213,12 @@ impl OutMsgQueueKey {
         Self::with_workchain_id_and_prefix(prefix.workchain_id, prefix.prefix, hash)
     }
 
-    // Note! msg == env.read_message()?
-    pub fn with_msg_envelope(env: &MsgEnvelope, msg: &Message) -> Result<Self> {
-        debug_assert_eq!(&env.read_message()?, msg);
-        let src_prefix = msg.src_ref().map(|address| AccountIdPrefixFull::prefix(address)).transpose()?.unwrap_or_default();
-        let dst_prefix = msg.dst_ref().map(|address| AccountIdPrefixFull::prefix(address)).transpose()?.unwrap_or_default();
-        let next_hop = src_prefix.interpolate_addr_intermediate(&dst_prefix, &env.next_addr())?;
-        Ok(Self::with_account_prefix(&next_hop, env.message_cell().repr_hash()))
-    }
-
     pub fn first_u64(acc: &AccountId) -> u64 { // TODO: remove to AccountId
         acc.clone().get_next_u64().unwrap()
     }
 
     pub fn to_hex_string(&self) -> String {
-        format!("{}:{:016X}, hash: {}", self.workchain_id, self.prefix, self.hash.to_hex_string())
+        format!("{}:{:016X}, hash: {:x}", self.workchain_id, self.prefix, self.hash)
     }
 }
 
@@ -412,6 +403,19 @@ impl OutMsg {
         } else {
             Ok(OutMsg::Dequeue(OutMsgDequeue::with_params(env, import_block_lt)?))
         }
+    }
+    /// Create Dequeue internal message
+    pub fn dequeue_long(env: &MsgEnvelope, import_block_lt: u64) -> Result<OutMsg> {
+        Ok(OutMsg::Dequeue(OutMsgDequeue::with_params(env, import_block_lt)?))
+    }
+    /// Create Dequeue Short internal message
+    pub fn dequeue_short(env: &MsgEnvelope, next_prefix: &AccountIdPrefixFull, import_block_lt: u64) -> Result<OutMsg> {
+        Ok(OutMsg::DequeueShort(OutMsgDequeueShort {
+            msg_env_hash: env.serialize()?.repr_hash(),
+            next_workchain: next_prefix.workchain_id,
+            next_addr_pfx: next_prefix.prefix,
+            import_block_lt,
+        }))
     }
     /// Create Dequeue immediately message
     pub fn dequeue_immediately(env: &MsgEnvelope, reimport: &InMsg) -> Result<OutMsg> {
