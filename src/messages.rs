@@ -661,9 +661,12 @@ impl InternalMessageHeader {
     }
 
     pub fn src(&self) -> Result<&MsgAddressInt> {
+        self.src_ref().ok_or_else(|| error!("incorrect source address"))
+    }
+    pub fn src_ref(&self) -> Option<&MsgAddressInt> {
         match self.src {
-            MsgAddressIntOrNone::Some(ref addr) => Ok(addr),
-            MsgAddressIntOrNone::None => fail!("incorrect source address")
+            MsgAddressIntOrNone::Some(ref addr) => Some(addr),
+            MsgAddressIntOrNone::None => None
         }
     }
     pub fn set_src(&mut self, src: MsgAddressInt) {
@@ -1187,7 +1190,7 @@ impl Message {
     /// For outbound external messages, function returns None
     ///
     pub fn int_dst_account_id(&self) -> Option<AccountId> {
-        match self.dst() {
+        match self.dst_ref() {
             Some(MsgAddressInt::AddrStd(std)) => Some(std.address.clone()),
             _ => None
         }
@@ -1363,13 +1366,18 @@ impl Message {
     ///
     /// Get destination workchain of message
     /// 
-    pub fn workchain_id(&self) -> Option<i32> {
+    pub fn dst_workchain_id(&self) -> Option<i32> {
         match &self.header {
             CommonMsgInfo::IntMsgInfo(ref imi) => Some(imi.dst.get_workchain_id()),
             CommonMsgInfo::ExtInMsgInfo(ref eimi) => Some(eimi.dst.get_workchain_id()),
             CommonMsgInfo::ExtOutMsgInfo(_) => None
         }
     }
+
+    ///
+    /// Get destination workchain of message
+    /// 
+    pub fn workchain_id(&self) -> Option<i32> { self.dst_workchain_id() }
 
     ///
     /// Get source workchain of message
@@ -1388,7 +1396,7 @@ impl Message {
 
     pub fn is_masterchain(&self) -> bool {
         self.src_workchain_id() == Some(MASTERCHAIN_ID)
-            || self.workchain_id() == Some(MASTERCHAIN_ID)
+            || self.dst_workchain_id() == Some(MASTERCHAIN_ID)
     }
 
     pub fn prepare_proof(&self, is_inbound: bool, block_root: &Cell) -> Result<Cell> {

@@ -1175,7 +1175,7 @@ impl ConfigParam18 {
 
     /// get value by index
     pub fn get(&self, index: u32) -> Result<StoragePrices> {
-        self.map.get(&index).and_then(|sp| sp.ok_or_else(|| error!(BlockError::InvalidIndex(index as usize))))
+        self.map.get(&index)?.ok_or_else(|| error!(BlockError::InvalidIndex(index as usize)))
     }
 
     /// insert value

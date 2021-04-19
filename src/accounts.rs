@@ -881,7 +881,7 @@ impl Account {
                 } else {
                     fail!("StateInit doesn't correspond to uninit account address")
                 }
-                AccountState::AccountFrozen(hash) => if hash == state.hash()? {
+                AccountState::AccountFrozen(hash) => if hash == &state.hash()? {
                     AccountState::AccountActive(state.clone())
                 } else {
                     fail!("StateInit doesn't correspond to frozen hash")
