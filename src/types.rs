@@ -371,6 +371,9 @@ macro_rules! define_NumberN_up32bit {
 
         #[allow(dead_code)]
         impl $varname {
+            pub const fn default() -> Self {
+                Self(0)
+            }
             pub fn from_u32(value: u32, max_value: u32) -> Result<Self> {
                 if value > max_value {
                     fail!(BlockError::InvalidArg(
@@ -595,9 +598,8 @@ impl Serializable for u64 {
 }
 
 impl Deserializable for u64 {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = slice.get_next_u64()?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_u64()
     }
 }
 
@@ -609,9 +611,8 @@ impl Serializable for u8 {
 }
 
 impl Deserializable for u8 {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = slice.get_next_byte()?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_byte()
     }
 }
 
@@ -623,9 +624,8 @@ impl Serializable for i32 {
 }
 
 impl Deserializable for u32 {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = slice.get_next_u32()?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_u32()
     }
 }
 
@@ -644,9 +644,8 @@ impl Serializable for u128 {
 }
 
 impl Deserializable for i32 {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = slice.get_next_i32()?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_i32()
     }
 }
 
@@ -658,9 +657,8 @@ impl Serializable for i8 {
 }
 
 impl Deserializable for i8 {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = slice.get_next_byte()? as i8;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_byte().map(|v| v as i8)
     }
 }
 
@@ -672,9 +670,8 @@ impl Serializable for i16 {
 }
 
 impl Deserializable for i16 {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = slice.get_next_i16()?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_i16()
     }
 }
 
@@ -686,9 +683,8 @@ impl Serializable for u16 {
 }
 
 impl Deserializable for u16 {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = slice.get_next_u16()?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_u16()
     }
 }
 
@@ -700,9 +696,8 @@ impl Serializable for bool {
 }
 
 impl Deserializable for bool {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = slice.get_next_bit()?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_bit()
     }
 }
 
@@ -719,9 +714,8 @@ impl<X: Default + Deserializable + Serializable> InRefValue<X> {
 }
 
 impl<X: Default + Deserializable + Serializable> Deserializable for InRefValue<X> {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        self.0 = X::construct_from_reference(slice)?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        Ok(Self(X::construct_from_reference(slice)?))
     }
 }
 
@@ -733,9 +727,8 @@ impl<X: Default + Deserializable + Serializable> Serializable for InRefValue<X> 
 }
 
 impl<X: Default + Deserializable> Deserializable for Arc<X> {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        *self = Arc::new(X::construct_from(slice)?);
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        Ok(Arc::new(X::construct_from(slice)?))
     }
 }
 
@@ -972,8 +965,8 @@ impl Serializable for UnixTime32 {
 }
 
 impl Deserializable for UnixTime32 {
-    fn read_from(&mut self, slice: &mut SliceData) -> Result<()>{
-        self.0.read_from(slice)
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        Ok(Self(slice.get_next_u32()?))
     }
 }
 

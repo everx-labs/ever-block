@@ -467,10 +467,10 @@ pub struct TrCreditPhase {
 }
 
 impl TrCreditPhase {
-    pub fn with_params(collected: Option<Grams>, credit: CurrencyCollection) -> Self {
+    pub fn with_params(due_fees_collected: Option<Grams>, credit: CurrencyCollection) -> Self {
         TrCreditPhase {
-            due_fees_collected: collected,
-            credit: credit,
+            due_fees_collected,
+            credit,
         }
     }
 }
@@ -478,7 +478,7 @@ impl TrCreditPhase {
 impl Default for TrCreditPhase {
     fn default() -> Self {
         TrCreditPhase {
-            due_fees_collected: Option::None,
+            due_fees_collected: None,
             credit: CurrencyCollection::default(),
         }
     }
@@ -1291,7 +1291,7 @@ impl Transaction {
         Transaction {
             account_addr,
             lt: 0,
-            prev_trans_hash: UInt256::from([0;32]),
+            prev_trans_hash: UInt256::default(),
             prev_trans_lt: 0,
             now: 0,
             outmsg_cnt: 0,
@@ -1411,6 +1411,10 @@ impl Transaction {
     pub fn write_in_msg(&mut self, value: Option<&Message>) -> Result<()> {
         self.in_msg = value.map(|v| ChildCell::with_struct(v)).transpose()?;
         Ok(())
+    }
+
+    pub fn set_in_msg_cell(&mut self, msg_cell: Cell) {
+        self.in_msg = Some(ChildCell::with_cell(msg_cell));
     }
 
     pub fn in_msg_cell(&self) -> Option<Cell> {
@@ -1560,9 +1564,9 @@ impl Eq for Transaction {}
 impl Default for Transaction {
     fn default() -> Self {
         Transaction {
-            account_addr: AccountId::from_raw(vec![0;32], 256),
+            account_addr: AccountId::from([0;32]),
             lt: 0,
-            prev_trans_hash: UInt256::from([0;32]),
+            prev_trans_hash: UInt256::default(),
             prev_trans_lt: 0,
             now: 0,            
             outmsg_cnt: 0,

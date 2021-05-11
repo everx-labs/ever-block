@@ -284,6 +284,7 @@ pub enum GlobalCapabilities {
     CapReportVersion = 8,
     CapSplitMergeTransactions = 16,
     CapShortDequeue = 32,
+    CapMbppEnabled = 64,
 }
 
 impl ConfigParams {
@@ -1475,6 +1476,7 @@ catchain_config_new#c2
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct CatchainConfig {
+    pub isolate_mc_validators: bool,
     pub shuffle_mc_validators: bool,
     pub mc_catchain_lifetime: u32,
     pub shard_catchain_lifetime: u32,
@@ -1504,8 +1506,9 @@ impl Deserializable for CatchainConfig {
         }
         if tag == CATCHAIN_CONFIG_TAG_2 {
             let flags = u8::construct_from(cell)?;
-            self.shuffle_mc_validators = flags == 1;
-            if flags >> 1 != 0 {
+            self.isolate_mc_validators = flags & 0b10 != 0;
+            self.shuffle_mc_validators = flags & 0b01 != 0;
+            if flags >> 2 != 0 {
                 fail!(BlockError::InvalidArg("`flags` should be zero".to_string()))
             }
         }
@@ -1520,7 +1523,9 @@ impl Deserializable for CatchainConfig {
 impl Serializable for CatchainConfig {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(CATCHAIN_CONFIG_TAG_2)?;
-        cell.append_u8(self.shuffle_mc_validators as u8)?;
+        cell.append_bits(0, 6)?;
+        cell.append_bit_bool(self.isolate_mc_validators)?;
+        cell.append_bit_bool(self.shuffle_mc_validators)?;
         self.mc_catchain_lifetime.write_to(cell)?;
         self.shard_catchain_lifetime.write_to(cell)?;
         self.shard_validators_lifetime.write_to(cell)?;
@@ -1729,9 +1734,9 @@ macro_rules! define_configparams {
         }
 
         impl Deserializable for $cpname {
-            fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-                self.$pname.read_from(cell)?;
-                Ok(())
+            fn construct_from(slice: &mut SliceData) -> Result<Self> {
+                let $pname = ValidatorSet::construct_from(slice)?;
+                Ok(Self { $pname })
             }
         }
 
@@ -1775,21 +1780,16 @@ impl Default for WorkchainFormat {
 }
 
 impl Deserializable for WorkchainFormat {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        cell.get_next_bits(3)?;
-        *self = match cell.get_next_bit()? {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        slice.get_next_bits(3)?;
+        match slice.get_next_bit()? {
             true => {
-                let mut val = WorkchainFormat1::default();
-                val.read_from(cell)?;
-                WorkchainFormat::Basic(val)
+                Ok(WorkchainFormat::Basic(WorkchainFormat1::construct_from(slice)?))
             }
             false => {
-                let mut val = WorkchainFormat0::default();
-                val.read_from(cell)?;
-                WorkchainFormat::Extended(val)
+                Ok(WorkchainFormat::Extended(WorkchainFormat0::construct_from(slice)?))
             }
-        };
-        Ok(())
+        }
     }
 }
 
@@ -1847,10 +1847,10 @@ impl WorkchainFormat1 {
 
 
 impl Deserializable for WorkchainFormat1 {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.vm_version.read_from(cell)?;
-        self.vm_mode.read_from(cell)?;
-        Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let vm_version = Deserializable::construct_from(slice)?;
+        let vm_mode = Deserializable::construct_from(slice)?;
+        Ok(Self { vm_version, vm_mode })
     }
 }
 
@@ -1876,20 +1876,15 @@ wfmt_ext#0
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkchainFormat0 {
-    min_addr_len: u16,  //use 12 bit
-    max_addr_len: u16,  //use 12 bit
-    addr_len_step: u16, // use 12 bit
-    workchain_type_id: u32
+    min_addr_len: Number12,
+    max_addr_len: Number12,
+    addr_len_step: Number12,
+    workchain_type_id: Number32,
 }
 
 impl Default for WorkchainFormat0 {
     fn default() -> Self {
-        WorkchainFormat0 {
-            min_addr_len: 64,
-            max_addr_len: 64,
-            addr_len_step: 0,
-            workchain_type_id: 1
-        }
+        WorkchainFormat0::new()
     }
 }
 
@@ -1897,8 +1892,13 @@ impl WorkchainFormat0 {
     ///
     /// Create empty new instance of WorkchainFormat0
     /// 
-    pub fn new() -> Self {
-        WorkchainFormat0::default()
+    pub const fn new() -> Self {
+        Self {
+            min_addr_len: Number12(64),
+            max_addr_len: Number12(64),
+            addr_len_step: Number12(0),
+            workchain_type_id: Number32(1)
+        }
     }
 
     ///
@@ -1910,10 +1910,10 @@ impl WorkchainFormat0 {
            workchain_type_id >= 1 {
                Ok(
                    WorkchainFormat0 {
-                        min_addr_len,
-                        max_addr_len,
-                        addr_len_step,
-                        workchain_type_id, 
+                        min_addr_len: Number12(min_addr_len as u32),
+                        max_addr_len: Number12(max_addr_len as u32),
+                        addr_len_step: Number12(addr_len_step as u32),
+                        workchain_type_id: Number32(workchain_type_id as u32), 
                    }
                )
            }
@@ -1932,7 +1932,7 @@ impl WorkchainFormat0 {
     /// Getter for min_addr_len
     /// 
     pub fn min_addr_len(&self) -> u16 {
-        self.min_addr_len
+        self.min_addr_len.0 as u16
     }
 
     ///
@@ -1940,7 +1940,7 @@ impl WorkchainFormat0 {
     /// 
     pub fn set_min_addr_len(&mut self, min_addr_len: u16) -> Result<()> {
         if min_addr_len >= 64 && min_addr_len <= 1023 {
-            self.min_addr_len = min_addr_len;
+            self.min_addr_len.0 = min_addr_len as u32;
             Ok(())
         } else {
             fail!(
@@ -1955,15 +1955,15 @@ impl WorkchainFormat0 {
     /// Getter for min_addr_len
     /// 
     pub fn max_addr_len(&self) -> u16 {
-        self.max_addr_len
+        self.max_addr_len.0 as u16
     }
 
     ///
     /// Setter for max_addr_len
     /// 
     pub fn set_max_addr_len(&mut self, max_addr_len: u16) -> Result<()> {
-        if max_addr_len >= 64 && max_addr_len <= 1024 && self.min_addr_len <= max_addr_len {
-            self.max_addr_len = max_addr_len;
+        if max_addr_len >= 64 && max_addr_len <= 1024 && self.min_addr_len.0 <= max_addr_len as u32 {
+            self.max_addr_len.0 = max_addr_len as u32;
             Ok(())
         } else {
             fail!(
@@ -1979,7 +1979,7 @@ impl WorkchainFormat0 {
     /// Getter for addr_len_step
     /// 
     pub fn addr_len_step(&self) -> u16 {
-        self.addr_len_step
+        self.addr_len_step.0 as u16
     }
 
     ///
@@ -1987,7 +1987,7 @@ impl WorkchainFormat0 {
     /// 
     pub fn set_addr_len_step(&mut self, addr_len_step: u16) -> Result<()> {
         if addr_len_step <= 1024 {
-            self.addr_len_step = addr_len_step;
+            self.addr_len_step.0 = addr_len_step as u32;
             Ok(())
         } else {
             fail!(
@@ -2000,7 +2000,7 @@ impl WorkchainFormat0 {
     /// Getter for workchain_type_id
     /// 
     pub fn workchain_type_id(&self) -> u32 {
-        self.workchain_type_id
+        self.workchain_type_id.0
     }
 
     ///
@@ -2008,7 +2008,7 @@ impl WorkchainFormat0 {
     /// 
     pub fn set_workchain_type_id(&mut self, workchain_type_id: u32) -> Result<()> {
         if workchain_type_id >= 1 {
-            self.workchain_type_id = workchain_type_id;
+            self.workchain_type_id.0 = workchain_type_id;
             Ok(())
         } else {
             fail!(
@@ -2019,21 +2019,20 @@ impl WorkchainFormat0 {
 }
 
 impl Deserializable for WorkchainFormat0 {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let mut val = Number12::default();
-        val.read_from(cell)?;
-        self.min_addr_len = val.0 as u16;
-        val.read_from(cell)?;
-        self.max_addr_len = val.0 as u16;
-        val.read_from(cell)?;
-        self.addr_len_step = val.0 as u16;
-        let mut val = Number32::default();
-        val.read_from(cell)?;
-        self.workchain_type_id = val.0;
-        if self.min_addr_len >= 64 && self.min_addr_len <= self.max_addr_len &&
-           self.max_addr_len <= 1023 && self.addr_len_step <= 1023 &&
-           self.workchain_type_id >= 1 {
-                Ok(())
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let min_addr_len = Number12::construct_from(slice)?;
+        let max_addr_len = Number12::construct_from(slice)?;
+        let addr_len_step = Number12::construct_from(slice)?;
+        let workchain_type_id = Number32::construct_from(slice)?;
+        if min_addr_len.0 >= 64 && min_addr_len.0 <= max_addr_len.0 &&
+           max_addr_len.0 <= 1023 && addr_len_step.0 <= 1023 &&
+           workchain_type_id.0 >= 1 {
+                Ok(Self {
+                    min_addr_len,
+                    max_addr_len,
+                    addr_len_step,
+                    workchain_type_id,
+                })
         } else {
             fail!(
                 BlockError::InvalidData(
@@ -2047,17 +2046,13 @@ impl Deserializable for WorkchainFormat0 {
 
 impl Serializable for WorkchainFormat0 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        if self.min_addr_len >= 64 && self.min_addr_len <= self.max_addr_len &&
-           self.max_addr_len <= 1023 && self.addr_len_step <= 1023 &&
-           self.workchain_type_id >= 1 {
-                let min = Number12(self.min_addr_len as u32);
-                let max = Number12(self.max_addr_len as u32);
-                let len = Number12(self.addr_len_step as u32);
-                let id = Number32(self.workchain_type_id);
-                min.write_to(cell)?;
-                max.write_to(cell)?;
-                len.write_to(cell)?;
-                id.write_to(cell)?;
+        if self.min_addr_len.0 >= 64 && self.min_addr_len.0 <= self.max_addr_len.0 &&
+           self.max_addr_len.0 <= 1023 && self.addr_len_step.0 <= 1023 &&
+           self.workchain_type_id.0 >= 1 {
+                self.min_addr_len.write_to(cell)?;
+                self.max_addr_len.write_to(cell)?;
+                self.addr_len_step.write_to(cell)?;
+                self.workchain_type_id.write_to(cell)?;
                 Ok(())
         } else {
             fail!(
