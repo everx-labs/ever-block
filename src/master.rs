@@ -1258,7 +1258,7 @@ impl ShardDescr {
             start_lt,
             end_lt,
             root_hash: root_hash,
-            file_hash: UInt256::from([0;32]),
+            file_hash: UInt256::default(),
             before_split: false,
             before_merge: false,
             want_split: false,

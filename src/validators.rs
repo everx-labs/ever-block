@@ -24,6 +24,7 @@ use crate::{
 use std::{
     io::{Write, Cursor},
     cmp::{min, Ordering},
+    borrow::Cow,
 };
 use sha2::{Sha256, Sha512, Digest};
 use ton_types::types::ByteOrderRead;
@@ -294,6 +295,17 @@ impl Ord for IncludedValidatorWeight {
 }
 
 impl ValidatorSet {
+    pub const fn default() -> Self {
+        Self {
+            utime_since: 0,
+            utime_until: 0, 
+            total: Number16::default(), 
+            main: Number16::default(),
+            total_weight: 0,
+            cc_seqno: 0,
+            list: Vec::new(),
+        }
+    }
     pub fn new(
         utime_since: u32,
         utime_until: u32, 
@@ -387,12 +399,8 @@ impl ValidatorSet {
     ) -> Result<(Vec<ValidatorDescr>, u32)> {
         let is_master = (shard_pfx == SHARD_FULL) && (workchain_id == MASTERCHAIN_ID);
 
-        let count = min(
-            self.total.0,
-            if is_master { self.main.0 } else { cc_config.shard_validators_num }
-        ) as usize;
-
         let subset = if is_master {
+            let count = min(self.total.0, self.main.0) as usize;
             if !cc_config.shuffle_mc_validators {
                 self.list[0..count].to_vec()
             } else {
@@ -412,10 +420,24 @@ impl ValidatorSet {
                 subset
             }
         } else {
-            let mut subset = Vec::with_capacity(count);
             let mut prng = ValidatorSetPRNG::new(shard_pfx, workchain_id, cc_seqno);
+            let full_list = if cc_config.isolate_mc_validators {
+                if self.total.0 <= self.main.0 {
+                    fail!("Count of validators is too small to make sharde's subset while `isolate_mc_validators` flag is set")
+                }
+                let list = self.list[self.main.0 as usize..].to_vec();
+                Cow::Owned(
+                    Self::new(self.utime_since, self.utime_until, self.main.0 as u16, list)?
+                )
+
+            } else {
+                Cow::Borrowed(self)
+            };
+            let count = min(full_list.total(), cc_config.shard_validators_num as u16) as usize;
+            let mut subset = Vec::with_capacity(count);
             let mut weights = Vec::<IncludedValidatorWeight>::with_capacity(count);
-            let mut weight_remainder = self.total_weight;
+            let mut weight_remainder = full_list.total_weight();
+
             for _ in 0..count {
                 debug_assert!(weight_remainder > 0);
                 // 1. take pseudo random weight less (or equal) than weight_remainder
@@ -432,7 +454,7 @@ impl ValidatorSet {
                 }
 
                 // 3. take validator with less weight greater than p
-                let next_validator = self.at_weight(p);
+                let next_validator = full_list.at_weight(p);
 
                 subset.push(ValidatorDescr::with_params(
                     next_validator.public_key.clone(),
