@@ -247,7 +247,7 @@ impl MerkleUpdate {
             Ok(old_root.clone())
         } else {
             let new_root: Cell =
-                self.traverse_on_apply(&self.new, &old_cells, 0).into();
+                self.traverse_on_apply(&self.new, &old_cells, &mut HashMap::new(), 0).into();
 
             // constructed tree's hash have to coinside with self.new_hash
             if new_root.repr_hash() != self.new_hash {
@@ -285,6 +285,7 @@ impl MerkleUpdate {
     fn traverse_on_apply(&self,
         update_cell: &Cell,
         old_cells: &HashMap<UInt256, Cell>,
+        new_cells: &mut HashMap<UInt256, BuilderData>,
         merkle_depth: u8
     ) -> BuilderData {
 
@@ -305,7 +306,14 @@ impl MerkleUpdate {
         for update_child in update_cell.clone_references().iter() {
             let new_child = match update_child.cell_type() {
                 CellType::Ordinary | CellType::MerkleProof | CellType::MerkleUpdate => {
-                    self.traverse_on_apply(update_child, old_cells, child_merkle_depth)
+                    let new_child_hash = update_child.hash(child_merkle_depth as usize);
+                    if let Some(c) = new_cells.get(&new_child_hash) {
+                        c.clone()
+                    } else {
+                        let c = self.traverse_on_apply(update_child, old_cells, new_cells, child_merkle_depth);
+                        new_cells.insert(new_child_hash, c.clone());
+                        c
+                    }
                 },
                 CellType::PrunedBranch => {
                     // if this pruned branch is related to current update
