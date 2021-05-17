@@ -285,9 +285,9 @@ impl MerkleUpdate {
     fn traverse_on_apply(&self,
         update_cell: &Cell,
         old_cells: &HashMap<UInt256, Cell>,
-        new_cells: &mut HashMap<UInt256, BuilderData>,
+        new_cells: &mut HashMap<UInt256, Cell>,
         merkle_depth: u8
-    ) -> BuilderData {
+    ) -> Cell {
 
         // We will recursively construct new skeleton for new cells 
         // and connect unchanged branches to it
@@ -321,10 +321,10 @@ impl MerkleUpdate {
                     if mask & (1 << child_merkle_depth) != 0 {
                         // connect branch from old bag instead pruned
                         let new_child_hash = Cell::hash(&update_child, update_child.level() as usize - 1);
-                        BuilderData::from(old_cells.get(&new_child_hash).unwrap())
+                        old_cells.get(&new_child_hash).unwrap().clone()
                     } else {
                         // else - just copy this cell (like an ordinary)
-                        BuilderData::from(update_child)
+                        update_child.clone()
                     }
                 },
                 CellType::LibraryReference => {
@@ -333,7 +333,7 @@ impl MerkleUpdate {
                 _ => panic!("Unknown cell type!")
             };
             child_mask |= new_child.level_mask();
-            new_cell.append_reference(new_child);
+            new_cell.append_reference_cell(new_child);
         }
 
         new_cell.set_level_mask(if update_cell.is_merkle() {
@@ -345,7 +345,7 @@ impl MerkleUpdate {
         // Copy data from update to constructed cell
         new_cell.append_bytestring(&SliceData::from(update_cell)).unwrap();
 
-        new_cell
+        new_cell.into()
     }
 
     fn traverse_new_on_create(
