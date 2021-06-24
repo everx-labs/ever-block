@@ -812,10 +812,8 @@ impl Account {
     pub fn set_data(&mut self, new_data: Cell) -> bool {
         if let Some(stuff) = self.stuff_mut() {
             if let AccountState::AccountActive(ref mut state_init) = stuff.storage.state {
-                if let Some(ref mut data) = (*state_init).data {
-                    *data = new_data;
-                    return true;
-                }
+                state_init.data = Some(new_data);
+                return true
             }
         }
         false
@@ -825,10 +823,8 @@ impl Account {
     pub fn set_code(&mut self, new_code: Cell) -> bool {
         if let Some(stuff) = self.stuff_mut() {
             if let AccountState::AccountActive(ref mut state_init) = stuff.storage.state {
-                if let Some(ref mut code) = state_init.code {
-                    *code = new_code;
-                    return true;
-                }
+                state_init.code = Some(new_code);
+                return true
             }
         }
         false
