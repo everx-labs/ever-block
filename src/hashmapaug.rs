@@ -493,9 +493,6 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         })
     }
     /// Puts element to the tree
-    fn set_serialized(&mut self, key: SliceData, leaf: &SliceData, extra: &Y) -> Result<Option<SliceData>> {
-        self.set_builder_serialized(key, &BuilderData::from_slice(leaf), extra)
-    }
     /// Puts element to the tree
     fn set_builder_serialized(&mut self, key: SliceData, leaf: &BuilderData, extra: &Y) -> Result<Option<SliceData>> {
         let bit_len = self.bit_len();

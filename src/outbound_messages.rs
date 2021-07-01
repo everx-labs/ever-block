@@ -391,20 +391,6 @@ impl OutMsg {
         }
     }
     /// Create Dequeue internal message
-    pub fn dequeue(env: &MsgEnvelope, import_block_lt: u64, short: bool) -> Result<OutMsg> {
-        if short {
-            let (_, next_prefix) = env.calc_cur_next_prefix()?;
-            Ok(OutMsg::DequeueShort(OutMsgDequeueShort {
-                msg_env_hash: env.serialize()?.repr_hash(),
-                next_workchain: next_prefix.workchain_id,
-                next_addr_pfx: next_prefix.prefix,
-                import_block_lt,
-            }))
-        } else {
-            Ok(OutMsg::Dequeue(OutMsgDequeue::with_params(env, import_block_lt)?))
-        }
-    }
-    /// Create Dequeue internal message
     pub fn dequeue_long(env: &MsgEnvelope, import_block_lt: u64) -> Result<OutMsg> {
         Ok(OutMsg::Dequeue(OutMsgDequeue::with_params(env, import_block_lt)?))
     }

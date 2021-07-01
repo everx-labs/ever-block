@@ -559,14 +559,19 @@ impl AccountStuff {
         self.storage_stat.used = StorageUsed::calculate_for_struct(&self.storage)?;
         Ok(())
     }
+    fn update_storage_stat_fast(&mut self) -> Result<()> {
+        let cell = self.storage.serialize()?;
+        self.storage_stat.used.bits.0 = cell.tree_bits_count();
+        self.storage_stat.used.cells.0 = cell.tree_cell_count();
+        self.storage_stat.used.public_cells.0 = 0;
+        Ok(())
+    }
 }
 
 impl Serializable for AccountStuff {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         self.addr.write_to(builder)?;
-        let mut storage_stat = self.storage_stat.clone();
-        storage_stat.used = StorageUsed::calculate_for_struct(&self.storage)?;
-        storage_stat.write_to(builder)?;
+        self.storage_stat.write_to(builder)?;
         self.storage.write_to(builder)?;
         Ok(())
     }
@@ -761,6 +766,13 @@ impl Account {
     pub fn update_storage_stat(&mut self) -> Result<()> {
         match self.stuff_mut() {
             Some(stuff) => stuff.update_storage_stat(),
+            None => Ok(())
+        }
+    }
+
+    pub fn update_storage_stat_fast(&mut self) -> Result<()> {
+        match self.stuff_mut() {
+            Some(stuff) => stuff.update_storage_stat_fast(),
             None => Ok(())
         }
     }

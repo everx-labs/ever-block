@@ -13,11 +13,12 @@
 
 use crate::{
     error::BlockError,
-    messages::Message,
     shard::{AccountIdPrefixFull, ShardIdent},
+    messages::Message,
     types::{AddSub, ChildCell, Grams},
     Serializable, Deserializable,
 };
+
 use std::cmp::Ordering;
 use ton_types::{
     error, fail, Result,
@@ -411,15 +412,17 @@ impl MsgEnvelope {
 
     ///
     /// Create Envelope with hypercube routing params
+    /// TBD
     ///
-    pub fn hypercube_routing(msg: &Message, src_shard: &ShardIdent, fwd_fee_remaining: Grams) -> Result<Self> {
+    #[allow(dead_code)]
+    pub(crate) fn hypercube_routing(msg: &Message, src_shard: &ShardIdent, fwd_fee_remaining: Grams) -> Result<Self> {
         let msg_cell = msg.serialize()?;
         let src = msg.src_ref().ok_or_else(|| error!("source address of message {:x} is invalid", msg_cell.repr_hash()))?;
         let src_prefix = AccountIdPrefixFull::prefix(src)?;
         let dst = msg.dst_ref().ok_or_else(|| error!("destination address of message {:x} is invalid", msg_cell.repr_hash()))?;
         let dst_prefix = AccountIdPrefixFull::prefix(dst)?;
-        let ia = IntermediateAddress::full_src();
-        let route_info = src_prefix.perform_hypercube_routing(&dst_prefix, src_shard, &ia)?;
+        let ia = IntermediateAddress::default();
+        let route_info = src_prefix.perform_hypercube_routing(&dst_prefix, src_shard, ia)?;
         Ok(MsgEnvelope {
             cur_addr: route_info.0,
             next_addr: route_info.1,
