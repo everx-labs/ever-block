@@ -285,6 +285,7 @@ pub enum GlobalCapabilities {
     CapSplitMergeTransactions = 16,
     CapShortDequeue = 32,
     CapMbppEnabled = 64,
+    CapFastStorageStat = 128,
 }
 
 impl ConfigParams {

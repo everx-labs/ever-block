@@ -153,13 +153,16 @@ impl AccountIdPrefixFull {
     /// (using count from IntermediateAddress::Regular)
     pub fn interpolate_addr_intermediate(&self, dest: &Self, ia: &IntermediateAddress) -> Result<Self> {
         if let IntermediateAddress::Regular(regular) = ia {
-            return Ok(self.interpolate_addr(&dest, regular.use_dest_bits()))
+            Ok(self.interpolate_addr(&dest, regular.use_dest_bits()))
+        } else {
+            fail!("IntermediateAddress::Regular is expected")
         }
-        fail!("IntermediateAddress::Regular is expected")
     }
 
     /// Returns count of the first bits matched in both addresses
-    pub fn count_matching_bits(&self, other: &Self) -> u8 {
+    /// TBD
+    #[allow(dead_code)]
+    pub(crate) fn count_matching_bits(&self, other: &Self) -> u8 {
         if self.workchain_id != other.workchain_id {
             (self.workchain_id ^ other.workchain_id).leading_zeros() as u8
         } else if self.prefix != other.prefix {
@@ -171,13 +174,15 @@ impl AccountIdPrefixFull {
 
     /// Performs Hypercube Routing from self to dest address.
     /// Result: (transit_addr_dest_bits, nh_addr_dest_bits)
-    pub fn perform_hypercube_routing(
+    /// TBD
+    #[allow(dead_code)]
+    pub(crate) fn perform_hypercube_routing(
         &self,
         dest: &AccountIdPrefixFull,
         cur_shard: &ShardIdent,
-        ia: &IntermediateAddress
+        ia: IntermediateAddress
     ) -> Result<(IntermediateAddress, IntermediateAddress)> {
-        let transit = self.interpolate_addr_intermediate(dest, ia)?;
+        let transit = self.interpolate_addr_intermediate(dest, &ia)?;
         if !cur_shard.contains_full_prefix(&transit) {
             fail!("Shard {} must fully contain transit prefix {}", cur_shard, transit)
         }
@@ -189,11 +194,11 @@ impl AccountIdPrefixFull {
 
         if transit.is_masterchain() || dest.is_masterchain() {
             // Route messages to/from masterchain directly
-            return Ok((ia.clone(), IntermediateAddress::full_dest()))
+            return Ok((ia, IntermediateAddress::full_dest()))
         }
 
         if transit.workchain_id != dest.workchain_id {
-            return Ok((ia.clone(), IntermediateAddress::use_dest_bits(32)?))
+            return Ok((ia, IntermediateAddress::use_dest_bits(32)?))
         }
 
         let x = cur_shard.prefix & (cur_shard.prefix - 1);
