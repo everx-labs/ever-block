@@ -65,12 +65,23 @@ impl ConfigParams {
     /// get config by index
     pub fn config(&self, index: u32) -> Result<Option<ConfigParamEnum>> {
         let key = index.write_to_new_cell().unwrap();
-        if let Ok(Some(slice)) = self.config_params.get(key.into()) {
+        if let Some(slice) = self.config_params.get(key.into())? {
             if let Some(cell) = slice.reference_opt(0) {
                 return Ok(Some(ConfigParamEnum::construct_from_slice_and_number(&mut cell.into(), index)?));
             }
         }
         Ok(None)
+    }
+
+    /// get config by index
+    pub fn config_present(&self, index: u32) -> Result<bool> {
+        let key = index.write_to_new_cell().unwrap();
+        if let Some(slice) = self.config_params.get(key.into())? {
+            if slice.remaining_references() != 0 {
+                return Ok(true)
+            }
+        }
+        Ok(false)
     }
 
     /// set config
@@ -254,6 +265,9 @@ impl ConfigParams {
         };
         Ok(vset)
     }
+    pub fn prev_validator_set_present(&self) -> Result<bool> {
+        Ok(self.config_present(33)? || self.config_present(32)?)
+    }
     pub fn validator_set(&self) -> Result<ValidatorSet> {
         let vset = match self.config(35)? {
             Some(ConfigParamEnum::ConfigParam35(param)) => param.cur_temp_validators,
@@ -273,6 +287,15 @@ impl ConfigParams {
             }
         };
         Ok(vset)
+    }
+    pub fn next_validator_set_present(&self) -> Result<bool> {
+        Ok(self.config_present(37)? || self.config_present(36)?)
+    }
+    pub fn read_cur_validator_set_and_cc_conf(&self) -> Result<(ValidatorSet, CatchainConfig)> {
+        Ok((
+            self.validator_set()?,
+            self.catchain_config()?
+        ))
     }
     // TODO 39 validator signed temp keys
 }
@@ -326,22 +349,20 @@ impl ConfigParams {
 
 impl ConfigParams {
     pub fn compute_validator_set_cc(&self, shard: &ShardIdent, at: u32, cc_seqno: u32, cc_seqno_delta: &mut u32) -> Result<Vec<ValidatorDescr>> {
-        let vset = self.validator_set()?;
-        let ccc = self.catchain_config()?;
+        let (vset, ccc) = self.read_cur_validator_set_and_cc_conf()?;
         if (*cc_seqno_delta & 0xfffffffe) != 0 {
             fail!("seqno_delta>1 is not implemented yet");
         }
         *cc_seqno_delta += cc_seqno;
         vset.calc_subset(&ccc, shard.shard_prefix_with_tag(), shard.workchain_id(), *cc_seqno_delta, at.into())
-        .map(|(set, _hash)| {
-            set
-        })
+            .map(|(set, _hash)| {
+                set
+            })
     }
     pub fn compute_validator_set(&self, shard: &ShardIdent, _at: u32, cc_seqno: u32) -> Result<Vec<ValidatorDescr>> {
-        let vset = self.validator_set()?;
-        let ccc = self.catchain_config()?;
+        let (vset, ccc) = self.read_cur_validator_set_and_cc_conf()?;
         vset.calc_subset(&ccc, shard.shard_prefix_with_tag(), shard.workchain_id(), cc_seqno, _at.into())
-        .map(|(set, _seq_no)| set)
+            .map(|(set, _seq_no)| set)
     }
 }
 

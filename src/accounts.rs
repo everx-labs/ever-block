@@ -669,7 +669,7 @@ impl Account {
         None
     }
 
-    // freeze account from active
+    // freeze active account
     pub fn try_freeze(&mut self) -> Result<()> {
         if let Some(stuff) = self.stuff_mut() {
             if let AccountState::AccountActive(ref state_init) = stuff.storage.state {
@@ -678,6 +678,16 @@ impl Account {
         }
         Ok(())
     }
+
+    // uninit active account
+    pub fn uninit_account(&mut self) {
+        if let Some(stuff) = self.stuff_mut() {
+            if let AccountState::AccountActive(_) = stuff.storage.state {
+                stuff.storage.state = AccountState::AccountUninit
+            }
+        }
+    }
+
     /// obsolete - use try_freeze
     pub fn freeze_account(&mut self) { self.try_freeze().unwrap() }
     /// create frozen account - for test purposes
@@ -1077,6 +1087,13 @@ pub struct ShardAccount {
 }
 
 impl ShardAccount {
+    pub fn with_account_root(account_root: Cell, last_trans_hash: UInt256, last_trans_lt: u64) -> Self {
+        ShardAccount {
+            account: ChildCell::with_cell(account_root),
+            last_trans_hash,
+            last_trans_lt,
+        }
+    }
     pub fn with_params(account: &Account, last_trans_hash: UInt256, last_trans_lt: u64) -> Result<Self> {
         Ok(ShardAccount {
             account: ChildCell::with_struct(account)?,
