@@ -660,22 +660,17 @@ impl Block {
     }
 
     pub fn read_cur_validator_set_and_cc_conf(&self) -> Result<(ValidatorSet, CatchainConfig)> {
-        let custom = self
+        self
             .read_extra()?
             .read_custom()?
             .ok_or_else(|| error!(BlockError::InvalidArg(
                 "Block doesn't contain `extra->custom` field".to_string()
-            )))?;
-        let config = custom
+            )))?
             .config()
             .ok_or_else(|| error!(BlockError::InvalidArg(
                 "Block doesn't contain `extra->custom->config` field, maybe no key block is used? ".to_string()
-            )))?;
-
-        Ok((
-            config.validator_set()?,
-            config.catchain_config()?
-        ))
+            )))?
+            .read_cur_validator_set_and_cc_conf()
     }
 }
 

@@ -1017,17 +1017,13 @@ impl ShardStateUnsplit {
     }
 
     pub fn read_cur_validator_set_and_cc_conf(&self) -> Result<(ValidatorSet, CatchainConfig)> {
-        let config = &self
+        self
             .read_custom()?
             .ok_or_else(|| error!(BlockError::InvalidArg(
                 "State doesn't contain `custom` field".to_string()
             )))?
-            .config;
-
-        Ok((
-            config.validator_set()?,
-            config.catchain_config()?
-        ))
+            .config
+            .read_cur_validator_set_and_cc_conf()
     }
 
     pub fn update_smc(&mut self, addr: &UInt256, code: Option<&Cell>, data: Option<&Cell>) -> Result<()> {
