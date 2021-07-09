@@ -93,7 +93,7 @@ impl ShardHashes {
     where F: FnMut(ShardIdent, ShardDescr, Option<ShardDescr>) -> Result<bool> {
         self.iterate_with_keys(|wc_id: i32, InRefValue(shardes_tree)| {
             shardes_tree.iterate_pairs(|prefix, shard_descr, sibling| {
-                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix.into())?;
+                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix.into_cell()?.into())?;
                 func(shard_ident, shard_descr, sibling)
             })
         })
@@ -253,7 +253,7 @@ impl ShardHashes {
         descr.min_ref_mc_seqno = !0;
         descr.next_validator_shard = SHARD_FULL;
         descr.min_ref_mc_seqno = 0;
-        let tree = BinTree::with_item(&descr);
+        let tree = BinTree::with_item(&descr)?;
 
         self.set(&workchain_id, &InRefValue(tree))
     }
@@ -509,19 +509,19 @@ impl Serializable for McBlockExtra {
         self.prev_blk_signatures.write_to(&mut cell1)?;
         if let Some(msg) = self.recover_create_msg.as_ref() {
             cell1.append_bit_one()?;
-            cell1.append_reference(msg.write_to_new_cell()?);
+            cell1.append_reference_cell(msg.serialize()?);
         } else {
             cell1.append_bit_zero()?;
         }
         
         if let Some(msg) = self.mint_msg.as_ref() {
             cell1.append_bit_one()?;
-            cell1.append_reference(msg.write_to_new_cell()?);
+            cell1.append_reference_cell(msg.serialize()?);
         } else {
             cell1.append_bit_zero()?;
         }
         
-        cell.append_reference(cell1);
+        cell.append_reference_cell(cell1.into_cell()?);
 
         if let Some(config) = &self.config {
             config.write_to(cell)?;
@@ -1025,7 +1025,7 @@ impl McStateExtra {
 
     /// Adds new workchain
     pub fn add_workchain(&mut self, workchain_id: i32, descr: &ShardDescr) -> Result<ShardIdent> {
-        let shards = BinTree::with_item(descr);
+        let shards = BinTree::with_item(descr)?;
         self.shards.set(&workchain_id, &InRefValue(shards))?;
         Ok(ShardIdent::with_workchain_id(workchain_id)?)
     }
@@ -1128,7 +1128,7 @@ impl Serializable for McStateExtra {
         if let Some(ref block_create_stats) = self.block_create_stats {
             block_create_stats.write_to(&mut cell1)?;
         }
-        cell.append_reference(cell1);
+        cell.append_reference_cell(cell1.into_cell()?);
         self.global_balance.write_to(cell)?;
         Ok(())
     }
@@ -1405,7 +1405,7 @@ impl Serializable for ShardDescr {
         let mut child = BuilderData::new();
         self.fees_collected.write_to(&mut child)?;
         self.funds_created.write_to(&mut child)?;
-        cell.append_reference(child);
+        cell.append_reference_cell(child.into_cell()?);
 
         Ok(())
     }

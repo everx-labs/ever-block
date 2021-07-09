@@ -86,7 +86,7 @@ impl AccountIdPrefixFull {
             cell.append_i32(self.workchain_id).unwrap();
         }
         cell.append_u64(self.prefix).unwrap();
-        cell.into()
+        cell.into_cell().unwrap().into()
     }
 
     /// Constructs AccountIdPrefixFull prefix for specified address.
@@ -341,7 +341,7 @@ impl ShardIdent {
             let prefix = self.shard_prefix_with_tag() >> (64 - prefix_len);
             cell.append_bits(prefix as usize, prefix_len as usize).unwrap();
         }
-        cell.into()
+        cell.into_cell().unwrap().into()
     }
 
     /// Get bitstring-key for BinTree operation for Shard
@@ -349,14 +349,14 @@ impl ShardIdent {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)?
             .append_u64(self.shard_prefix_without_tag())?;
-        Ok(cell.into())
+        Ok(cell.into_cell()?.into())
     }
 
     pub fn full_key_with_tag(&self) -> Result<SliceData> {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)?
             .append_u64(self.shard_prefix_with_tag())?;
-        Ok(cell.into())
+        Ok(cell.into_cell()?.into())
     }
 
     pub fn workchain_id(&self) -> i32 {
@@ -1058,8 +1058,8 @@ impl ShardStateUnsplit {
         let mut builder = BuilderData::from_slice(&data);
         let cell = config.config_params.data()
             .ok_or_else(|| error!("configs musn't be empty"))?;
-        builder.prepend_reference(BuilderData::from(cell));
-        config_smc.set_data(builder.into());
+        builder.prepend_reference_cell(cell.clone());
+        config_smc.set_data(builder.into_cell()?);
         shard_config_smc.write_account(&config_smc)?;
         accounts.set(&config.config_addr, &shard_config_smc, &config_smc.aug()?)?;
         self.write_accounts(&accounts)
@@ -1117,12 +1117,12 @@ impl Serializable for ShardStateUnsplit {
         self.gen_time.write_to(builder)?;
         self.gen_lt.write_to(builder)?;
         self.min_ref_mc_seqno.write_to(builder)?;
-        builder.append_reference(self.out_msg_queue_info.write_to_new_cell()?);
+        builder.append_reference_cell(self.out_msg_queue_info.serialize()?);
         builder.append_bit_bool(self.before_split)?;
 
         let mut accounts_builder = BuilderData::new();
         self.accounts.write_to(&mut accounts_builder)?;
-        builder.append_reference(accounts_builder);
+        builder.append_reference_cell(accounts_builder.into_cell()?);
 
         let mut b2 = BuilderData::new();
         self.overload_history.write_to(&mut b2)?;
@@ -1131,11 +1131,11 @@ impl Serializable for ShardStateUnsplit {
         self.total_validator_fees.write_to(&mut b2)?;
         self.libraries.write_to(&mut b2)?;
         self.master_ref.write_maybe_to(&mut b2)?;
-        builder.append_reference(b2);
+        builder.append_reference_cell(b2.into_cell()?);
 
         builder.append_bit_bool(self.custom.is_some())?;
         if let Some(ref custom) = self.custom {
-            builder.append_reference(custom.write_to_new_cell()?);
+            builder.append_reference_cell(custom.serialize()?);
         }
 
         Ok(())

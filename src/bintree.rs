@@ -81,9 +81,9 @@ where F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable
     if *bits != 1 || children.len() < 2 {
         Ok(false)
     } else if let Some(x) = key.get_next_bit_opt() {
-        let mut child = BuilderData::from(&children.remove(x));
+        let mut child = BuilderData::from(children.remove(x));
         let result = child.update_cell(internal_merge, (key, merger));
-        children.insert(x, child.into());
+        children.insert(x, child.into_cell()?);
         result
     } else {
         let mut right_slice = SliceData::from(&children.remove(1));
@@ -111,26 +111,26 @@ where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
             return Ok(false)
         }
         if let Some(x) = key.get_next_bit_opt() {
-            let mut child = BuilderData::from(&children.remove(x));
+            let mut child = BuilderData::from(children.remove(x));
             let result = child.update_cell(internal_split, (key, splitter));
-            children.insert(x, child.into());
+            children.insert(x, child.into_cell()?);
             return result
         }
     } else if key.is_empty() { // bt_leaf$0 {X:Type} leaf:X
         let leaf = BuilderData::with_raw_and_refs(std::mem::replace(data, vec![0x80]), *bits, children.drain(..))?;
         *bits = 1;
 
-        let mut leaf_slice = SliceData::from(leaf);
+        let mut leaf_slice = SliceData::from(leaf.into_cell()?);
         if leaf_slice.get_next_bit()? {
             return Ok(false)
         }
         let (left, right) = splitter(X::construct_from(&mut leaf_slice)?)?;
         let mut left_cell = BuilderData::with_raw(vec![0], 1)?;
         left.write_to(&mut left_cell)?;
-        children.push(left_cell.into());
+        children.push(left_cell.into_cell()?.into());
         let mut right_cell = BuilderData::with_raw(vec![0], 1)?;
         right.write_to(&mut right_cell)?;
-        children.push(right_cell.into());
+        children.push(right_cell.into_cell()?.into());
 
         return Ok(true)
     }
@@ -147,14 +147,14 @@ where F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
             return Ok(false)
         }
         if let Some(x) = key.get_next_bit_opt() {
-            let mut child = BuilderData::from(&children.remove(x));
+            let mut child = BuilderData::from(children.remove(x));
             let result = child.update_cell(internal_update, (key, mutator));
-            children.insert(x, child.into());
+            children.insert(x, child.into_cell()?.into());
             return result
         }
     } else if key.is_empty() { // bt_leaf$0 {X:Type} leaf:X
         let leaf = BuilderData::with_raw_and_refs(std::mem::replace(data, vec![0x80]), *bits, children.drain(..))?;
-        let mut leaf_slice = SliceData::from(leaf);
+        let mut leaf_slice = SliceData::from(leaf.into_cell()?);
         if leaf_slice.get_next_bit()? {
             return Ok(false)
         }
@@ -179,7 +179,7 @@ where
         iterate_internal(&mut cursor.checked_drain_reference()?.into(), left_key, p)? &&
         iterate_internal(&mut cursor.checked_drain_reference()?.into(), key, p)?
     } else {
-        return p(key.into(), X::construct_from(cursor)?)
+        return p(key.into_cell()?.into(), X::construct_from(cursor)?)
     };
     Ok(result)
 }
@@ -243,13 +243,13 @@ impl<X: Default + Serializable + Deserializable> BinTreeType<X> for BinTree<X> {
 
 impl<X: Default + Serializable + Deserializable> BinTree<X> {
     /// Constructs new instance and put item
-    pub fn with_item(value: &X) -> Self {
+    pub fn with_item(value: &X) -> Result<Self> {
         let mut leaf = BuilderData::with_raw(vec![0x00], 1).unwrap();
-        value.write_to(&mut leaf).expect("should be ok");
-        Self {
-            data: leaf.into(),
+        value.write_to(&mut leaf)?;
+        Ok(Self {
+            data: leaf.into_cell()?.into(),
             phantom: PhantomData::<X>,
-        }
+        })
     }
 
     /// Splits item by calling splitter function, returns false if item was not found
@@ -260,7 +260,7 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
     ) -> Result<bool> {
         let mut builder = BuilderData::from_slice(&self.data);
         if builder.update_cell(internal_split, (key, splitter))? {
-            self.data = builder.into();
+            self.data = builder.into_cell()?.into();
             Ok(true)
         } else {
             Ok(false)
@@ -275,7 +275,7 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
     ) -> Result<bool> {
         let mut builder = BuilderData::from_slice(&self.data);
         if builder.update_cell(internal_merge, (key, merger))? {
-            self.data = builder.into();
+            self.data = builder.into_cell()?.into();
             Ok(true)
         } else {
             Ok(false)
@@ -290,7 +290,7 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
     ) -> Result<bool> {
         let mut builder = BuilderData::from_slice(&self.data);
         if builder.update_cell(internal_update, (key, mutator))? {
-            self.data = builder.into();
+            self.data = builder.into_cell()?.into();
             Ok(true)
         } else {
             Ok(false)
@@ -341,15 +341,15 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeType<X> 
 
 impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y> {
     /// Constructs new instance and put item
-    pub fn with_item(value: &X, aug: &Y) -> Self {
+    pub fn with_item(value: &X, aug: &Y) -> Result<Self> {
         let mut leaf = BuilderData::with_raw(vec![0x00], 1).unwrap();
-        value.write_to(&mut leaf).expect("should be ok");
-        aug.write_to(&mut leaf).expect("should be ok");
-        Self {
+        value.write_to(&mut leaf)?;
+        aug.write_to(&mut leaf)?;
+        Ok(Self {
             extra: aug.clone(),
-            data: leaf.into(),
+            data: leaf.into_cell()?.into(),
             phantom: PhantomData::<X>,
-        }
+        })
     }
     pub fn set_extra(&mut self, _key: SliceData, _aug: &Y) -> bool {
         unimplemented!()
@@ -427,7 +427,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
                 let mut fork_aug = Y::construct_from(slice)?;
                 fork_aug.calc(aug)?;
                 fork_aug.write_to(&mut cell)?;
-                *slice = cell.into();
+                *slice = cell.into_cell()?.into();
                 return Ok(true)
             }
         } else if key.is_empty() {
@@ -435,13 +435,13 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
             let mut fork_aug = Y::construct_from(slice)?;
             fork_aug.calc(aug)?;
             let mut builder = BuilderData::with_bitstring(vec![0xC0])?;
-            builder.append_reference(cell);
+            builder.append_reference_cell(cell.into_cell()?);
             let mut cell = BuilderData::with_raw(vec![0], 1)?;
             value.write_to(&mut cell)?;
             aug.write_to(&mut cell)?;
-            builder.append_reference(cell);
+            builder.append_reference_cell(cell.into_cell()?);
             fork_aug.write_to(&mut builder)?;
-            *slice = builder.into();
+            *slice = builder.into_cell()?.into();
             return Ok(true)
         }
         Ok(false)

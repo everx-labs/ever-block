@@ -537,7 +537,7 @@ impl Serializable for MsgEnvelope {
         self.cur_addr.write_to(cell)?;
         self.next_addr.write_to(cell)?;
         self.fwd_fee_remaining.write_to(cell)?;
-        cell.append_reference(self.msg.write_to_new_cell()?);
+        cell.append_reference_cell(self.msg.serialize()?);
         Ok(())
     }
 }

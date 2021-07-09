@@ -752,6 +752,13 @@ impl Account {
         self.stuff().is_none()
     }
 
+    pub fn frozen_hash(&self) -> Option<&UInt256> {
+        match self.state() {
+            Some(AccountState::AccountFrozen(state_init_hash)) => Some(state_init_hash),
+            _ => None
+        }
+    }
+
     pub fn belongs_to_shard(&self, shard: &ShardIdent) -> Result<bool> {
         match self.get_addr() {
             Some(addr) => Ok(addr.get_workchain_id() == shard.workchain_id() && shard.contains_account(addr.get_address())?),
@@ -1145,7 +1152,7 @@ impl ShardAccount {
 
 impl Serializable for ShardAccount {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference(self.account.write_to_new_cell()?);
+        cell.checked_append_reference(self.account.serialize()?)?;
         self.last_trans_hash.write_to(cell)?;
         self.last_trans_lt.write_to(cell)?;
         Ok(())

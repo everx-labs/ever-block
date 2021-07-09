@@ -95,7 +95,7 @@ where
         let bit_len = K::default().write_to_new_cell()?.length_in_bits();
         let mut dictionary = HashmapE::with_bit_len(bit_len);
         for (key, value) in self.iter() {
-            let key = key.write_to_new_cell()?;
+            let key = key.serialize()?;
             dictionary.set_builder(key.into(), &value.write_to_new_cell()?)?;
         }
         dictionary.write_to(cell)
@@ -155,7 +155,7 @@ pub trait Serializable {
     }
 
     fn serialize(&self) -> Result<Cell> {
-        Ok(self.write_to_new_cell()?.into())
+        self.write_to_new_cell()?.into_cell()
     }
 }
 
@@ -216,7 +216,7 @@ impl Deserializable for Cell {
 
 impl Serializable for Cell {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference(BuilderData::from(self));
+        cell.append_reference_cell(self.clone());
         Ok(())
     }
 }

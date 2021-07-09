@@ -162,7 +162,7 @@ macro_rules! define_HashmapAugE {
                 remainder.checked_append_reference(right)?;
                 aug.write_to(&mut remainder)?;
                 builder.append_builder(&remainder)?;
-                Ok((builder, remainder.into()))
+                Ok((builder, remainder.into_cell()?.into()))
             }
             fn is_fork(slice: &mut SliceData) -> Result<bool> {
                 Ok(slice.remaining_references() > 1)
@@ -268,7 +268,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         Ok((aug, val))
     }
     fn key_value_aug(key: BuilderData, mut slice: SliceData) -> Result<(K, X, Y)> {
-        let key = K::construct_from(&mut key.into())?;
+        let key = K::construct_from_cell(key.into_cell()?)?;
         let (val, aug) = Self::value_aug(&mut slice)?;
         Ok((key, val, aug))
     }
@@ -292,7 +292,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
     }
     /// gets aug and item in combined slice
     fn get_raw(&self, key: &K) -> Leaf {
-        let key = key.write_to_new_cell()?;
+        let key = key.serialize()?;
         self.get_serialized_raw(key.into())
     }
     /// get item as slice
@@ -335,14 +335,14 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
     }
     /// sets item to hashmapaug
     fn set(&mut self, key: &K, value: &X, aug: &Y) -> Result<()> {
-        let key = key.write_to_new_cell()?;
+        let key = key.serialize()?;
         let value = value.write_to_new_cell()?;
         self.set_builder_serialized(key.into(), &value, aug)?;
         Ok(())
     }
     /// sets item to hashmapaug as ref
     fn setref(&mut self, key: &K, value: &Cell, aug: &Y) -> Result<()> {
-        let key = key.write_to_new_cell()?;
+        let key = key.serialize()?;
         let value = value.write_to_new_cell()?;
         self.set_builder_serialized(key.into(), &value, aug)?;
         Ok(())
@@ -359,6 +359,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
                     (false, false) => (1, 1),
                 };
                 let result = ton_types::get_min_max::<Self>(root.clone(), &mut path, self.bit_len(), next_index, index, &mut 0)?;
+                let path = path.into_cell()?;
                 Ok(result.map(|value| (path.into(), value)))
             }
             None => Ok(None)
@@ -367,8 +368,8 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
     /// gets item with minimal key
     fn get_min(&self, signed: bool) -> Result<Option<(K, X)>> {
         match self.find_key(true, signed)? {
-            Some((key, mut val)) => {
-                let key = K::construct_from(&mut key.into())?;
+            Some((mut key, mut val)) => {
+                let key = K::construct_from(&mut key)?;
                 Y::skip(&mut val)?;
                 let val = X::construct_from(&mut val)?;
                 Ok(Some((key, val)))
@@ -379,8 +380,8 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
     /// gets item with maximal key
     fn get_max(&self, signed: bool) -> Result<Option<(K, X)>> {
         match self.find_key(false, signed)? {
-            Some((key, mut val)) => {
-                let key = K::construct_from(&mut key.into())?;
+            Some((mut key, mut val)) => {
+                let key = K::construct_from(&mut key)?;
                 Y::skip(&mut val)?;
                 let val = X::construct_from(&mut val)?;
                 Ok(Some((key, val)))
@@ -391,8 +392,8 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
     /// gets item with aug for minimal or maximal key
     fn get_minmax(&self, min: bool, signed: bool) -> Result<Option<(K, X, Y)>> {
         match self.find_key(min, signed)? {
-            Some((key, mut val)) => {
-                let key = K::construct_from(&mut key.into())?;
+            Some((mut key, mut val)) => {
+                let key = K::construct_from(&mut key)?;
                 let aug = Y::construct_from(&mut val)?;
                 let val = X::construct_from(&mut val)?;
                 Ok(Some((key, val, aug)))
@@ -508,7 +509,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
             self.set_root_extra(extra.clone());
             *self.data_mut() = Some(Self::make_cell_with_label_and_builder(
                 key, bit_len, true, &Self::combine(extra, leaf)?
-            )?.into());
+            )?.into_cell()?);
             None
         };
         Ok(result)
@@ -539,7 +540,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
             builder.checked_append_reference(reference)?;
         }
         fork_extra.write_to(&mut builder)?;
-        *slice = builder.into();
+        *slice = builder.into_cell()?.into();
         Ok((result, fork_extra))
     }
     // Continues or finishes search of place
@@ -595,7 +596,7 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
                 }
             }
         };
-        *cell = builder.into();
+        *cell = builder.into_cell()?;
         result
     }
     // Slices the edge and put new leaf
@@ -628,14 +629,14 @@ pub trait HashmapAugType<K: Deserializable + Serializable, X: Deserializable + S
         // Leaf for fork
         let another_cell = Self::make_cell_with_label_and_builder(key, length, true, &Self::combine(extra, leaf)?)?;
         if !label_bit {
-            builder.append_reference(existing_cell);
-            builder.append_reference(another_cell);
+            builder.append_reference_cell(existing_cell.into_cell()?);
+            builder.append_reference_cell(another_cell.into_cell()?);
         } else {
-            builder.append_reference(another_cell);
-            builder.append_reference(existing_cell);
+            builder.append_reference_cell(another_cell.into_cell()?);
+            builder.append_reference_cell(existing_cell.into_cell()?);
         };
         fork_extra.write_to(&mut builder)?;
-        *slice = builder.into();
+        *slice = builder.into_cell()?.into();
         Ok(fork_extra)
     }
     // Combines extra with leaf
@@ -742,7 +743,7 @@ pub trait HashmapAugRemover<K, X, Y>: HashmapAugType<K, X, Y> + HashmapRemover
 where K: Deserializable + Serializable, X: Deserializable + Serializable, Y: Augmentable {
     fn filter<F: FnMut(K, X, Y) -> Result<HashmapFilterResult>> (&mut self, mut func: F) -> Result<()> {
         Self::hashmap_filter(self, |key, mut aug_val| {
-            let key = K::construct_from(&mut key.into())?;
+            let key = K::construct_from_cell(key.clone().into_cell()?)?;
             let (val, aug) = Self::value_aug(&mut aug_val)?;
             func(key, val, aug)
         })?;
