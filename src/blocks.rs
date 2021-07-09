@@ -548,8 +548,8 @@ impl Serializable for BlkPrevInfo {
                 prev.write_to(cell)?;
             }
             BlkPrevInfo::Blocks{prev1, prev2} => {
-                cell.append_reference(prev1.write_to_new_cell()?);
-                cell.append_reference(prev2.write_to_new_cell()?);
+                cell.append_reference_cell(prev1.serialize()?);
+                cell.append_reference_cell(prev2.serialize()?);
             },
         }
         Ok(())
@@ -825,18 +825,15 @@ impl Deserializable for BlockExtra {
 impl Serializable for BlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u32(BLOCK_EXTRA_TAG)?;
-        cell.append_reference(self.in_msg_descr.write_to_new_cell()?);
-        cell.append_reference(self.out_msg_descr.write_to_new_cell()?);
-
-        let mut account_blocks_builder = BuilderData::new();
-        self.account_blocks.write_to(&mut account_blocks_builder)?;
-        cell.append_reference(account_blocks_builder);
+        cell.append_reference_cell(self.in_msg_descr.serialize()?);
+        cell.append_reference_cell(self.out_msg_descr.serialize()?);
+        cell.append_reference_cell(self.account_blocks.serialize()?);
 
         self.rand_seed.write_to(cell)?;
         self.created_by.write_to(cell)?;
         if let Some(custrom) = &self.custom {
             cell.append_bit_one()?;
-            cell.append_reference(custrom.write_to_new_cell()?);
+            cell.append_reference_cell(custrom.serialize()?);
         } else {
             cell.append_bit_zero()?;
         }
@@ -1006,11 +1003,11 @@ impl Serializable for BlockInfo {
         }
 
         if let Some(ref master) = self.master_ref {
-            cell.append_reference(master.write_to_new_cell()?);
+            cell.append_reference_cell(master.serialize()?);
         }
-        cell.append_reference(self.prev_ref.write_to_new_cell()?);
+        cell.append_reference_cell(self.prev_ref.serialize()?);
         if let Some(prev_vert_ref) = self.prev_vert_ref.as_ref() {
-            cell.append_reference(prev_vert_ref.write_to_new_cell()?);
+            cell.append_reference_cell(prev_vert_ref.serialize()?);
         }
 
         Ok(())
@@ -1028,7 +1025,7 @@ impl Serializable for ValueFlow {
         self.to_next_blk.write_to(&mut cell1)?;
         self.imported.write_to(&mut cell1)?;
         self.exported.write_to(&mut cell1)?;
-        cell.append_reference(cell1);
+        cell.append_reference_cell(cell1.into_cell()?);
         self.fees_collected.write_to(cell)?;
 
         let mut cell2 = BuilderData::new();
@@ -1036,7 +1033,7 @@ impl Serializable for ValueFlow {
         self.recovered.write_to(&mut cell2)?;
         self.created.write_to(&mut cell2)?;
         self.minted.write_to(&mut cell2)?;
-        cell.append_reference(cell2);
+        cell.append_reference_cell(cell2.into_cell()?);
 
         Ok(())
     }
@@ -1160,10 +1157,10 @@ impl Serializable for Block {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_u32(BLOCK_TAG)?;
         builder.append_i32(self.global_id)?;
-        builder.append_reference(self.info.write_to_new_cell()?); // info:^BlockInfo
-        builder.append_reference(self.value_flow.write_to_new_cell()?); // value_flow:^ValueFlow
-        builder.append_reference(self.state_update.write_to_new_cell()?); // state_update:^(MERKLE_UPDATE ShardState)
-        builder.append_reference(self.extra.write_to_new_cell()?); // extra:^BlockExtra
+        builder.append_reference_cell(self.info.serialize()?); // info:^BlockInfo
+        builder.append_reference_cell(self.value_flow.serialize()?); // value_flow:^ValueFlow
+        builder.append_reference_cell(self.state_update.serialize()?); // state_update:^(MERKLE_UPDATE ShardState)
+        builder.append_reference_cell(self.extra.serialize()?); // extra:^BlockExtra
         Ok(())
     }
 }
@@ -1242,14 +1239,14 @@ impl Serializable for TopBlockDescr {
         let mut prev = BuilderData::new();
         for (i, c) in self.chain.iter().rev().enumerate() {
             let mut builder = BuilderData::new();
-            builder.append_reference(BuilderData::from(&c));
+            builder.append_reference_cell(c.clone());
             if i != 0 {
-                builder.append_reference(prev);
+                builder.append_reference_cell(prev.into_cell()?);
             }
             prev = builder;
         }
         cell.append_bits(self.chain.len(), 8)?;
-        cell.checked_append_references_and_data(&prev.into())?;
+        cell.append_builder(&prev)?;
         Ok(())
     }
 }
@@ -1312,7 +1309,7 @@ impl TopBlockDescrSet {
     }
     pub fn insert(&mut self, shard: &ShardIdent, descr: &TopBlockDescr) -> Result<()> {
         let key = shard.full_key_with_tag()?;
-        let value = descr.write_to_new_cell()?;
+        let value = descr.serialize()?;
         self.collection.0.setref(key, &value.into()).map(|_|())
     }
     pub fn is_empty(&self) -> bool {

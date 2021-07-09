@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io::{Write, Read, Cursor};
 use ton_types::{
-    BuilderData, Cell, error, fail, Result, SliceData,
+    BuilderData, error, fail, Result, SliceData,
     BagOfCells, deserialize_tree_of_cells,
     ExceptionCode, UInt256
 };
@@ -99,7 +99,7 @@ impl SignedBlock {
         pub fn with_block_and_key(block: Block, key: &ed25519_dalek::Keypair) -> Result<Self> {
 
 		// block serialization 
-		let block_root: Cell = block.write_to_new_cell()?.into();
+		let block_root = block.serialize()?;
 		let bag = BagOfCells::with_root(&block_root);
 		let mut serialized_block = Vec::<u8>::new();
 		bag.write_to(&mut serialized_block, true)?;
@@ -171,11 +171,11 @@ impl SignedBlock {
 		let block_absent_cell = self.block_repr_hash.write_to_new_cell()?;
 
 		let mut cell = self.block_serialize_hash.write_to_new_cell()?;
-		cell.append_reference(block_absent_cell.clone());
-		cell.append_reference(self.signatures.write_to_new_cell()?);
+		cell.append_reference_cell(block_absent_cell.clone().into_cell()?);
+		cell.append_reference_cell(self.signatures.serialize()?);
 
 		// Transfom tree into bag 
-		let bag = BagOfCells::with_roots_and_absent(vec![&cell.into()], vec![&block_absent_cell.into()]);
+		let bag = BagOfCells::with_roots_and_absent(vec![&cell.into_cell()?], vec![&block_absent_cell.into_cell()?]);
 
 		// Write signed block's bytes and then unsigned block's bytes
 		bag.write_to(dest, true)?;

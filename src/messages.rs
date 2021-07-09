@@ -1151,7 +1151,7 @@ impl Message {
     }
 
     pub fn body_as_cell(&self) -> Cell {
-        self.body.as_ref().map(|slice| slice.into_cell()).unwrap_or_default()
+        self.body.as_ref().map(|slice| slice.clone().into_cell()).unwrap_or_default()
     }
 
     pub fn set_body(&mut self, body: SliceData) {
@@ -1433,9 +1433,7 @@ impl Message {
                 .read_message()?;
         }
 
-        MerkleProof::create_by_usage_tree(block_root, usage_tree)
-            .and_then(|proof| proof.write_to_new_cell())
-            .map(|cell| cell.into())
+        MerkleProof::create_by_usage_tree(block_root, usage_tree)?.serialize()
     }
 
     pub fn serialize_with_params(
@@ -1497,7 +1495,7 @@ impl Message {
                 } else { // if not enough space in current cell - append as reference
                     builder.append_bit_one()?      //mayby bit
                         .append_bit_one()?;     //either bit 
-                    builder.append_reference(init_builder);
+                    builder.append_reference_cell(init_builder.into_cell()?);
                 }
             }
             None => {
@@ -1507,21 +1505,21 @@ impl Message {
         }
 
         // write body
-        match self.body {
-            Some(_) => {
+        match self.body.as_ref() {
+            Some(body) => {
                 if !body_to_ref {
                     builder.append_bit_zero()?;     //either bit
-                    builder.checked_append_references_and_data(&self.body().unwrap())?;
+                    builder.checked_append_references_and_data(body)?;
                 } else { // if not enough space in current cell - append as reference
                     builder.append_bit_one()?;     //either bit
-                    builder.append_reference(BuilderData::from_slice(&self.body().unwrap()));
+                    builder.append_reference_cell(body.clone().into_cell());
                 };
-            },
+            }
             None => {
                 // write either be bit
                 // otherwise not be able to read 
                 builder.append_bit_zero()?;
-            },
+            }
         }
         Ok(())
     }
@@ -1721,16 +1719,32 @@ impl StateInit {
         self.split_depth = Some(val);
     }
 
+    pub fn split_depth(&self) -> Option<&Number5> {
+        self.split_depth.as_ref()
+    }
+
     pub fn set_special(&mut self, val: TickTock) {
         self.special = Some(val);
+    }
+
+    pub fn special(&self) -> Option<&TickTock> {
+        self.special.as_ref()
     }
 
     pub fn set_code(&mut self, val: Cell) {
         self.code = Some(val);
     }
 
+    pub fn code(&self) -> Option<&Cell> {
+        self.code.as_ref()
+    }
+
     pub fn set_data(&mut self, val: Cell) {
         self.data = Some(val);
+    }
+
+    pub fn data(&self) -> Option<&Cell> {
+        self.data.as_ref()
     }
 
     pub fn libraries(&self) -> StateInitLib { self.library.clone() }
@@ -1806,7 +1820,7 @@ pub fn generate_big_msg() -> Message {
     stinit.set_split_depth(Number5(23));
     stinit.set_special(TickTock::with_values(false, true));
     let mut code = SliceData::new(vec![0x3F, 0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xF4]);
-    stinit.set_code(code.into_cell());
+    stinit.set_code(code.clone().into_cell());
     let mut code1 = SliceData::new(vec![0xad, 0xc9, 0xba, 0xfc, 0x56, 0x94, 0x11, 0x56, 0x58, 0xfa, 0x2b, 0xdf, 0xe4, 0x65, 0x15, 0x1a, 
                                     0x32, 0x03, 0x69, 0x4a, 0xff, 0xcd, 0x00, 0x8f, 0x36, 0x8b, 0xd2, 0xcc, 0x8c, 0xc8, 0x10, 0xfb, 
                                     0x6b, 0x5b, 0x51]);
@@ -1874,11 +1888,11 @@ pub fn generate_big_msg() -> Message {
                  0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,
                  0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0x80]));
 
-    body1.append_reference(body2);
-    body.append_reference(body1);
+    body1.append_reference_cell(body2.into_cell().unwrap());
+    body.append_reference_cell(body1.into_cell().unwrap());
 
     *msg.state_init_mut() = Some(stinit);
-    *msg.body_mut() = Some(body.into());
+    msg.set_body(body.into_cell().unwrap().into());
 
     msg
 }

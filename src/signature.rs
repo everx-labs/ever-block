@@ -310,7 +310,7 @@ impl BlockSignaturesPure {
     /// Add crypto signature pair to BlockSignaturesPure
     pub fn add_sigpair(&mut self, signature: CryptoSignaturePair) {
         self.sig_count += 1;
-        let key = (self.sig_count as u16).write_to_new_cell().unwrap();
+        let key = (self.sig_count as u16).serialize().unwrap();
         self.signatures.set_builder(key.into(), &signature.write_to_new_cell().unwrap()).unwrap();
     }
 
@@ -447,7 +447,7 @@ impl BlockProof {
     pub fn new() -> Self {
         BlockProof {
             proof_for: BlockIdExt::default(),
-            root: BuilderData::default().into(),
+            root: Cell::default(),
             signatures: None,
         }
     }
@@ -475,7 +475,7 @@ impl Serializable for BlockProof {
         cell.checked_append_reference(self.root.clone())?;
         if let Some(s) = self.signatures.as_ref() {
             cell.append_bit_one()?;
-            cell.checked_append_reference(s.write_to_new_cell()?.into())?;
+            cell.checked_append_reference(s.serialize()?)?;
         } else {
             cell.append_bit_zero()?;
         }

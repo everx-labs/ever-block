@@ -246,7 +246,7 @@ impl Serializable for TrComputePhase {
             v.vm_init_state_hash.write_to(&mut sep_cell)?; // vm_init_state_hash:uint256
             v.vm_final_state_hash.write_to(&mut sep_cell)?; // vm_final_state_hash:uint256
 
-            cell.append_reference(sep_cell);
+            cell.append_reference_cell(sep_cell.into_cell()?);
         }
 
         Ok(())
@@ -690,7 +690,7 @@ impl Serializable for TransactionDescrOrdinary {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference(a.write_to_new_cell()?);
+            cell.append_reference_cell(a.serialize()?);
         }
 
         Ok(())
@@ -767,7 +767,7 @@ impl Serializable for TransactionDescrTickTock {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference(a.write_to_new_cell()?);
+            cell.append_reference_cell(a.serialize()?);
         }
 
         Ok(())
@@ -818,7 +818,7 @@ impl Serializable for TransactionDescrSplitPrepare {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference(a.write_to_new_cell()?);
+            cell.append_reference_cell(a.serialize()?);
         }
 
         Ok(())
@@ -859,7 +859,7 @@ impl Serializable for TransactionDescrSplitInstall {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         cell.append_bit_bool(self.installed)?;
-        cell.append_reference(self.prepare_transaction.write_to_new_cell()?);
+        cell.append_reference_cell(self.prepare_transaction.serialize()?);
         Ok(())
     }
 }
@@ -931,7 +931,7 @@ pub struct TransactionDescrMergeInstall {
 impl Serializable for TransactionDescrMergeInstall {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
-        cell.append_reference(self.prepare_transaction.write_to_new_cell()?);
+        cell.append_reference_cell(self.prepare_transaction.serialize()?);
         self.credit_ph.write_maybe_to(cell)?;
         self.compute_ph.write_to(cell)?;
         cell.append_bit_bool(self.action.is_some())?;
@@ -939,7 +939,7 @@ impl Serializable for TransactionDescrMergeInstall {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference(a.write_to_new_cell()?);
+            cell.append_reference_cell(a.serialize()?);
         }
 
         Ok(())
@@ -1434,7 +1434,7 @@ impl Transaction {
 
     /// add output message to Hashmap
     pub fn add_out_message(&mut self, mgs: &Message) -> Result<()> {
-        let msg_cell = mgs.write_to_new_cell()?.into();
+        let msg_cell = mgs.serialize()?.into();
 
         let mut descr = self.read_description()?;
         descr.append_to_storage_used(&msg_cell);
@@ -1514,7 +1514,7 @@ impl Transaction {
             )?;
 
         MerkleProof::create_by_usage_tree(block_root, usage_tree)
-            .and_then(|proof| proof.write_to_new_cell())
+            .and_then(|proof| proof.serialize())
             .map(|cell| cell.into())
     }
 
@@ -1599,17 +1599,17 @@ impl Serializable for Transaction {
         match &self.in_msg {
             Some(in_msg) => {
                 builder1.append_bit_one()?;
-                builder1.append_reference(in_msg.write_to_new_cell()?);
+                builder1.append_reference_cell(in_msg.serialize()?);
             },
             None => {
                 builder1.append_bit_zero()?;
             }
         };
         self.out_msgs.write_to(&mut builder1)?;
-        builder.append_reference(builder1);
+        builder.append_reference_cell(builder1.into_cell()?);
         self.total_fees.write_to(builder)?; // total_fees
-        builder.append_reference(self.state_update.write_to_new_cell()?); // ^(HASH_UPDATE Account)
-        builder.append_reference(self.description.write_to_new_cell()?); // ^TransactionDescr
+        builder.append_reference_cell(self.state_update.serialize()?); // ^(HASH_UPDATE Account)
+        builder.append_reference_cell(self.description.serialize()?); // ^TransactionDescr
 
         Ok(())
     }
@@ -1700,7 +1700,7 @@ impl AccountBlock {
         let mut transactions = Transactions::default();
         transactions.setref(
             &transaction.logical_time(),
-            &transaction.write_to_new_cell()?.into(),
+            &transaction.serialize()?.into(),
             transaction.total_fees()
         )?;
         Ok(AccountBlock {
@@ -1720,7 +1720,7 @@ impl AccountBlock {
 
     /// add transaction to block
     pub fn add_transaction(&mut self, transaction: &Transaction) -> Result<()> {
-        self.add_serialized_transaction(transaction, &transaction.write_to_new_cell()?.into())
+        self.add_serialized_transaction(transaction, &transaction.serialize()?.into())
     }
 
     /// append serialized transaction to block (use to increase speed)
@@ -1813,7 +1813,7 @@ impl Serializable for AccountBlock {
         cell.append_bits(ACCOUNT_BLOCK_TAG, 4)?;
         self.account_addr.write_to(cell)?;                                  // account_addr: AccountId,
         self.transactions.write_hashmap_root(cell)?;
-        cell.append_reference(self.state_update.write_to_new_cell()?);      // ^(HASH_UPDATE Account)
+        cell.append_reference_cell(self.state_update.serialize()?);      // ^(HASH_UPDATE Account)
         Ok(())
     }
 }
@@ -1860,7 +1860,7 @@ impl ShardAccountBlocks {
 
     /// adds transaction to account by id from transaction
     pub fn add_transaction(&mut self, transaction: &Transaction) -> Result<()> {
-        self.add_serialized_transaction(transaction, &transaction.write_to_new_cell()?.into())
+        self.add_serialized_transaction(transaction, &transaction.serialize()?.into())
     }
 
     pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> Result<()> {
