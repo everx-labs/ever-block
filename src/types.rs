@@ -958,6 +958,12 @@ impl From<u32> for UnixTime32 {
     }
 }
 
+impl Into<u32> for UnixTime32 {
+    fn into(self) -> u32 {
+        self.0
+    }
+}
+
 impl Serializable for UnixTime32 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()>{
         self.0.write_to(cell)

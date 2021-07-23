@@ -1272,6 +1272,17 @@ impl Message {
             _ => ()
         };
     }
+    pub fn set_dst_address(&mut self, dst: MsgAddressInt) {
+        match self.header {
+            CommonMsgInfo::IntMsgInfo(ref mut header) => {
+                header.dst = dst;
+            }
+            CommonMsgInfo::ExtInMsgInfo(ref mut header) => {
+                header.dst = dst;
+            }
+            _ => ()
+        };
+    }
 
     ///
     /// Get message's Unix time and logical time
