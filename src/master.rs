@@ -432,7 +432,6 @@ impl McBlockExtra {
 
     pub fn config(&self) -> Option<&ConfigParams> { self.config.as_ref() }
     pub fn config_mut(&mut self) -> &mut Option<ConfigParams> { &mut self.config }
-    pub fn set_config(&mut self, config: ConfigParams) { self.config = Some(config) }
 
     pub fn read_recover_create_msg(&self) -> Result<Option<InMsg>> {
         self.recover_create_msg.as_ref().map(|mr| mr.read_struct()).transpose()

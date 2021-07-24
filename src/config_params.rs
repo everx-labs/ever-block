@@ -42,27 +42,20 @@ pub struct ConfigParams {
 
 impl Default for ConfigParams {
     fn default() -> ConfigParams {
-        Self::new()
+        ConfigParams {
+            config_addr: UInt256::default(),
+            config_params: HashmapE::with_bit_len(32)
+        }
     }
 }
 
 impl ConfigParams {
     /// create new instance ConfigParams
-    pub const fn new() -> Self {
-        Self {
-            config_addr: UInt256::default(),
-            config_params: HashmapE::with_bit_len(32)
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub const fn with_address_and_root(config_addr: UInt256, data: Cell) -> Self {
-        Self {
-            config_addr,
-            config_params: HashmapE::with_hashmap(32, Some(data))
-        }
-    }
-
-    pub const fn with_address_and_params(config_addr: UInt256, data: Option<Cell>) -> Self {
+    pub fn with_address_and_params(config_addr: UInt256, data: Option<Cell>) -> Self {
         Self {
             config_addr,
             config_params: HashmapE::with_hashmap(32, data)
@@ -218,8 +211,10 @@ impl ConfigParams {
             if let Some(ConfigParamEnum::ConfigParam20(param)) = self.config(20)? {
                 return Ok(param)
             }
-        } else if let Some(ConfigParamEnum::ConfigParam21(param)) = self.config(21)? {
-            return Ok(param)
+        } else {
+            if let Some(ConfigParamEnum::ConfigParam21(param)) = self.config(21)? {
+                return Ok(param)
+            }
         }
         fail!("Gas prices not found")
     }
@@ -228,8 +223,10 @@ impl ConfigParams {
             if let Some(ConfigParamEnum::ConfigParam22(param)) = self.config(22)? {
                 return Ok(param)
             }
-        } else if let Some(ConfigParamEnum::ConfigParam23(param)) = self.config(23)? {
-            return Ok(param)
+        } else {
+            if let Some(ConfigParamEnum::ConfigParam23(param)) = self.config(23)? {
+                return Ok(param)
+            }
         }
         fail!("BlockLimits not found")
     }
@@ -238,8 +235,10 @@ impl ConfigParams {
             if let Some(ConfigParamEnum::ConfigParam24(param)) = self.config(24)? {
                 return Ok(param)
             }
-        } else if let Some(ConfigParamEnum::ConfigParam25(param)) = self.config(25)? {
-            return Ok(param)
+        } else {
+            if let Some(ConfigParamEnum::ConfigParam25(param)) = self.config(25)? {
+                return Ok(param)
+            }
         }
         fail!("Forward prices not found")
     }
@@ -252,7 +251,7 @@ impl ConfigParams {
     // TODO 29 consensus config
     pub fn fundamental_smc_addr(&self) -> Result<FundamentalSmcAddresses> {
         match self.config(31)? {
-            Some(ConfigParamEnum::ConfigParam31(param)) => Ok(param.fundamental_smc_addr),
+            Some(ConfigParamEnum::ConfigParam31(param)) => Ok(param.fundamental_smc_addr.clone()),
             _ => fail!("fundamental_smc_addr not found in config")
         }
     }
@@ -310,7 +309,6 @@ pub enum GlobalCapabilities {
     CapShortDequeue = 32,
     CapMbppEnabled = 64,
     CapFastStorageStat = 128,
-    CapInitCodeHash = 256,
 }
 
 impl ConfigParams {
@@ -428,7 +426,7 @@ impl ConfigParams {
 impl Deserializable for ConfigParams {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.config_addr.read_from(cell)?;
-        *self.config_params.data_mut() = Some(cell.checked_drain_reference()?);
+        *self.config_params.data_mut() = Some(cell.checked_drain_reference()?.clone());
         Ok(())
     }
 }
@@ -500,10 +498,6 @@ macro_rules! read_config {
 
 impl ConfigParamEnum {
     
-    pub fn construct_from_cell_and_number(cell: Cell, index: u32) -> Result<ConfigParamEnum> {
-        Self::construct_from_slice_and_number(&mut cell.into(), index)
-    }
-
     /// read config from cell
     pub fn construct_from_slice_and_number(slice: &mut SliceData, index: u32) -> Result<ConfigParamEnum> {
         match index {
@@ -541,7 +535,7 @@ impl ConfigParamEnum {
             36 => { read_config!(ConfigParam36, ConfigParam36, slice) },
             37 => { read_config!(ConfigParam37, ConfigParam37, slice) },
             39 => { read_config!(ConfigParam39, ConfigParam39, slice) },
-            index => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
+            index @ _ => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
         }
     }
 
@@ -1202,11 +1196,6 @@ impl ConfigParam18 {
         self.map.len()
     } 
 
-    /// determine is empty
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    } 
-
     /// get value by index
     pub fn get(&self, index: u32) -> Result<StoragePrices> {
         self.map.get(&index)?.ok_or_else(|| error!(BlockError::InvalidIndex(index as usize)))
@@ -1325,7 +1314,7 @@ impl GasLimitsPrices {
     pub fn calc_max_gas_threshold(&self) -> u128 {
         let mut result = self.flat_gas_price as u128;
         if self.gas_limit > self.flat_gas_limit {
-            result += ((self.gas_price as u128) * ((self.gas_limit - self.flat_gas_limit) as u128)) >> 16;
+            result += (self.gas_price as u128) * ((self.gas_limit - self.flat_gas_limit) as u128) >> 16;
         }
         result
     }
@@ -1972,7 +1961,7 @@ impl WorkchainFormat0 {
     /// Setter for min_addr_len
     /// 
     pub fn set_min_addr_len(&mut self, min_addr_len: u16) -> Result<()> {
-        if (64..=1023).contains(&min_addr_len) {
+        if min_addr_len >= 64 && min_addr_len <= 1023 {
             self.min_addr_len.0 = min_addr_len as u32;
             Ok(())
         } else {
@@ -1995,7 +1984,7 @@ impl WorkchainFormat0 {
     /// Setter for max_addr_len
     /// 
     pub fn set_max_addr_len(&mut self, max_addr_len: u16) -> Result<()> {
-        if (64..=1024).contains(&max_addr_len) && self.min_addr_len.0 <= max_addr_len as u32 {
+        if max_addr_len >= 64 && max_addr_len <= 1024 && self.min_addr_len.0 <= max_addr_len as u32 {
             self.max_addr_len.0 = max_addr_len as u32;
             Ok(())
         } else {
@@ -2202,7 +2191,10 @@ impl WorkchainDescr {
     }
 
     pub fn basic(&self) -> bool {
-        matches!(self.format, WorkchainFormat::Basic(_))
+        match self.format {
+            WorkchainFormat::Basic(_) => true,
+            _ => false
+        }
     }
 
 }
@@ -2463,12 +2455,7 @@ impl ConfigParam12 {
 
     /// get length
     pub fn len(&self) -> Result<usize> {
-        self.workchains.len()
-    } 
-
-    /// determine is empty
-    pub fn is_empty(&self) -> bool {
-        self.workchains.is_empty()
+        Ok(self.workchains.len()?)
     } 
 
     /// get value by index
@@ -2689,11 +2676,6 @@ impl ConfigParam39 {
     /// get length
     pub fn len(&self) -> Result<usize> {
         self.validator_keys.len()
-    } 
-
-    /// determine is empty
-    pub fn is_empty(&self) -> bool {
-        self.validator_keys.is_empty()
     } 
 
     /// get value by key
