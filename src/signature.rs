@@ -21,7 +21,8 @@ use crate::{
 use ed25519::signature::{Signature, Verifier};
 use std::{
     io::{Cursor, Write},
-    collections::HashMap
+    collections::HashMap,
+    str::FromStr,
 };
 use ton_types::{
     error, fail, Result,
@@ -49,12 +50,8 @@ impl CryptoSignature {
         Ok(Self(ed25519::Signature::from_bytes(bytes)?))
     }
 
-    pub fn from_str(string: &str) -> Result<Self> {
-        let buf = hex::decode(string).map_err(
-            |err| BlockError::InvalidData(format!("error parsing hex string: {}", err))
-        )?;
-        Self::from_bytes(&buf)
-    }
+    #[deprecated]
+    pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
 
     pub fn from_r_s(r: &[u8], s: &[u8]) -> Result<Self>
     {
@@ -105,6 +102,16 @@ impl CryptoSignature {
 impl Default for CryptoSignature {
     fn default() -> Self {
         Self(ed25519::Signature::from_bytes(&[0; ed25519_dalek::SIGNATURE_LENGTH]).unwrap())
+    }
+}
+
+impl FromStr for CryptoSignature {
+    type Err = failure::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        let key_buf = hex::decode(s).map_err(
+            |err| BlockError::InvalidData(format!("error parsing hex string {} : {}", s, err))
+        )?;
+        Self::from_bytes(&key_buf)
     }
 }
 
@@ -205,12 +212,8 @@ impl SigPubKey {
         Ok(SigPubKey(ed25519_dalek::PublicKey::from_bytes(bytes)?))
     }
 
-    pub fn from_str(string: &str) -> Result<Self> {
-        let key_buf = hex::decode(string).map_err(
-            |err| BlockError::InvalidData(format!("error parsing hex string: {}", err))
-        )?;
-        Self::from_bytes(&key_buf)
-    }
+    #[deprecated]
+    pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
 
     pub fn key(&self) -> &ed25519_dalek::PublicKey {
         &self.0
@@ -222,6 +225,20 @@ impl SigPubKey {
 
     pub fn verify_signature(&self, data: &[u8], signature: &CryptoSignature) -> bool {
         self.0.verify(data, signature.signature()).is_ok()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl FromStr for SigPubKey {
+    type Err = failure::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        let key_buf = hex::decode(s).map_err(
+            |err| BlockError::InvalidData(format!("error parsing hex string {}: {}", s, err))
+        )?;
+        Self::from_bytes(&key_buf)
     }
 }
 

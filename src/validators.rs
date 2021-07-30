@@ -26,7 +26,7 @@ use std::{
     cmp::{min, Ordering},
     borrow::Cow,
 };
-use sha2::{Sha256, Sha512, Digest};
+use sha2::{Digest, Sha256, Sha512};
 use ton_types::types::ByteOrderRead;
 use crc::{crc32, Hasher32};
 use ton_types::{
@@ -176,10 +176,10 @@ impl ValidatorDescr {
         }
     }
 
-    pub fn with_params(
-        public_key: SigPubKey, 
+    pub const fn with_params(
+        public_key: SigPubKey,
         weight: u64,
-        adnl_addr: Option<UInt256>) -> Self 
+        adnl_addr: Option<UInt256>) -> Self
     {
         ValidatorDescr {
             public_key,
@@ -189,7 +189,6 @@ impl ValidatorDescr {
         }
     }
 
-    // TODO: to be deleted
     pub fn compute_node_id_short(&self) -> UInt256 {
         let mut hasher = Sha256::new();
         let magic = [0xc6, 0xb4, 0x13, 0x48]; // magic 0x4813b4c6 from original node's code
@@ -217,9 +216,9 @@ impl Serializable for ValidatorDescr {
 }
 
 impl Deserializable for ValidatorDescr {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let tag = cell.get_next_byte()?;
-        if tag != VALIDATOR_DESC_TAG && tag != VALIDATOR_DESC_ADDR_TAG {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let tag = slice.get_next_byte()?;
+        if !matches!(tag, VALIDATOR_DESC_TAG | VALIDATOR_DESC_ADDR_TAG) {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
@@ -227,14 +226,19 @@ impl Deserializable for ValidatorDescr {
                 }
             )
         }
-        self.public_key.read_from(cell)?;
-        self.weight.read_from(cell)?;
-        if tag == VALIDATOR_DESC_ADDR_TAG {
-            let mut adnl_addr = UInt256::default();
-            adnl_addr.read_from(cell)?;
-            self.adnl_addr = Some(adnl_addr);
-        }
-        Ok(())
+        let public_key = Deserializable::construct_from(slice)?;
+        let weight = Deserializable::construct_from(slice)?;
+        let adnl_addr = if tag == VALIDATOR_DESC_TAG {
+            None
+        } else {
+            Some(Deserializable::construct_from(slice)?)
+        };
+        Ok(Self {
+            public_key,
+            weight,
+            adnl_addr,
+            prev_weight_sum: 0,
+        })
     }
 }
 
@@ -325,11 +329,11 @@ impl ValidatorSet {
         Ok(ValidatorSet {
             utime_since,
             utime_until, 
-            total: Number16(list.len() as u32), 
-            main: Number16(main as u32), 
+            total: Number16(list.len() as u32),
+            main: Number16(main as u32),
             total_weight,
             cc_seqno: 0,
-            list: list, 
+            list,
         })
     }
 
@@ -367,6 +371,13 @@ impl ValidatorSet {
 
     pub fn list(&self) -> &Vec<ValidatorDescr> {
         &self.list
+    }
+
+    pub fn validator_by_pub_key(&self, pub_key: &[u8; 32]) -> Option<&ValidatorDescr> {
+        self.list.iter().find_map(|item| match item.public_key.as_slice() == pub_key {
+            true => Some(item),
+            false => None
+        })
     }
 
     pub fn catchain_seqno(&self) -> u32 {
@@ -486,7 +497,7 @@ impl ValidatorSet {
         Ok((subset, hash_short))
     }
 
-    const HASH_SHORT_MAGIC: i32 = -1877581587;
+    const HASH_SHORT_MAGIC: u32 = 0x901660ED;
 
     pub fn calc_subset_hash_short(subset: &Vec<ValidatorDescr>, cc_seqno: u32) -> Result<u32> {
         let mut hasher = crc32::Digest::new(crc32::CASTAGNOLI);
@@ -530,7 +541,7 @@ impl Serializable for ValidatorSet {
 impl Deserializable for ValidatorSet {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_byte()?;
-        if tag != VALIDATOR_SET_TAG && tag != VALIDATOR_SET_EX_TAG {
+        if !matches!(tag, VALIDATOR_SET_TAG | VALIDATOR_SET_EX_TAG) {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
