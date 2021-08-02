@@ -59,12 +59,13 @@ pub struct BlockIdExt {
 
 impl BlockIdExt {
     /// New instance of BlockIdExt structure
-    pub fn new(shard_id: ShardIdent, seq_no: u32) -> Self {
-        Self::with_params(shard_id, seq_no, Default::default(), Default::default())
+    #[deprecated]
+    pub const fn new(shard_id: ShardIdent, seq_no: u32) -> Self {
+        Self::with_params(shard_id, seq_no, UInt256::default(), UInt256::default())
     }
 
     // New instance of BlockIdExt structure
-    pub fn with_params(
+    pub const fn with_params(
         shard_id: ShardIdent,
         seq_no: u32,
         root_hash: UInt256,
@@ -77,20 +78,12 @@ impl BlockIdExt {
             file_hash,
         }
     }
-    pub fn from_ext_blk(blk: ExtBlkRef) -> Self {
+    pub const fn from_ext_blk(blk: ExtBlkRef) -> Self {
         BlockIdExt {
             shard_id: ShardIdent::masterchain(),
             seq_no: blk.seq_no,
             root_hash: blk.root_hash,
             file_hash: blk.file_hash,
-        }
-    }
-    pub fn dummy_masterchain() -> Self {
-        BlockIdExt {
-            shard_id: ShardIdent::masterchain(),
-            seq_no: 0,
-            root_hash: UInt256::default(),
-            file_hash: UInt256::default(),
         }
     }
 
@@ -129,12 +122,12 @@ impl Deserializable for BlockIdExt {
 
 impl Display for BlockIdExt {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "({}:{}, {}, rh {}, fh {})", 
+        write!(f, "({}:{}, {}, rh {:x}, fh {:x})", 
             self.shard_id.workchain_id(), 
             self.shard_id.shard_prefix_as_str_with_tag(), 
             self.seq_no,
-            self.root_hash.to_hex_string(),
-            self.file_hash.to_hex_string())
+            self.root_hash,
+            self.file_hash)
     }
 }
 

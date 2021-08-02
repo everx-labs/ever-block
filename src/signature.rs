@@ -207,8 +207,7 @@ impl SigPubKey {
         Self::default()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self>
-    {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         Ok(SigPubKey(ed25519_dalek::PublicKey::from_bytes(bytes)?))
     }
 
@@ -227,8 +226,26 @@ impl SigPubKey {
         self.0.verify(data, signature.signature()).is_ok()
     }
 
-    pub fn as_slice(&self) -> &[u8] {
+    pub fn as_slice(&self) -> &[u8; 32] {
         self.0.as_bytes()
+    }
+}
+
+impl PartialEq<UInt256> for SigPubKey {
+    fn eq(&self, other: &UInt256) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+impl AsRef<[u8]> for SigPubKey {
+    fn as_ref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
+impl AsRef<[u8; 32]> for SigPubKey {
+    fn as_ref(&self) -> &[u8; 32] {
+        self.as_slice()
     }
 }
 

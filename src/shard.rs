@@ -250,7 +250,7 @@ impl Default for ShardIdent {
 }
 
 impl ShardIdent {
-    pub fn masterchain() -> Self {
+    pub const fn masterchain() -> Self {
         ShardIdent {
             workchain_id: MASTERCHAIN_ID,
             prefix: SHARD_FULL,
