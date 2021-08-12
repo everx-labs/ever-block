@@ -249,6 +249,12 @@ impl ConfigParams {
             _ => fail!("no CatchainConfig in config_params")
         }
     }
+    pub fn consensus_config(&self) -> Result<ConsensusConfig> {
+        match self.config(29)? {
+            Some(ConfigParamEnum::ConfigParam29(ConfigParam29{ consensus_config})) => Ok(consensus_config),
+            _ => fail!("no ConsensusConfig in config_params")
+        }
+    }
     // TODO 29 consensus config
     pub fn fundamental_smc_addr(&self) -> Result<FundamentalSmcAddresses> {
         match self.config(31)? {
@@ -485,6 +491,7 @@ pub enum ConfigParamEnum {
     ConfigParam36(ConfigParam36),
     ConfigParam37(ConfigParam37),
     ConfigParam39(ConfigParam39),
+    ConfigParam40(ConfigParam40),
     ConfigParamAny(u32, SliceData),
 }
 
@@ -541,6 +548,7 @@ impl ConfigParamEnum {
             36 => { read_config!(ConfigParam36, ConfigParam36, slice) },
             37 => { read_config!(ConfigParam37, ConfigParam37, slice) },
             39 => { read_config!(ConfigParam39, ConfigParam39, slice) },
+            40 => { read_config!(ConfigParam40, ConfigParam40, slice) },
             index => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
         }
     }
@@ -582,6 +590,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam36(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(36)},
             ConfigParamEnum::ConfigParam37(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(37)},
             ConfigParamEnum::ConfigParam39(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(39)},
+            ConfigParamEnum::ConfigParam40(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(40)},
             ConfigParamEnum::ConfigParamAny(index, slice) => { cell.append_reference_cell(slice.clone().into_cell()); Ok(*index)},
         }
     }
@@ -2720,6 +2729,111 @@ impl Deserializable for ConfigParam39 {
 impl Serializable for ConfigParam39 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.validator_keys.write_to(cell)?;
+        Ok(())
+    }
+}
+
+///
+/// ConfigParam 40 struct
+///
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct ConfigParam40 {
+    pub slashing_config: SlashingConfig,
+}
+
+impl ConfigParam40 {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Deserializable for ConfigParam40 {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        self.slashing_config.read_from(cell)?;
+        Ok(())
+    }
+}
+
+impl Serializable for ConfigParam40 {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.slashing_config.write_to(cell)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SlashingConfig {
+    pub slashing_period_mc_blocks_count : u32, //number of MC blocks for one slashing iteration
+    pub resend_mc_blocks_count : u32, //number of MC blocks to resend slashing messages in case they have not been delivered
+    pub min_samples_count : u32, //minimal number of samples to compute statistics parameters
+    pub collations_score_weight : u32, //weight for collations score in total score
+    pub signing_score_weight : u32, //weight for signing score in total score
+    pub min_slashing_protection_score : u32, //minimal score to protect from any slashing [0..100]
+    pub z_param_numerator : u32, //numerator for Z param of confidence interval
+    pub z_param_denominator : u32, //numerator for Z param of confidence interval
+}
+
+impl SlashingConfig {
+    pub fn new() -> Self {
+        Self {
+            slashing_period_mc_blocks_count : 100,
+            resend_mc_blocks_count : 4,
+            min_samples_count : 30,
+            collations_score_weight : 0,
+            signing_score_weight : 1,
+            min_slashing_protection_score : 70,
+            z_param_numerator : 2326, //98% confidence
+            z_param_denominator : 1000,
+        }
+    }
+}
+
+impl Default for SlashingConfig {
+    fn default() -> SlashingConfig {
+        Self::new()
+    }
+}
+
+const SLASHING_VERSION1_TAG: u8 = 1;
+
+impl Deserializable for SlashingConfig {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        match cell.get_next_byte()? {
+            SLASHING_VERSION1_TAG => {
+                self.slashing_period_mc_blocks_count.read_from(cell)?;
+                self.resend_mc_blocks_count.read_from(cell)?;
+                self.min_samples_count.read_from(cell)?;
+                self.collations_score_weight.read_from(cell)?;
+                self.signing_score_weight.read_from(cell)?;
+                self.min_slashing_protection_score.read_from(cell)?;
+                self.z_param_numerator.read_from(cell)?;
+                self.z_param_denominator.read_from(cell)?;
+            }
+            tag => {
+                fail!(
+                    BlockError::InvalidConstructorTag {
+                        t: tag as u32,
+                        s: "SlashingConfig".to_string()
+                    }
+                )
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Serializable for SlashingConfig {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        cell.append_u8(SLASHING_VERSION1_TAG)?;
+        self.slashing_period_mc_blocks_count.write_to(cell)?;
+        self.resend_mc_blocks_count.write_to(cell)?;
+        self.min_samples_count.write_to(cell)?;
+        self.collations_score_weight.write_to(cell)?;
+        self.signing_score_weight.write_to(cell)?;
+        self.min_slashing_protection_score.write_to(cell)?;
+        self.z_param_numerator.write_to(cell)?;
+        self.z_param_denominator.write_to(cell)?;
         Ok(())
     }
 }

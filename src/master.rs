@@ -79,11 +79,33 @@ impl Deserializable for ShardIdentFull {
     }
 }
 
+impl fmt::Display for ShardIdentFull {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{:016X}", self.workchain_id, self.prefix)
+    }
+}
+
+impl fmt::LowerHex for ShardIdentFull {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{:016X}", self.workchain_id, self.prefix)
+    }
+}
+
 impl ShardHashes {
+    pub fn iterate_shards_for_workchain<F>(&self, workchain_id: i32, mut func: F) -> Result<()>
+    where F: FnMut(ShardIdent, ShardDescr) -> Result<bool> {
+        if let Some(InRefValue(shards)) = self.get(&workchain_id)? {
+            shards.iterate(|prefix, shard_descr| {
+                let shard_ident = ShardIdent::with_prefix_slice(workchain_id, prefix)?;
+                func(shard_ident, shard_descr)
+            })?;
+        }
+        Ok(())
+    }
     pub fn iterate_shards<F>(&self, mut func: F) -> Result<bool>
     where F: FnMut(ShardIdent, ShardDescr) -> Result<bool> {
-        self.iterate_with_keys(|wc_id: i32, InRefValue(shardes_tree)| {
-            shardes_tree.iterate(|prefix, shard_descr| {
+        self.iterate_with_keys(|wc_id: i32, InRefValue(shards)| {
+            shards.iterate(|prefix, shard_descr| {
                 let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
                 func(shard_ident, shard_descr)
             })
@@ -91,8 +113,8 @@ impl ShardHashes {
     }
     pub fn iterate_shards_with_siblings<F>(&self, mut func: F) -> Result<bool>
     where F: FnMut(ShardIdent, ShardDescr, Option<ShardDescr>) -> Result<bool> {
-        self.iterate_with_keys(|wc_id: i32, InRefValue(shardes_tree)| {
-            shardes_tree.iterate_pairs(|prefix, shard_descr, sibling| {
+        self.iterate_with_keys(|wc_id: i32, InRefValue(shards)| {
+            shards.iterate_pairs(|prefix, shard_descr, sibling| {
                 let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix.into_cell()?.into())?;
                 func(shard_ident, shard_descr, sibling)
             })
@@ -703,18 +725,12 @@ impl OldMcBlocksInfo {
             .ok_or_else(|| error!("Block with given seq_no {} is not found", id.seq_no()))?;
 
         if found_id.blk_ref.root_hash != *id.root_hash() {
-            fail!(
-                "Given block has invalid root hash: found {}, expected {}",
-                found_id.blk_ref.root_hash.to_hex_string(),
-                id.root_hash().to_hex_string()
-            )
+            fail!("Given block has invalid root hash: found {:x}, expected {:x}",
+                found_id.blk_ref.root_hash, id.root_hash())
         }
         if found_id.blk_ref.file_hash != *id.file_hash() {
-            fail!(
-                "Given block has invalid file hash: found {}, expected {}",
-                found_id.blk_ref.file_hash.to_hex_string(),
-                id.file_hash().to_hex_string()
-            )
+            fail!("Given block has invalid file hash: found {:x}, expected {:x}",
+                found_id.blk_ref.file_hash, id.file_hash())
         }
         if let Some(is_key) = is_key_opt {
             if is_key != found_id.key {
