@@ -245,7 +245,7 @@ impl fmt::LowerHex for OutMsgQueueKey {
         if f.alternate() {
             write!(f, "0x")?;
         }
-        write!(f, "{}", self.to_hex_string())
+        write!(f, "{}:{:016X}, hash: {:x}", self.workchain_id, self.prefix, self.hash)
     }
 }
 

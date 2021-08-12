@@ -191,7 +191,7 @@ impl ValidatorDescr {
 
     pub fn compute_node_id_short(&self) -> UInt256 {
         let mut hasher = Sha256::new();
-        let magic = [0xc6, 0xb4, 0x13, 0x48]; // magic 0x4813b4c6 from original node's code
+        let magic = [0xc6, 0xb4, 0x13, 0x48]; // magic 0x4813b4c6 from original node's code 1209251014 for KEY_ED25519
         hasher.input(&magic);
         hasher.input(self.public_key.key_bytes());
         From::<[u8; 32]>::from(hasher.result().into())
@@ -317,7 +317,7 @@ impl ValidatorSet {
         mut list: Vec<ValidatorDescr>
     ) -> Result<Self> {
         if list.is_empty() {
-            failure::bail!(BlockError::InvalidArg("`list` can't be empty".to_string()))
+            fail!(BlockError::InvalidArg("`list` can't be empty".to_string()))
         }
         let mut total_weight = 0;
         for i in 0..list.len() {
@@ -344,9 +344,10 @@ impl ValidatorSet {
         cc_seqno: u32,
         list: Vec<ValidatorDescr>
     ) -> Result<Self> {
-        let mut res = Self::new(utime_since, utime_until, main, list)?;
-        res.cc_seqno = cc_seqno;
-        Ok(res)
+        Ok(Self {
+            cc_seqno,
+            ..Self::new(utime_since, utime_until, main, list)?
+        })
     }
 
     pub fn utime_since(&self) -> u32 {
@@ -385,6 +386,14 @@ impl ValidatorSet {
     }
 
     pub fn set_catchain_seqno(&mut self, cc_seqno: u32) {
+        self.cc_seqno = cc_seqno;
+    }
+
+    pub fn cc_seqno(&self) -> u32 {
+        self.cc_seqno
+    }
+
+    pub fn set_cc_seqno(&mut self, cc_seqno: u32) {
         self.cc_seqno = cc_seqno;
     }
 

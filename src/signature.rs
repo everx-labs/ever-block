@@ -12,10 +12,10 @@
 */
 
 use crate::{
-    blocks::{BlockIdExt},
+    Serializable, Deserializable,
+    blocks::BlockIdExt,
     error::BlockError,
     validators::ValidatorBaseInfo,
-    Serializable, Deserializable,
     validators::ValidatorDescr
 };
 use ed25519::signature::{Signature, Verifier};
@@ -304,25 +304,26 @@ pub struct BlockSignaturesPure {
 
 impl Default for BlockSignaturesPure {
     fn default() -> Self {
-        BlockSignaturesPure {
-            sig_count: 0,
-            sig_weight: 0,
-            signatures: HashmapE::with_bit_len(16),
-        }
+        Self::new()
     }
 }
 
 impl BlockSignaturesPure {
     /// New empty instance of BlockSignaturesPure
-    pub fn new() -> Self {
-        BlockSignaturesPure::default()
-    }
-    
-    /// New instance of BlockSignaturesPure
-    pub fn with_weight(weight: u64) -> Self {
-        BlockSignaturesPure {
+    pub const fn new() -> Self {
+        Self {
             sig_count: 0,
-            sig_weight: weight,
+            sig_weight: 0,
+            signatures: HashmapE::with_bit_len(16),
+        }
+    }
+    pub const fn default() -> Self { Self::new() }
+
+    /// New instance of BlockSignaturesPure
+    pub const fn with_weight(sig_weight: u64) -> Self {
+        Self {
+            sig_count: 0,
+            sig_weight,
             signatures: HashmapE::with_bit_len(16),
         }
     }
@@ -352,7 +353,7 @@ impl BlockSignaturesPure {
         &self.signatures
     }
 
-    pub fn check_signatures(&self, validators_list: Vec<ValidatorDescr>, data: &[u8]) -> Result<u64> {
+    pub fn check_signatures(&self, validators_list: &[ValidatorDescr], data: &[u8]) -> Result<u64> {
         // Calc validators short ids
         let mut validators_map = HashMap::new();
         for vd in validators_list {
