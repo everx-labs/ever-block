@@ -256,6 +256,12 @@ impl ShardIdent {
             prefix: SHARD_FULL,
         }
     }
+    pub const fn full(workchain_id: i32) -> Self {
+        ShardIdent {
+            workchain_id,
+            prefix: SHARD_FULL,
+        }
+    }
     pub fn with_prefix_len(shard_pfx_len: u8, workchain_id: i32, shard_prefix: u64) -> Result<Self> {
         if shard_pfx_len > MAX_SPLIT_DEPTH {
             fail!(BlockError::InvalidArg(
