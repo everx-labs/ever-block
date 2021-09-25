@@ -460,6 +460,7 @@ impl fmt::Display for AccountStorage {
 /// account_something_new$001 = AccountState;
 ///
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum AccountState {
     AccountUninit,
@@ -1026,7 +1027,9 @@ impl Account {
     }
     /// setting due payment
     pub fn set_due_payment(&mut self, due_payment: Option<Grams>) {
-        self.stuff_mut().map(|s| s.storage_stat.due_payment = due_payment);
+        if let Some(stuff) = self.stuff_mut() {
+            stuff.storage_stat.due_payment = due_payment
+        }
     }
 
     /// getting balance of the account
@@ -1039,7 +1042,9 @@ impl Account {
 
     /// setting balance of the account
     pub fn set_balance(&mut self, balance: CurrencyCollection) {
-        self.stuff_mut().map(|s| s.storage.balance = balance);
+        if let Some(stuff) = self.stuff_mut() {
+            stuff.storage.balance = balance
+        }
     }
 
     /// adding funds to account (for example, for credit phase transaction)

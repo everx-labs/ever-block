@@ -165,6 +165,12 @@ pub trait Deserializable: Default {
         x.read_from(slice)?;
         Ok(x)
     }
+    fn construct_maybe_from(slice: &mut SliceData) -> Result<Option<Self>> {
+        match slice.get_next_bit()? {
+            true => Ok(Some(Self::construct_from(slice)?)),
+            false => Ok(None)
+        }
+    }
     fn construct_from_cell(cell: Cell) -> Result<Self> {
         Self::construct_from(&mut cell.into())
     }
@@ -209,7 +215,7 @@ pub trait MaybeSerialize {
 
 impl Deserializable for Cell {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        *self = cell.checked_drain_reference()?.clone();
+        *self = cell.checked_drain_reference()?;
         Ok(())
     }
 }
@@ -296,7 +302,7 @@ impl Serializable for AccountId {
         if self.remaining_bits() != 256 {
             fail!("account_id must contain 256 bits, but {}", self.remaining_bits())
         }
-        cell.append_bytestring(&self)?;
+        cell.append_bytestring(self)?;
         Ok(())
     }
 }
@@ -306,7 +312,7 @@ impl Deserializable for () {
         if cell.remaining_bits() == 0 && cell.remaining_references() == 0 {
             Ok(())
         } else {
-            fail!("It must be True by TLB, but some data is present: {}", cell.to_hex_string())
+            fail!("It must be True by TLB, but some data is present: {:x}", cell)
         }
     }
 }

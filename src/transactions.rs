@@ -189,7 +189,7 @@ impl TrComputePhase {
 
     pub fn get_vmphase_mut(&mut self) -> Option<&mut TrComputePhaseVm> {
         match self {
-            TrComputePhase::Vm(ref mut vm_ref) => return Some(vm_ref),
+            TrComputePhase::Vm(ref mut vm_ref) => Some(vm_ref),
             _ => None,
         }
     }
@@ -254,38 +254,46 @@ impl Serializable for TrComputePhase {
 }
 
 impl Deserializable for TrComputePhase {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-
+    fn construct_from(cell: &mut SliceData) -> Result<Self> {
         if !cell.get_next_bit()? {
-            // tr_phase_compute_skipped$0clear
-            let mut s = TrComputePhaseSkipped::default();
-            s.reason.read_from(cell)?;// reason:ComputeSkipReason
-            *self = TrComputePhase::Skipped(s);
+            let reason = Deserializable::construct_from(cell)?;
+            Ok(TrComputePhase::Skipped(TrComputePhaseSkipped { reason }))
         } else {
             // tr_phase_compute_vm$1
-            let mut v = TrComputePhaseVm::default();
-
-            v.success = cell.get_next_bit()?; // success:Bool
-            v.msg_state_used = cell.get_next_bit()?; // msg_state_used:Bool
-            v.account_activated = cell.get_next_bit()?; // account_activated:Bool
-            v.gas_fees.read_from(cell)?; // gas_fees:Gram
+            let success = cell.get_next_bit()?; // success:Bool
+            let msg_state_used = cell.get_next_bit()?; // msg_state_used:Bool
+            let account_activated = cell.get_next_bit()?; // account_activated:Bool
+            let gas_fees = Deserializable::construct_from(cell)?; // gas_fees:Gram
 
             // fields below are serialized into separate cell
-            let mut sep_cell = cell.checked_drain_reference()?.into();
+            let sep_cell = &mut cell.checked_drain_reference()?.into();
 
-            v.gas_used.read_from(&mut sep_cell)?; // gas_used:(VarUInteger 7)
-            v.gas_limit.read_from(&mut sep_cell)?; // gas_limit:(VarUInteger 7)
-            v.gas_credit = VarUInteger3::read_maybe_from(&mut sep_cell)?; // gas_credit:(Maybe (VarUInteger 3))
-            v.mode = sep_cell.get_next_byte()? as i8; // mode:int8
-            v.exit_code = sep_cell.get_next_u32()? as i32; // exit_code:int32
-            v.exit_arg = i32::read_maybe_from(&mut sep_cell)?; // exit_arg:(Maybe int32)
-            v.vm_steps = sep_cell.get_next_u32()?; // vm_steps:uint32
-            v.vm_init_state_hash.read_from(&mut sep_cell)?; // vm_init_state_hash:uint256
-            v.vm_final_state_hash.read_from(&mut sep_cell)?; // vm_final_state_hash:uint256
-
-            *self = TrComputePhase::Vm(v);
+            let gas_used = Deserializable::construct_from(sep_cell)?; // gas_used:(VarUInteger 7)
+            let gas_limit = Deserializable::construct_from(sep_cell)?; // gas_limit:(VarUInteger 7)
+            let gas_credit = Deserializable::construct_maybe_from(sep_cell)?; // gas_credit:(Maybe (VarUInteger 3))
+            let mode = Deserializable::construct_from(sep_cell)?; // mode:int8
+            let exit_code = Deserializable::construct_from(sep_cell)?; // exit_code:int32
+            let exit_arg = Deserializable::construct_maybe_from(sep_cell)?; // exit_arg:(Maybe int32)
+            let vm_steps = Deserializable::construct_from(sep_cell)?; // vm_steps:uint32
+            let vm_init_state_hash = Deserializable::construct_from(sep_cell)?; // vm_init_state_hash:uint256
+            let vm_final_state_hash = Deserializable::construct_from(sep_cell)?; // vm_final_state_hash:uint256
+            let v = TrComputePhaseVm {
+                success,
+                msg_state_used,
+                account_activated,
+                gas_fees,
+                gas_used,
+                gas_limit,
+                gas_credit,
+                mode,
+                exit_code,
+                exit_arg,
+                vm_steps,
+                vm_init_state_hash,
+                vm_final_state_hash
+            };
+            Ok(TrComputePhase::Vm(v))
         }
-        Ok(())
     }
 }
 
@@ -304,7 +312,15 @@ pub struct TrStoragePhase {
 }
 
 impl TrStoragePhase {
-    pub fn with_params(collected: Grams, due: Option<Grams>, status: AccStatusChange) -> Self {
+    pub fn new() -> Self {
+        Self {
+            storage_fees_collected: Grams::default(),
+            storage_fees_due: None,
+            status_change: AccStatusChange::default()
+        
+        }
+    }
+    pub const fn with_params(collected: Grams, due: Option<Grams>, status: AccStatusChange) -> Self {
         TrStoragePhase {
             storage_fees_collected: collected,
             storage_fees_due: due,
@@ -419,17 +435,15 @@ impl Deserializable for TrBouncePhase {
             bp.msg_fees.read_from(cell)?; // msg_fees:Grams
             bp.fwd_fees.read_from(cell)?; // fwd_fees:Grams
             *self = TrBouncePhase::Ok(bp);
+        } else if cell.get_next_bit()? {
+            // tr_phase_bounce_nofunds$01
+            let mut bp = TrBouncePhaseNofunds::default();
+            bp.msg_size.read_from(cell)?; // msg_size:StorageUsed
+            bp.req_fwd_fees.read_from(cell)?; // req_fwd_fees:Grams
+            *self = TrBouncePhase::Nofunds(bp);
         } else {
-            if cell.get_next_bit()? {
-                // tr_phase_bounce_nofunds$01
-                let mut bp = TrBouncePhaseNofunds::default();
-                bp.msg_size.read_from(cell)?; // msg_size:StorageUsed
-                bp.req_fwd_fees.read_from(cell)?; // req_fwd_fees:Grams
-                *self = TrBouncePhase::Nofunds(bp);
-            } else {
-                //tr_phase_bounce_negfunds$00
-                *self = TrBouncePhase::Negfunds;
-            }
+            //tr_phase_bounce_negfunds$00
+            *self = TrBouncePhase::Negfunds;
         }
         Ok(())
     }
@@ -467,7 +481,10 @@ pub struct TrCreditPhase {
 }
 
 impl TrCreditPhase {
-    pub fn with_params(due_fees_collected: Option<Grams>, credit: CurrencyCollection) -> Self {
+    pub const fn default() -> Self {
+        TrCreditPhase::with_params(None, CurrencyCollection::default())
+    }
+    pub const fn with_params(due_fees_collected: Option<Grams>, credit: CurrencyCollection) -> Self {
         TrCreditPhase {
             due_fees_collected,
             credit,
@@ -746,14 +763,16 @@ pub struct TransactionDescrTickTock {
 
 impl TransactionDescrTickTock {
     pub fn tick() -> Self {
-        let mut descr = Self::default();
-        descr.tt = TransactionTickTock::Tick;
-        descr
+        Self {
+            tt: TransactionTickTock::Tick,
+            ..Self::default()
+        }
     }
     pub fn tock() -> Self {
-        let mut descr = Self::default();
-        descr.tt = TransactionTickTock::Tock;
-        descr
+        Self {
+            tt: TransactionTickTock::Tock,
+            ..Self::default()
+        }
     }
 }
 
@@ -1025,19 +1044,11 @@ impl TransactionDescr {
     }
 
     pub fn is_split(&self) -> bool {
-        match self {
-            TransactionDescr::SplitPrepare(_) |
-            TransactionDescr::SplitInstall(_) => true,
-            _ => false,
-        }
+        matches!(self, TransactionDescr::SplitPrepare(_) | TransactionDescr::SplitInstall(_))
     }
 
     pub fn is_merge(&self) -> bool {
-        match self {
-            TransactionDescr::MergePrepare(_) |
-            TransactionDescr::MergeInstall(_) => true,
-            _ => false,
-        }
+        matches!(self, TransactionDescr::MergePrepare(_) | TransactionDescr::MergeInstall(_))
     }
 
     fn append_to_storage_used(&mut self, cell: &Cell) {
@@ -1328,7 +1339,7 @@ impl Transaction {
     }
 
     /// Get account address of transaction
-    pub fn account_id<'a>(&'a self) -> &'a AccountId {
+    pub fn account_id(&self) -> &AccountId {
         &self.account_addr
     }
 
@@ -1377,11 +1388,6 @@ impl Transaction {
 
     /// get total fees
     pub fn total_fees(&self) -> &CurrencyCollection { &self.total_fees }
-
-    /// get mutable total fees
-    pub fn total_fees_mut(&mut self) -> &mut CurrencyCollection {
-        &mut self.total_fees
-    }
 
     ///
     /// Calculate total transaction fees
@@ -1434,7 +1440,7 @@ impl Transaction {
 
     /// add output message to Hashmap
     pub fn add_out_message(&mut self, mgs: &Message) -> Result<()> {
-        let msg_cell = mgs.serialize()?.into();
+        let msg_cell = mgs.serialize()?;
 
         let mut descr = self.read_description()?;
         descr.append_to_storage_used(&msg_cell);
@@ -1513,9 +1519,7 @@ impl Transaction {
                 )
             )?;
 
-        MerkleProof::create_by_usage_tree(block_root, usage_tree)
-            .and_then(|proof| proof.serialize())
-            .map(|cell| cell.into())
+        MerkleProof::create_by_usage_tree(block_root, usage_tree)?.serialize()
     }
 
     pub fn contains_out_msg(&self, msg: &Message, hash: &UInt256) -> bool {
@@ -1634,7 +1638,7 @@ impl Deserializable for Transaction {
         self.outmsg_cnt = cell.get_next_int(15)? as i16; // outmsg_cnt
         self.orig_status.read_from(cell)?; // orig_status
         self.end_status.read_from(cell)?; // end_status
-        let ref mut cell1 = SliceData::from(cell.checked_drain_reference()?);
+        let cell1 = &mut SliceData::from(cell.checked_drain_reference()?);
         if cell1.get_next_bit()? {
             let mut msg = ChildCell::default();
             msg.read_from_reference(cell1)?;
@@ -1700,7 +1704,7 @@ impl AccountBlock {
         let mut transactions = Transactions::default();
         transactions.setref(
             &transaction.logical_time(),
-            &transaction.serialize()?.into(),
+            &transaction.serialize()?,
             transaction.total_fees()
         )?;
         Ok(AccountBlock {
@@ -1720,7 +1724,7 @@ impl AccountBlock {
 
     /// add transaction to block
     pub fn add_transaction(&mut self, transaction: &Transaction) -> Result<()> {
-        self.add_serialized_transaction(transaction, &transaction.serialize()?.into())
+        self.add_serialized_transaction(transaction, &transaction.serialize()?)
     }
 
     /// append serialized transaction to block (use to increase speed)
@@ -1854,13 +1858,13 @@ impl ShardAccountBlocks {
         self.set_builder_serialized(
             account_block.account_addr.clone(),
             &account_block.write_to_new_cell()?,
-            &account_block.total_fee()
+            account_block.total_fee()
         ).map(|_|())
     }
 
     /// adds transaction to account by id from transaction
     pub fn add_transaction(&mut self, transaction: &Transaction) -> Result<()> {
-        self.add_serialized_transaction(transaction, &transaction.serialize()?.into())
+        self.add_serialized_transaction(transaction, &transaction.serialize()?)
     }
 
     pub fn add_serialized_transaction(&mut self, transaction: &Transaction, transaction_cell: &Cell) -> Result<()> {
@@ -1884,7 +1888,7 @@ impl ShardAccountBlocks {
         };
         // append transaction to AccountBlock
         account_block.add_serialized_transaction(transaction, transaction_cell)?;
-        self.set_builder_serialized(account_id.clone(), &account_block.write_to_new_cell()?, &transaction.total_fees())?;
+        self.set_builder_serialized(account_id.clone(), &account_block.write_to_new_cell()?, transaction.total_fees())?;
         Ok(())
     }
 
@@ -1898,7 +1902,7 @@ impl ShardAccountBlocks {
     }
 
     pub fn full_transaction_fees(&self) -> &CurrencyCollection {
-        &self.root_extra()
+        self.root_extra()
     }
 }
 

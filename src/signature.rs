@@ -50,7 +50,7 @@ impl CryptoSignature {
         Ok(Self(ed25519::Signature::from_bytes(bytes)?))
     }
 
-    #[deprecated]
+    // #[deprecated]
     pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
 
     pub fn from_r_s(r: &[u8], s: &[u8]) -> Result<Self>
@@ -64,8 +64,8 @@ impl CryptoSignature {
         let mut sign = [0_u8; ed25519_dalek::SIGNATURE_LENGTH];
         {
             let mut cur = Cursor::new(&mut sign[..]);
-            cur.write(r).unwrap();
-            cur.write(s).unwrap();
+            cur.write_all(r).unwrap();
+            cur.write_all(s).unwrap();
         }
         Ok(Self(ed25519::Signature::from_bytes(&sign[..])?))
     }
@@ -211,7 +211,7 @@ impl SigPubKey {
         Ok(SigPubKey(ed25519_dalek::PublicKey::from_bytes(bytes)?))
     }
 
-    #[deprecated]
+    // #[deprecated]
     pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
 
     pub fn key(&self) -> &ed25519_dalek::PublicKey {
@@ -365,7 +365,7 @@ impl BlockSignaturesPure {
         self.signatures().iterate_slices(|ref mut _key, ref mut slice| {
             let sign = CryptoSignaturePair::construct_from(slice)?;
             if let Some(vd) = validators_map.get(&sign.node_id_short) {
-                if !vd.public_key.verify_signature(data, &sign.sign) {
+                if !vd.verify_signature(data, &sign.sign) {
                     fail!(BlockError::BadSignature)
                 }
                 weight += vd.weight;
@@ -530,7 +530,7 @@ impl Deserializable for BlockProof {
             )
         }
         self.proof_for.read_from(cell)?; 
-        self.root = cell.checked_drain_reference()?.clone();
+        self.root = cell.checked_drain_reference()?;
         self.signatures = if cell.get_next_bit()? {
             Some(BlockSignatures::construct_from_reference(cell)?)
         } else {

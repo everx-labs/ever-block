@@ -47,7 +47,7 @@ use crate::{
 
 macro_rules! define_VarIntegerN {
     ( $varname:ident, $N:expr, BigInt ) => {
-        #[derive( Eq, Hash, Clone, Debug)]
+        #[derive( Eq, Clone, Debug)]
         pub struct $varname(pub BigInt);
 
         #[allow(dead_code)]
@@ -199,7 +199,7 @@ macro_rules! define_VarIntegerN {
         }
     };
     ( $varname:ident, $N:expr, $tt:ty ) => {
-        #[derive( Eq, Hash, Clone, Debug, Default, Ord, PartialEq, PartialOrd)]
+        #[derive( Eq, Clone, Debug, Default, Ord, PartialEq, PartialOrd)]
         pub struct $varname(pub $tt);
 
         impl $varname {
@@ -477,7 +477,7 @@ impl CurrencyCollection {
     }
 
     pub fn set_other_ex(&mut self, key: u32, other: &VarUInteger32) -> Result<()> {
-        self.other.set(&key, &other)?;
+        self.other.set(&key, other)?;
         Ok(())
     }
 
@@ -958,6 +958,7 @@ impl From<u32> for UnixTime32 {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<u32> for UnixTime32 {
     fn into(self) -> u32 {
         self.0
@@ -1024,7 +1025,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
                         BlockError::PrunedCellAccess(std::any::type_name::<T>().into())
                     )
                 }
-                T::construct_from(&mut SliceData::from(cell.clone()))
+                T::construct_from(&mut SliceData::from(cell))
             }
             None => Ok(T::default())
         }

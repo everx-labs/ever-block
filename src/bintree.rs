@@ -39,7 +39,7 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
             }
         }
         if key.is_empty() {
-            X::construct_from(&mut cursor).map(|x| Some(x))
+            Ok(Some(X::construct_from(&mut cursor)?))
         } else {
             Ok(None)
         }
@@ -103,7 +103,7 @@ where F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable
 fn internal_split<X, F>(data: &SliceData, mut key: SliceData, splitter: F) -> Result<Option<BuilderData>>
 where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
 {
-    if data.remaining_bits() == 1 && data.get_bits(0, 1)? == 1 { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
+    if data.remaining_bits() == 1 && data.get_bit(0)? { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
         if data.remaining_references() < 2 {
             return Ok(None)
         }
@@ -139,7 +139,7 @@ where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
 fn internal_update<X, F>(data: &SliceData, mut key: SliceData, mutator: F) -> Result<Option<BuilderData>>
 where F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
 {
-    if data.remaining_bits() == 1 && data.get_bits(0, 1)? == 1 { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
+    if data.remaining_bits() == 1 && data.get_bit(0)? { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
         if data.remaining_references() < 2 {
             return Ok(None)
         }
@@ -203,16 +203,16 @@ where
         let left = X::construct_from(cursor)?;
         match sibling {
             Some(cell) => {
-                let mut cursor = SliceData::from(cell.clone());
+                let mut cursor = SliceData::from(cell);
                 if cursor.get_next_bit()? {
-                    func(key.clone(), left, None)?
+                    func(key, left, None)?
                 } else if check_sibling {
                     func(key, left, Some(X::construct_from(&mut cursor)?))?
                 } else {
                     true
                 }
             }
-            None => func(key.clone(), left, None)?
+            None => func(key, left, None)?
         }
     };
     Ok(result)
@@ -362,7 +362,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
         }
         if key.is_empty() {
             X::skip(&mut cursor)?;
-            Y::construct_from(&mut cursor).map(|extra| Some(extra))
+            Ok(Some(Y::construct_from(&mut cursor)?))
         } else {
             Ok(None)
         }
