@@ -152,7 +152,7 @@ impl OutMsgDescr {
     }
 
     pub fn full_exported(&self) -> &CurrencyCollection {
-        &self.root_extra()
+        self.root_extra()
     }
 }
 
@@ -217,6 +217,7 @@ impl OutMsgQueueKey {
         acc.clone().get_next_u64().unwrap()
     }
 
+    // #[deprecated(note = "use Display converter in format!")]
     pub fn to_hex_string(&self) -> String {
         format!("{}:{:016X}, hash: {:x}", self.workchain_id, self.prefix, self.hash)
     }
@@ -507,14 +508,14 @@ impl OutMsg {
     pub fn message_cell(&self) -> Result<Option<Cell>> {
         Ok(
             match self {
-                OutMsg::External(ref x) => Some(x.message_cell().clone()),
-                OutMsg::Immediately(ref x) => Some(x.read_out_message()?.message_cell().clone()),
-                OutMsg::New(ref x) => Some(x.read_out_message()?.message_cell().clone()),
-                OutMsg::Transit(ref x) => Some(x.read_out_message()?.message_cell().clone()),
-                OutMsg::Dequeue(ref x) => Some(x.read_out_message()?.message_cell().clone()),
+                OutMsg::External(ref x) => Some(x.message_cell()),
+                OutMsg::Immediately(ref x) => Some(x.read_out_message()?.message_cell()),
+                OutMsg::New(ref x) => Some(x.read_out_message()?.message_cell()),
+                OutMsg::Transit(ref x) => Some(x.read_out_message()?.message_cell()),
+                OutMsg::Dequeue(ref x) => Some(x.read_out_message()?.message_cell()),
                 OutMsg::DequeueShort(_) => None,
-                OutMsg::DequeueImmediately(ref x) => Some(x.read_out_message()?.message_cell().clone()),
-                OutMsg::TransitRequeued(ref x) => Some(x.read_out_message()?.message_cell().clone()),
+                OutMsg::DequeueImmediately(ref x) => Some(x.read_out_message()?.message_cell()),
+                OutMsg::TransitRequeued(ref x) => Some(x.read_out_message()?.message_cell()),
                 OutMsg::None => fail!("wrong message type")
             }
         )
@@ -590,31 +591,31 @@ impl Augmentation<CurrencyCollection> for OutMsg {
                 let env = x.read_out_message()?;
                 let msg = env.read_message()?;
                 // exported value = msg.value + msg.ihr_fee + fwd_fee_remaining
-                exported.add(&msg.header().get_value().unwrap())?;
+                exported.add(msg.header().get_value().unwrap())?;
                 if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
                     exported.grams.add(&header.ihr_fee)?;
                 }
-                exported.grams.add(&env.fwd_fee_remaining())?;
+                exported.grams.add(env.fwd_fee_remaining())?;
             }
             OutMsg::Transit(ref x) => {
                 let env = x.read_out_message()?;
                 let msg = env.read_message()?;
                 // exported value = msg.value + msg.ihr_fee + fwd_fee_remaining
-                exported.add(&msg.header().get_value().unwrap())?;
+                exported.add(msg.header().get_value().unwrap())?;
                 if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
                     exported.grams.add(&header.ihr_fee)?;
                 }
-                exported.grams.add(&env.fwd_fee_remaining())?;
+                exported.grams.add(env.fwd_fee_remaining())?;
             }
             OutMsg::TransitRequeued(ref x) => {
                 let env = x.read_out_message()?;
                 let msg = env.read_message()?;
                 // exported value = msg.value + msg.ihr_fee + fwd_fee_remaining
-                exported.add(&msg.header().get_value().unwrap())?;
+                exported.add(msg.header().get_value().unwrap())?;
                 if let CommonMsgInfo::IntMsgInfo(header) = msg.header() {
                     exported.grams.add(&header.ihr_fee)?;
                 }
-                exported.grams.add(&env.fwd_fee_remaining())?;
+                exported.grams.add(env.fwd_fee_remaining())?;
             }
             OutMsg::None => fail!("wrong OutMsg type"),
             // for other types - no value exported
@@ -674,7 +675,7 @@ impl Deserializable for OutMsg {
             OUT_MSG_TR => read_out_msg_descr!(cell, OutMsgTransit, Transit),
             OUT_MSG_DEQ_IMM => read_out_msg_descr!(cell, OutMsgDequeueImmediately, DequeueImmediately),
             OUT_MSG_TRDEQ => read_out_msg_descr!(cell, OutMsgTransitRequeued, TransitRequeued),
-            tag if cell.remaining_bits() > 0 && (tag == OUT_MSG_DEQ >> 1 || tag == OUT_MSG_DEQ_SHORT >> 1) => {
+            tag if cell.remaining_bits() != 0 && (tag == OUT_MSG_DEQ >> 1 || tag == OUT_MSG_DEQ_SHORT >> 1) => {
                 match (tag << 1) | cell.get_next_bit_int().unwrap() as u8 {
                     OUT_MSG_DEQ => read_out_msg_descr!(cell, OutMsgDequeue, Dequeue),
                     OUT_MSG_DEQ_SHORT => read_out_msg_descr!(cell, OutMsgDequeueShort, DequeueShort),

@@ -153,7 +153,7 @@ impl AccountIdPrefixFull {
     /// (using count from IntermediateAddress::Regular)
     pub fn interpolate_addr_intermediate(&self, dest: &Self, ia: &IntermediateAddress) -> Result<Self> {
         if let IntermediateAddress::Regular(regular) = ia {
-            Ok(self.interpolate_addr(&dest, regular.use_dest_bits()))
+            Ok(self.interpolate_addr(dest, regular.use_dest_bits()))
         } else {
             fail!("IntermediateAddress::Regular is expected")
         }
@@ -176,6 +176,7 @@ impl AccountIdPrefixFull {
     /// Result: (transit_addr_dest_bits, nh_addr_dest_bits)
     /// TBD
     #[allow(dead_code)]
+    #[allow(clippy::many_single_char_names)]
     pub(crate) fn perform_hypercube_routing(
         &self,
         dest: &AccountIdPrefixFull,
@@ -187,7 +188,7 @@ impl AccountIdPrefixFull {
             fail!("Shard {} must fully contain transit prefix {}", cur_shard, transit)
         }
 
-        if cur_shard.contains_full_prefix(&dest) {
+        if cur_shard.contains_full_prefix(dest) {
             // If destination is in this shard, set cur:=next_hop:=dest
             return Ok((IntermediateAddress::full_dest(), IntermediateAddress::full_dest()))
         }
@@ -299,7 +300,7 @@ impl ShardIdent {
         let mut shard_prefix = 0;
         while let Some(bit) = shard_prefix_slice.get_next_bit_opt() {
             shard_pfx_bits += 1;
-            shard_prefix = shard_prefix | ((bit as u64) << 64 - shard_pfx_bits)
+            shard_prefix |= (bit as u64) << (64 - shard_pfx_bits)
         }
         if shard_pfx_bits > MAX_SPLIT_DEPTH {
             fail!(
@@ -538,7 +539,7 @@ impl ShardIdent {
         self.prefix
     }
 
-    pub fn shard_prefix_without_tag(self) -> u64 {
+    pub fn shard_prefix_without_tag(&self) -> u64 {
         self.prefix - self.prefix_lower_bits()
     }
 
@@ -570,7 +571,7 @@ impl ShardIdent {
 
     pub fn split(&self) -> Result<(ShardIdent, ShardIdent)> {
         let lb = self.prefix_lower_bits() >> 1;
-        if lb & (!0 >> MAX_SPLIT_DEPTH + 1) != 0 {
+        if lb & (!0 >> (MAX_SPLIT_DEPTH + 1)) != 0 {
             fail!(
                 BlockError::InvalidArg(
                     format!("Can't split shard {}, because of max split depth is {}",
@@ -598,7 +599,7 @@ impl ShardIdent {
 
     // TODO: need to check max split first
     pub fn right_ancestor_mask(&self) -> Result<Self> {
-        Self::with_tagged_prefix(self.workchain_id, self.prefix + (1 << 64 - MAX_SPLIT_DEPTH))
+        Self::with_tagged_prefix(self.workchain_id, self.prefix + (1 << (64 - MAX_SPLIT_DEPTH)))
     }
 
     // returns all 0 and first 1 from right to left
@@ -834,9 +835,10 @@ pub struct ShardStateUnsplit {
 
 impl ShardStateUnsplit {
     pub fn with_ident(shard_id: ShardIdent) -> Self {
-        let mut shard_state = ShardStateUnsplit::default();
-        shard_state.shard_id = shard_id;
-        shard_state
+        Self {
+            shard_id,
+            ..ShardStateUnsplit::default()
+        }
     }
 
     pub fn id(&self) -> String {
@@ -1095,7 +1097,7 @@ impl Deserializable for ShardStateUnsplit {
         self.before_split = cell.get_next_bit()?;
         self.accounts.read_from_reference(cell)?;
 
-        let ref mut cell1 = cell.checked_drain_reference()?.into();
+        let cell1 = &mut cell.checked_drain_reference()?.into();
         self.overload_history.read_from(cell1)?;
         self.underload_history.read_from(cell1)?;
         self.total_balance.read_from(cell1)?;

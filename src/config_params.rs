@@ -205,6 +205,12 @@ impl ConfigParams {
             _ => fail!("no elector params in config")
         }
     }
+    pub fn validators_count(&self) -> Result<ConfigParam16> {
+        match self.config(16)? {
+            Some(ConfigParamEnum::ConfigParam16(param)) => Ok(param),
+            _ => fail!("no elector params in config")
+        }
+    }
     // TODO 16 validators count
     // TODO 17 stakes config
     pub fn storage_prices(&self) -> Result<ConfigParam18> {
@@ -317,6 +323,7 @@ pub enum GlobalCapabilities {
     CapMbppEnabled = 64,
     CapFastStorageStat = 128,
     CapInitCodeHash = 256,
+    CapOffHypercube = 512,
 }
 
 impl ConfigParams {
@@ -2709,13 +2716,13 @@ impl ConfigParam39 {
     pub fn get(&self, key: &UInt256) -> Result<ValidatorSignedTempKey> {
         self
             .validator_keys
-            .get(key)
-            .and_then(|vtk| vtk.ok_or_else(|| error!(BlockError::InvalidArg(key.to_hex_string()))))
+            .get(key)?
+            .ok_or_else(|| error!(BlockError::InvalidArg(format!("{:x}", key))))
     }
 
     /// insert value
     pub fn insert(&mut self, key: &UInt256, validator_key: &ValidatorSignedTempKey) -> Result<()> {
-        self.validator_keys.set(key, &validator_key)
+        self.validator_keys.set(key, validator_key)
     }
 }
 

@@ -301,7 +301,7 @@ impl FromStr for MsgAddress {
         }
         let address = SliceData::from_string(parts[len - 1])?;
         if len == 2 && parts[0].is_empty() {
-            return Ok(MsgAddress::with_extern(address)?)
+            return MsgAddress::with_extern(address)
         }
         let workchain_id = len.checked_sub(2)
             .map(|index| parts[index].parse::<i32>()).transpose()
@@ -324,7 +324,8 @@ impl FromStr for MsgAddress {
                         )
                 }
             ).transpose()?
-            .map(|value| AnycastInfo::with_rewrite_pfx(value)).transpose()
+            .map(AnycastInfo::with_rewrite_pfx)
+            .transpose()
             .map_err(
                 |err| BlockError::InvalidArg(
                     format!("anycast is not correct: {}", err)
@@ -412,7 +413,7 @@ impl MsgAddressInt {
     pub fn get_rewrite_pfx(&self) -> Option<AnycastInfo> { self.rewrite_pfx() }
     pub fn address(&self) -> AccountId {
         match self {
-            MsgAddressInt::AddrStd(addr_std) => addr_std.address.clone().into(),
+            MsgAddressInt::AddrStd(addr_std) => addr_std.address.clone(),
             MsgAddressInt::AddrVar(addr_var) => addr_var.address.clone()
         }
     }
@@ -557,11 +558,10 @@ impl fmt::Display for MsgAddressIntOrNone {
 impl Serializable for MsgAddressIntOrNone {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
-            MsgAddressIntOrNone::None       => {
+            MsgAddressIntOrNone::None => {
                 cell.append_raw(&[0x00], 2)?;
-                ()
-            },
-            MsgAddressIntOrNone::Some(addr) => addr.write_to(cell)?,
+            }
+            MsgAddressIntOrNone::Some(addr) => addr.write_to(cell)?
         }
         Ok(())
     } 
@@ -889,14 +889,14 @@ impl CommonMsgInfo {
     /// Value can be transmitted only internal messages
     /// For other types of messages, function returned None
     ///
-    pub fn get_value<'a>(&'a self) -> Option<&'a CurrencyCollection> {
+    pub fn get_value(&self) -> Option<&CurrencyCollection> {
         match self  {
             CommonMsgInfo::IntMsgInfo(header) => Some(&header.value),
             _ => None,
         }        
     }
 
-    pub fn get_value_mut<'a>(&'a mut self) -> Option<&'a mut CurrencyCollection> {
+    pub fn get_value_mut(&mut self) -> Option<&mut CurrencyCollection> {
         match self  {
             CommonMsgInfo::IntMsgInfo(header) => Some(&mut header.value),
             _ => None,
@@ -1176,10 +1176,8 @@ impl Message {
             CommonMsgInfo::ExtOutMsgInfo(ref header) => &header.src,
             _ => &MsgAddressIntOrNone::None,
         };
-        if let MsgAddressIntOrNone::Some(ref addr_int) = addr {
-            if let MsgAddressInt::AddrStd(ref addr_std) = addr_int {
-                return Some(addr_std.address.clone());
-            }
+        if let MsgAddressIntOrNone::Some(MsgAddressInt::AddrStd(addr_std)) = addr {
+            return Some(addr_std.address.clone())
             // TODO: What about AddrVar?
         }
         None
@@ -1262,23 +1260,12 @@ impl Message {
         };
     }
     pub fn set_src_address(&mut self, src: MsgAddressInt) {
-        match self.header {
-            CommonMsgInfo::IntMsgInfo(ref mut header) => {
+        match &mut self.header {
+            CommonMsgInfo::IntMsgInfo(header) => {
                 header.src = MsgAddressIntOrNone::Some(src);
             }
-            CommonMsgInfo::ExtOutMsgInfo(ref mut header) => {
+            CommonMsgInfo::ExtOutMsgInfo(header) => {
                 header.src = MsgAddressIntOrNone::Some(src);
-            }
-            _ => ()
-        };
-    }
-    pub fn set_dst_address(&mut self, dst: MsgAddressInt) {
-        match self.header {
-            CommonMsgInfo::IntMsgInfo(ref mut header) => {
-                header.dst = dst;
-            }
-            CommonMsgInfo::ExtInMsgInfo(ref mut header) => {
-                header.dst = dst;
             }
             _ => ()
         };
@@ -1289,11 +1276,11 @@ impl Message {
     /// None only for internal and external outbound message
     ///
     pub fn at_and_lt(&self) -> Option<(u32, u64)> {
-        match self.header {
-            CommonMsgInfo::IntMsgInfo(ref header) => {
+        match &self.header {
+            CommonMsgInfo::IntMsgInfo(header) => {
                 Some((header.created_at.0, header.created_lt))
             },
-            CommonMsgInfo::ExtOutMsgInfo(ref header) => {
+            CommonMsgInfo::ExtOutMsgInfo(header) => {
                 Some((header.created_at.0, header.created_lt))
             },
             _ => None
@@ -1315,14 +1302,25 @@ impl Message {
     ///
     /// Get value transmitted by the message
     ///
-    pub fn get_value<'a>(&'a self) -> Option<&'a CurrencyCollection> {
+    pub fn get_value(&self) -> Option<&CurrencyCollection> { self.value() }
+
+    ///
+    /// Get value transmitted by the message
+    ///
+    pub fn value(&self) -> Option<&CurrencyCollection> {
         self.header.get_value()
     }
 
     ///
     /// Get value transmitted by the message
     ///
-    pub fn get_value_mut<'a>(&'a mut self) -> Option<&'a mut CurrencyCollection> {
+    pub fn get_value_mut(&mut self) -> Option<&mut CurrencyCollection> { self.value_mut() }
+
+
+    ///
+    /// Get value transmitted by the message
+    ///
+    pub fn value_mut(&mut self) -> Option<&mut CurrencyCollection> {
         self.body_to_ref = None;
         self.init_to_ref = None;
         self.header.get_value_mut()
@@ -1341,30 +1339,21 @@ impl Message {
     /// Is message an internal?
     /// 
     pub fn is_internal(&self) -> bool {
-        match self.header {
-            CommonMsgInfo::IntMsgInfo(_) => true,
-            _ => false
-        }
+        matches!(self.header, CommonMsgInfo::IntMsgInfo(_))
     }
 
     ///
     /// Is message an external inbound?
     /// 
     pub fn is_inbound_external(&self) -> bool {
-        match self.header {
-            CommonMsgInfo::ExtInMsgInfo(_) => true,
-            _ => false
-        }
+        matches!(self.header, CommonMsgInfo::ExtInMsgInfo(_))
     }
 
     ///
     /// Is message an external outbound?
     /// 
     pub fn is_outbound_external(&self) -> bool {
-        match self.header {
-            CommonMsgInfo::ExtOutMsgInfo(_) => true,
-            _ => false
-        }
+        matches!(self.header, CommonMsgInfo::ExtOutMsgInfo(_))
     }
 
     ///
@@ -1475,25 +1464,21 @@ impl Message {
         let (body_to_ref, init_to_ref) = 
         if let (Some(b), Some(i)) = (body_to_ref, init_to_ref) {
             (*b, *i)
+        } else if header_bits + state_bits + body_bits <= MAX_DATA_BITS &&
+            header_refs + state_refs + body_refs <= MAX_REFERENCES_COUNT {
+            // all fits into one cell
+            (false, false)
+        } else if header_bits + state_bits <= MAX_DATA_BITS &&
+            header_refs + state_refs < MAX_REFERENCES_COUNT { // + body cell ref
+            // header & state fit
+            (true, false)
+        } else if header_bits + body_bits <= MAX_DATA_BITS &&
+            header_refs + body_refs < MAX_REFERENCES_COUNT { // + init cell ref
+            // header & body fit
+            (false, true)
         } else {
-            if header_bits + state_bits + body_bits <= MAX_DATA_BITS &&
-                header_refs + state_refs + body_refs <= MAX_REFERENCES_COUNT {
-                // all fits into one cell
-                (false, false)
-            } else {
-                if header_bits + state_bits <= MAX_DATA_BITS &&
-                    header_refs + state_refs + 1 <= MAX_REFERENCES_COUNT { // + body cell ref
-                    // header & state fit
-                    (true, false)
-                } else if header_bits + body_bits <= MAX_DATA_BITS &&
-                    header_refs + body_refs + 1 <= MAX_REFERENCES_COUNT { // + init cell ref
-                    // header & body fit
-                    (false, true)
-                } else {
-                    // only header fits
-                    (true, true)
-                }
-            }
+            // only header fits
+            (true, true)
         };
 
         // write StateInit
@@ -1789,13 +1774,13 @@ impl Deserializable for StateInit {
         self.special = TickTock::read_maybe_from(cell)?;
         // code:(Maybe ^Cell)
         self.code = match cell.get_next_bit()? {
-            true => Some(cell.checked_drain_reference()?.clone()),
+            true => Some(cell.checked_drain_reference()?),
             false => None,
         };
 
         // data:(Maybe ^Cell)
         self.data = match cell.get_next_bit()? {
-            true => Some(cell.checked_drain_reference()?.clone()),
+            true => Some(cell.checked_drain_reference()?),
             false => None,
         };
 

@@ -246,13 +246,13 @@ impl InMsg {
     pub fn message_cell(&self) -> Result<Cell> {
         Ok(
             match self {
-                InMsg::External(ref x) => x.message_cell().clone(),
-                InMsg::IHR(ref x) => x.message_cell().clone(),
-                InMsg::Immediatelly(ref x) => x.read_message()?.message_cell().clone(),
-                InMsg::Final(ref x) => x.read_message()?.message_cell().clone(),
-                InMsg::Transit(ref x) => x.read_in_message()?.message_cell().clone(),
-                InMsg::DiscardedFinal(ref x) => x.read_message()?.message_cell().clone(),
-                InMsg::DiscardedTransit(ref x) => x.read_message()?.message_cell().clone(),
+                InMsg::External(ref x) => x.message_cell(),
+                InMsg::IHR(ref x) => x.message_cell(),
+                InMsg::Immediatelly(ref x) => x.read_message()?.message_cell(),
+                InMsg::Final(ref x) => x.read_message()?.message_cell(),
+                InMsg::Transit(ref x) => x.read_in_message()?.message_cell(),
+                InMsg::DiscardedFinal(ref x) => x.read_message()?.message_cell(),
+                InMsg::DiscardedTransit(ref x) => x.read_message()?.message_cell(),
                 InMsg::None => Default::default()
             }
         )
@@ -544,7 +544,7 @@ impl Deserializable for InMsgIHR {
         self.msg.read_from_reference(cell)?;
         self.transaction.read_from_reference(cell)?;
         self.ihr_fee.read_from(cell)?;
-        self.proof_created = cell.checked_drain_reference()?.clone();
+        self.proof_created = cell.checked_drain_reference()?;
         Ok(())
     }
 }
@@ -730,7 +730,7 @@ impl InMsgDiscardedTransit {
         Ok(
             InMsgDiscardedTransit {
                 in_msg: ChildCell::with_struct(msg)?,
-                transaction_id: transaction_id,
+                transaction_id,
                 fwd_fee: fee,
                 proof_delivered: proof
             }
@@ -773,7 +773,7 @@ impl Deserializable for InMsgDiscardedTransit {
         self.in_msg.read_from_reference(cell)?;
         self.transaction_id.read_from(cell)?;
         self.fwd_fee.read_from(cell)?;
-        self.proof_delivered = cell.checked_drain_reference()?.clone();
+        self.proof_delivered = cell.checked_drain_reference()?;
         Ok(())
     }
 }

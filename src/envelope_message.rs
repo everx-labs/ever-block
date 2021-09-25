@@ -519,13 +519,13 @@ impl MsgEnvelope {
     /// is message route in one workchain
     pub fn same_workchain(&self) -> Result<bool> {
         let msg = self.read_message()?;
-        debug_assert!(msg.is_internal(), "Message with hash {} is not internal",
-            self.message_cell().repr_hash().to_hex_string());
+        debug_assert!(msg.is_internal(), "Message with hash {:x} is not internal",
+            self.message_cell().repr_hash());
         if let (Some(src), Some(dst)) = (msg.src_ref(), msg.dst_ref()) {
             return Ok(src.get_workchain_id() == dst.get_workchain_id())
         }
-        fail!("Message with hash {} has wrong type of src/dst address",
-            self.message_cell().repr_hash().to_hex_string())
+        fail!("Message with hash {:x} has wrong type of src/dst address",
+            self.message_cell().repr_hash())
     }
 }
 

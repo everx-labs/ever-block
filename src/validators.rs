@@ -14,7 +14,7 @@
 use crate::{
     define_HashmapE,
     error::BlockError,
-    signature::SigPubKey,
+    signature::{CryptoSignature, SigPubKey},
     types::{Number16, UnixTime32},
     Serializable, Deserializable,
     config_params::CatchainConfig,
@@ -193,9 +193,17 @@ impl ValidatorDescr {
         let mut hasher = Sha256::new();
         let magic = [0xc6, 0xb4, 0x13, 0x48]; // magic 0x4813b4c6 from original node's code 1209251014 for KEY_ED25519
         hasher.input(&magic);
-        hasher.input(self.public_key.key_bytes());
+        hasher.input(self.public_key.as_slice());
         From::<[u8; 32]>::from(hasher.result().into())
     }
+
+    pub fn verify_signature(&self, data: &[u8], signature: &CryptoSignature) -> bool {
+        match SigPubKey::from_bytes(self.public_key.as_slice()) {
+            Ok(pub_key) => pub_key.verify_signature(data, signature),
+            _ => false
+        }
+    }
+
 }
 
 const VALIDATOR_DESC_TAG: u8 = 0x53;
@@ -281,10 +289,16 @@ pub struct ValidatorSet {
     list: Vec<ValidatorDescr>, //ValidatorDescriptions,
 }
 
-#[derive(Eq, PartialEq, PartialOrd, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 struct IncludedValidatorWeight {
     pub prev_weight_sum: u64,
     pub weight: u64,
+}
+
+impl PartialOrd for IncludedValidatorWeight {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Ord for IncludedValidatorWeight {
@@ -292,7 +306,7 @@ impl Ord for IncludedValidatorWeight {
         match self.prev_weight_sum.cmp(&other.prev_weight_sum) {
             Ordering::Equal => {
                 self.weight.cmp(&other.weight)
-            },
+            }
             other => other
         }
     }
@@ -320,10 +334,10 @@ impl ValidatorSet {
             fail!(BlockError::InvalidArg("`list` can't be empty".to_string()))
         }
         let mut total_weight = 0;
-        for i in 0..list.len() {
-            list[i].prev_weight_sum = total_weight;
-            total_weight = total_weight.checked_add(list[i].weight).ok_or_else(|| 
-                BlockError::InvalidData(format!("Validator's total weight is more than 2^64"))
+        for descr in &mut list {
+            descr.prev_weight_sum = total_weight;
+            total_weight = total_weight.checked_add(descr.weight).ok_or_else(|| 
+                BlockError::InvalidData("Validator's total weight is more than 2^64".to_string())
             )?;
         }
         Ok(ValidatorSet {
@@ -399,7 +413,7 @@ impl ValidatorSet {
 
     pub fn at_weight(&self, weight_pos: u64) -> &ValidatorDescr {
         debug_assert!(weight_pos < self.total_weight);
-        debug_assert!(self.list.len() > 0);
+        debug_assert!(!self.list.is_empty());
         for i in 0..self.list.len() {
             if self.list[i].prev_weight_sum > weight_pos {
                 debug_assert!(i != 0);
@@ -434,8 +448,8 @@ impl ValidatorSet {
                     indexes[j] = i;
                 }
                 let mut subset = Vec::with_capacity(count);
-                for i in 0..count {
-                    subset.push(self.list()[indexes[i]].clone());
+                for index in indexes.iter().take(count) {
+                    subset.push(self.list()[*index].clone());
                 }
                 subset
             }
@@ -501,20 +515,20 @@ impl ValidatorSet {
             subset
         };
 
-        let hash_short = Self::calc_subset_hash_short(&subset, cc_seqno)?;
+        let hash_short = Self::calc_subset_hash_short(subset.as_slice(), cc_seqno)?;
 
         Ok((subset, hash_short))
     }
 
     const HASH_SHORT_MAGIC: u32 = 0x901660ED;
 
-    pub fn calc_subset_hash_short(subset: &Vec<ValidatorDescr>, cc_seqno: u32) -> Result<u32> {
+    pub fn calc_subset_hash_short(subset: &[ValidatorDescr], cc_seqno: u32) -> Result<u32> {
         let mut hasher = crc32::Digest::new(crc32::CASTAGNOLI);
         hasher.write(&Self::HASH_SHORT_MAGIC.to_le_bytes());
         hasher.write(&cc_seqno.to_le_bytes());
         hasher.write(&(subset.len() as u32).to_le_bytes());
         for vd in subset.iter() {
-            hasher.write(vd.public_key.key_bytes());
+            hasher.write(vd.public_key.as_slice());
             hasher.write(&vd.weight.to_le_bytes());
             if let Some(addr) = vd.adnl_addr.as_ref() {
                 hasher.write(addr.as_slice());
@@ -580,16 +594,12 @@ impl Deserializable for ValidatorSet {
             self.list.push(val);
         }
         if self.list.is_empty() {
-            failure::bail!(BlockError::InvalidData("list can't be empty".to_string()));
+            fail!(BlockError::InvalidData("list can't be empty".to_string()));
         }
         if tag == VALIDATOR_SET_TAG {
             self.total_weight = self.list.iter().map(|vd| vd.weight).sum();
-        } else {
-            if self.total_weight != total_weight {
-                failure::bail!(
-                    BlockError::InvalidData("Calculated total_weight is not equal to the read one while read ValidatorSet".to_string())
-                )
-            }
+        } else if self.total_weight != total_weight {
+            fail!(BlockError::InvalidData("Calculated total_weight is not equal to the read one while read ValidatorSet".to_string()))
         }
 
         if self.main > self.total {
@@ -623,10 +633,10 @@ impl ValidatorSetPRNG {
         // u32 cc_seqno;
         let mut context = [0_u8; 48];
         let mut cur = Cursor::new(&mut context[..]);
-        cur.write(seed).unwrap();
-        cur.write(&shard_pfx.to_be_bytes()).unwrap();
-        cur.write(&workchain_id.to_be_bytes()).unwrap();
-        cur.write(&cc_seqno.to_be_bytes()).unwrap();
+        cur.write_all(seed).unwrap();
+        cur.write_all(&shard_pfx.to_be_bytes()).unwrap();
+        cur.write_all(&workchain_id.to_be_bytes()).unwrap();
+        cur.write_all(&cc_seqno.to_be_bytes()).unwrap();
 
         ValidatorSetPRNG{
             context,

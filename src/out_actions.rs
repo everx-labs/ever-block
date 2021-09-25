@@ -74,7 +74,7 @@ impl Deserializable for OutActions {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let mut cell = cell.clone();
         while cell.remaining_references() != 0 {
-            let prev_cell = cell.checked_drain_reference()?.clone();
+            let prev_cell = cell.checked_drain_reference()?;
             let mut action = OutAction::default();
             action.read_from(&mut cell)?;
             self.push_front(action);
@@ -171,7 +171,7 @@ pub const RESERVE_VALID_MODES: u8 =
 
 pub const CHANGE_LIB_REMOVE: u8 = 0;
 pub const SET_LIB_CODE_REMOVE: u8 = 1;
-pub const SET_LIB_CODE_ADD_PRIVATE: u8 = 1 * 2 + 1;
+pub const SET_LIB_CODE_ADD_PRIVATE: u8 = 2 + 1;
 pub const SET_LIB_CODE_ADD_PUBLIC: u8 = 2 * 2 + 1;
 
 ///
@@ -218,21 +218,21 @@ impl OutAction {
 impl Serializable for OutAction {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
-            &OutAction::SendMsg{ref mode, ref out_msg} => {
+            OutAction::SendMsg{ref mode, ref out_msg} => {
                 ACTION_SEND_MSG.write_to(cell)?; // tag
                 mode.write_to(cell)?;
                 cell.append_reference_cell(out_msg.serialize()?);
-            },
-            &OutAction::SetCode{ref new_code} => {
+            }
+            OutAction::SetCode{ref new_code} => {
                 ACTION_SET_CODE.write_to(cell)?; //tag
                 cell.append_reference_cell(new_code.clone());
-            },
-            &OutAction::ReserveCurrency{ref mode, ref value} => {
+            }
+            OutAction::ReserveCurrency{ref mode, ref value} => {
                 ACTION_RESERVE.write_to(cell)?; // tag
                 mode.write_to(cell)?;
                 value.write_to(cell)?;
-            },
-            &OutAction::ChangeLibrary{ref mode, ref code, ref hash} => {
+            }
+            OutAction::ChangeLibrary{ref mode, ref code, ref hash} => {
                 ACTION_CHANGE_LIB.write_to(cell)?; // tag
                 mode.write_to(cell)?;
                 if let Some(value) = hash {
@@ -241,8 +241,8 @@ impl Serializable for OutAction {
                 if let Some(value) = code {
                     cell.append_reference_cell(value.clone());
                 }
-            },
-            &OutAction::None => fail!(
+            }
+            OutAction::None => fail!(
                 BlockError::InvalidOperation("self is None".to_string())
             )
         }
@@ -265,7 +265,7 @@ impl Deserializable for OutAction {
                 *self = OutAction::new_send(mode, msg);
             }
             ACTION_SET_CODE => {
-                *self = OutAction::new_set(cell.checked_drain_reference()?.clone())
+                *self = OutAction::new_set(cell.checked_drain_reference()?)
             }
             ACTION_RESERVE => {
                 let mut mode = 0u8;
@@ -283,7 +283,7 @@ impl Deserializable for OutAction {
                         *self = OutAction::new_change_library(mode, None, Some(hash));
                     }
                     _ => {
-                        let code = cell.checked_drain_reference()?.clone();
+                        let code = cell.checked_drain_reference()?;
                         *self = OutAction::new_change_library(mode, Some(code), None);
                     }
                 }

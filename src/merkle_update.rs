@@ -64,8 +64,8 @@ impl Deserializable for MerkleUpdate {
         self.new_hash.read_from(cell)?;
         self.old_depth = cell.get_next_u16()?;
         self.new_depth = cell.get_next_u16()?;
-        self.old = cell.checked_drain_reference()?.clone();
-        self.new = cell.checked_drain_reference()?.clone();
+        self.old = cell.checked_drain_reference()?;
+        self.new = cell.checked_drain_reference()?;
 
         if self.old_hash != Cell::hash(&self.old, 0) {
             fail!(
@@ -318,7 +318,7 @@ impl MerkleUpdate {
                     let mask = update_child.level_mask().mask();
                     if mask & (1 << child_merkle_depth) != 0 {
                         // connect branch from old bag instead pruned
-                        let new_child_hash = Cell::hash(&update_child, update_child.level() as usize - 1);
+                        let new_child_hash = Cell::hash(update_child, update_child.level() as usize - 1);
                         old_cells.get(&new_child_hash).unwrap().clone()
                     } else {
                         // else - just copy this cell (like an ordinary)
@@ -388,7 +388,7 @@ impl MerkleUpdate {
             if let Some(common_cell) = new_cells.get(&child_hash) {
 
                 let pruned_branch_cell = Self::make_pruned_branch_cell(common_cell, 0)?;
-                pruned_branches.insert(child_hash.clone(), pruned_branch_cell.clone().into_cell()?);
+                pruned_branches.insert(child_hash, pruned_branch_cell.clone().into_cell()?);
 
                 childs[i] = Some(pruned_branch_cell);
                 has_pruned = true;
@@ -404,17 +404,16 @@ impl MerkleUpdate {
 
             let mut old_update_cell = BuilderData::new();
             let mut child_mask = LevelMask::with_mask(0);
-            let mut i = 0;
-            for child_opt in childs {
-                let child = if child_opt.is_some() {
-                    child_opt.unwrap()
-                } else {
-                    let child = &old_cell.reference(i).unwrap();
-                    Self::make_pruned_branch_cell(child, 0)?
+            for (i, child_opt) in childs.into_iter().enumerate() {
+                let child = match child_opt {
+                    None => {
+                        let child = old_cell.reference(i).unwrap();
+                        Self::make_pruned_branch_cell(&child, 0)?
+                    }
+                    Some(child) => child
                 };
                 child_mask |= child.level_mask();
                 old_update_cell.append_reference_cell(child.into_cell()?);
-                i += 1;
             }
             old_update_cell.set_level_mask(child_mask);
 
@@ -440,8 +439,7 @@ impl MerkleUpdate {
         Ok(LevelMask::with_mask(mask | (1 << depth)))
     }
 
-    pub(crate) fn make_pruned_branch_cell(cell: &Cell, merkle_depth: u8) 
-        -> Result<BuilderData> {
+    pub(crate) fn make_pruned_branch_cell(cell: &Cell, merkle_depth: u8) -> Result<BuilderData> {
 
         let mut result = BuilderData::new();
         let level_mask = Self::add_one_hash(cell, merkle_depth)?;
@@ -495,7 +493,7 @@ impl MerkleUpdate {
                 known_cells.insert(hash, cell.clone());
                 let child_merkle_depth = if cell.is_merkle() { merkle_depth + 1 } else { merkle_depth };
                 for child in cell.clone_references().iter() {
-                    Self::collate_old_cells(&child, known_cells_hashes, known_cells, visited, child_merkle_depth);
+                    Self::collate_old_cells(child, known_cells_hashes, known_cells, visited, child_merkle_depth);
                 }
             }
         }
