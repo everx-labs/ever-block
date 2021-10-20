@@ -21,8 +21,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use num::{BigInt, BigUint, bigint::Sign, One, Zero};
 use num_traits::cast::ToPrimitive;
-use ton_types::{error, fail, Result,
-    BuilderData, Cell, CellType, IBitstring, HashmapE, HashmapType, SliceData, ExceptionCode, UInt256
+use ton_types::{
+    error, fail,
+    Result, BuilderData, Cell, CellType, IBitstring, HashmapE, HashmapType, SliceData, UInt256
 };
 
 use crate::{
@@ -217,7 +218,7 @@ macro_rules! define_VarIntegerN {
                 let bits = 8 - ($N as u8).leading_zeros();
                 let bytes = ((0 as $tt).leading_zeros() / 8 - self.0.leading_zeros() / 8) as usize;
                 if bytes > $N {
-                    fail!(ExceptionCode::IntegerOverflow)
+                    fail!("cannot store {} grams, required {} bytes", self, bytes)
                 }
                 cell.append_bits(bytes, bits as usize)?;
                 let be_bytes = self.0.to_be_bytes();
