@@ -235,7 +235,7 @@ shard_ident$00
     shard_prefix: uint64
 = ShardIdent;
 */
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct ShardIdent {
     workchain_id: i32,
     prefix: u64, // with terminated bit!

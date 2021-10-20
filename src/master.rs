@@ -203,17 +203,17 @@ impl ShardHashes {
         let shard1 = self.find_shard(&shard.left_ancestor_mask()?)?
             .ok_or_else(|| error!("get_shard_cc_seqno: can't find shard1"))?;
 
-        if shard1.shard.is_ancestor_for(shard) {
+        if shard1.shard().is_ancestor_for(shard) {
             return Ok(shard1.descr.next_catchain_seqno)
-        } else if !shard.is_parent_for(&shard1.shard) {
-            fail!("get_shard_cc_seqno: invalid shard1 {} for {}", &shard1.shard, shard)
+        } else if !shard.is_parent_for(shard1.shard()) {
+            fail!("get_shard_cc_seqno: invalid shard1 {} for {}", shard1.shard(), shard)
         }
 
         let shard2 = self.find_shard(&shard.right_ancestor_mask()?)?
             .ok_or_else(|| error!("get_shard_cc_seqno: can't find shard2"))?;
 
-        if !shard.is_parent_for(&shard2.shard) {
-            fail!("get_shard_cc_seqno: invalid shard2 {} for {}", &shard2.shard, shard)
+        if !shard.is_parent_for(shard2.shard()) {
+            fail!("get_shard_cc_seqno: invalid shard2 {} for {}", shard2.shard(), shard)
         }
 
         Ok(std::cmp::max(shard1.descr.next_catchain_seqno, shard2.descr.next_catchain_seqno) + 1)
@@ -306,15 +306,14 @@ impl ShardHashes {
 
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct McShardRecord {
-    pub shard: ShardIdent,
     pub descr: ShardDescr,
     pub block_id: BlockIdExt,
 }
 
 impl McShardRecord {
     pub fn from_shard_descr(shard: ShardIdent, descr: ShardDescr) -> Self {
-        let block_id = BlockIdExt::with_params(shard.clone(), descr.seq_no, descr.root_hash.clone(), descr.file_hash.clone());
-        Self { shard, descr, block_id }
+        let block_id = BlockIdExt::with_params(shard, descr.seq_no, descr.root_hash.clone(), descr.file_hash.clone());
+        Self { descr, block_id }
     }
 
     pub fn from_block(block: &Block, block_id: BlockIdExt) -> Result<Self> {
@@ -322,7 +321,6 @@ impl McShardRecord {
         let value_flow = block.read_value_flow()?;
         Ok(
             McShardRecord {
-                shard: info.shard().clone(),
                 descr: ShardDescr {
                     seq_no: info.seq_no(),
                     reg_mc_seqno: 0xffff_ffff, // by t-node
@@ -349,7 +347,7 @@ impl McShardRecord {
         )
     }
 
-    pub fn shard(&self) -> &ShardIdent { &self.shard }
+    pub fn shard(&self) -> &ShardIdent { self.block_id.shard() }
 
     pub fn descr(&self) -> &ShardDescr { &self.descr }
 
