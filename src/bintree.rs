@@ -81,7 +81,7 @@ where F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable
     } else if let Some(x) = key.get_next_bit_opt() {
         if let Some(reference) = internal_merge(&data.reference(x)?.into(), key, merger)? {
             let mut cell = BuilderData::from_slice(data);
-            cell.replace_reference_cell(x, reference.into());
+            cell.replace_reference_cell(x, reference.into_cell()?);
             return Ok(Some(cell))
         }
     } else {
@@ -110,7 +110,7 @@ where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
         if let Some(x) = key.get_next_bit_opt() {
             if let Some(reference) = internal_split(&data.reference(x)?.into(), key, splitter)? {
                 let mut cell = BuilderData::from_slice(data);
-                cell.replace_reference_cell(x, reference.into());
+                cell.replace_reference_cell(x, reference.into_cell()?);
                 return Ok(Some(cell))
             }
         }
