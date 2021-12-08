@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -16,7 +16,7 @@ use crate::{
 	error::BlockError,
 	Deserializable, Serializable,
 };
-use ed25519::signature::{Signature, Signer, Verifier};
+use ed25519::signature::{Signer, Verifier};
 use sha2::Digest;
 use std::cmp::Ordering;
 use std::collections::HashMap;

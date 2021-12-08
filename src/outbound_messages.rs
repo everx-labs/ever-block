@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -29,7 +29,7 @@ use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, SliceData, IBitstring,
-    HashmapType, HashmapRemover, HashmapSubtree, hm_label,
+    HashmapType, HashmapSubtree, hm_label,
 };
 
 
@@ -161,7 +161,6 @@ impl OutMsgDescr {
 // _ (HashmapAugE 352 EnqueuedMsg uint64) = OutMsgQueue;
 // 352 = 32 - dest workchain_id, 64 - first 64 bit of dest account address, 256 - message hash
 define_HashmapAugE!(OutMsgQueue, 352, OutMsgQueueKey, EnqueuedMsg, MsgTime);
-impl HashmapRemover for OutMsgQueue {}
 impl HashmapSubtree for OutMsgQueue {}
 // impl HashmapAugRemover<OutMsgQueueKey, EnqueuedMsg, MsgTime> for OutMsgQueue {}
 

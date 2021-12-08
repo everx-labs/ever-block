@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -2845,7 +2845,7 @@ impl Serializable for SlashingConfig {
     }
 }
 
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ParamLimitIndex {
     Underload = 0,
     Normal,
@@ -2874,13 +2874,6 @@ pub struct ParamLimits {
 
 impl ParamLimits {
 
-/*
-    /// new instance of ParamLimits
-    pub fn new() -> Self {
-        Self::default()
-    }
-*/
-
     pub fn with_limits(underload: u32, soft: u32, hard: u32) -> Result<Self> {
         let mut limits = [0u32; LIMIT_COUNT];
         Self::set_limits(&mut limits, underload, soft, hard)?;
@@ -2888,14 +2881,14 @@ impl ParamLimits {
     }
 
     pub fn classify(&self, value: u32) -> ParamLimitIndex {
-        if value >= self.limits[ParamLimitIndex::Medium as usize - 1] {
-            if value >= self.limits[ParamLimitIndex::Hard as usize - 1] {
+        if value >= self.medium() {
+            if value >= self.hard_limit() {
                 ParamLimitIndex::Hard
             } else {
                 ParamLimitIndex::Medium
             }
-        } else if value >= self.limits[ParamLimitIndex::Underload as usize] {
-            if value >= self.limits[ParamLimitIndex::Soft as usize - 1] {
+        } else if value >= self.underload() {
+            if value >= self.soft_limit() {
                 ParamLimitIndex::Soft
             } else {
                 ParamLimitIndex::Normal
@@ -2905,77 +2898,35 @@ impl ParamLimits {
         }
     }
 
-/*
-    pub fn limits(&self, index: ParamLimitIndex) -> u32 {
-        self.limits[index as usize]
+    pub fn fits(&self, level: ParamLimitIndex, value: u32) -> bool {
+        // *level*         *checks*
+        // Underload       value < unerload
+        // Normal          value < soft
+        // Soft            value < medium
+        // Medium          value < hard
+        // Hard            always true
+        level == ParamLimitIndex::Hard || value < self.limits[level as usize]
     }
-*/
+
+    pub fn fits_normal(&self, value: u32, percent: u32) -> bool {
+        value * 100 < self.soft_limit() * percent
+    }
 
     pub fn underload(&self) -> u32 {
         self.limits[ParamLimitIndex::Underload as usize]
     }
 
-/*
-    pub fn set_underload(&mut self, underload: u32) -> Result<()>{
-        if underload > self.soft_limit() {
-            fail!(
-                BlockError::InvalidArg(
-                    "`underload` have to be less or equal `soft_limit`".to_string()
-                )
-            )
-        }
-        self.limits[ParamLimitIndex::Underload as usize] = underload;
-        Ok(())
-    }
-*/
-
     pub fn soft_limit(&self) -> u32 {
         self.limits[ParamLimitIndex::Soft as usize - 1]
     }
 
-/*
-    pub fn set_soft_limit(&mut self, soft_limit: u32) -> Result<()>{
-        if soft_limit > self.hard_limit() {
-            fail!(
-                BlockError::InvalidArg(
-                    "`soft_limit` have to be less or equal `hard_limit`".to_string()
-                )
-            )
-        }
-        self.limits[ParamLimitIndex::Soft as usize] = soft_limit;
-        self.update_medium_limit();
-        Ok(())
+    pub fn medium(&self) -> u32 {
+        self.limits[ParamLimitIndex::Medium as usize - 1]
     }
-*/
 
     pub fn hard_limit(&self) -> u32 {
         self.limits[ParamLimitIndex::Hard as usize - 1]
     }
-
-/*
-    pub fn set_hard_limit(&mut self, hard_limit: u32) -> Result<()>{
-        if self.limits[ParamLimitIndex::Soft as usize] > hard_limit {
-            fail!(
-                BlockError::InvalidArg(
-                    "`hard_limit` have to be larger or equal `soft_limit`".to_string()
-                )
-            )
-        }
-        self.limits[ParamLimitIndex::Hard as usize] = hard_limit;
-        self.update_medium_limit();
-        Ok(())
-    }
-*/
-
-/*
-    pub fn medium_limit(&self) -> u32 {
-        self.limits[ParamLimitIndex::Medium as usize]
-    }
-
-    fn update_medium_limit(&mut self) {
-        self.limits[ParamLimitIndex::Medium as usize] = Self::compute_medium_limit(self.soft_limit(), self.hard_limit());
-    }
-*/
 
     fn compute_medium_limit(soft: u32, hard: u32) -> u32 {
         soft + ((hard - soft) >> 1)
@@ -3021,32 +2972,10 @@ impl Deserializable for ParamLimits {
                 }
             )
         }
-        let mut limits = [0u32; 3];
-        limits[0].read_from(slice)?;
-        limits[1].read_from(slice)?;
-        limits[2].read_from(slice)?;
-        Self::set_limits(&mut self.limits, limits[0], limits[1], limits[2])
-/*
-        self.limits[ParamLimitIndex::Underload as usize].read_from(slice)?;
-        self.limits[ParamLimitIndex::Soft as usize - 1].read_from(slice)?;
-        self.limits[ParamLimitIndex::Hard as usize - 1].read_from(slice)?;
-        if self.underload() > self.soft() {
-            fail!(
-                BlockError::InvalidData(
-                    "`underload` have to be less or equal `soft_limit`".to_string()
-                )
-            )
-        }
-        if self.soft() > self.hard_limit() {
-            fail!(
-                BlockError::InvalidData(
-                    "`soft_limit` have to be less or equal `hard_limit`".to_string()
-                )
-            )
-        }
-        self.update_medium_limit();
-        Ok(())
-*/
+        let underload = u32::construct_from(slice)?;
+        let soft = u32::construct_from(slice)?;
+        let hard = u32::construct_from(slice)?;
+        Self::set_limits(&mut self.limits, underload, soft, hard)
     }
 }
 
@@ -3073,62 +3002,37 @@ pub struct BlockLimits {
     bytes: ParamLimits,
     gas: ParamLimits,
     lt_delta: ParamLimits,
-//    start_lt: u64, // This field is always zero in Telegram's implementation
 }
 
 impl BlockLimits {
 
-/*
-    pub fn new() -> Self {
-        Self::default()
-    }
-*/
-
     pub fn with_limits(bytes: ParamLimits, gas: ParamLimits, lt_delta: ParamLimits) -> Self {
-        Self { bytes, gas, lt_delta /*, start_lt: 0*/ }
+        Self { bytes, gas, lt_delta }
     }
 
     pub fn bytes(&self) -> &ParamLimits {
         &self.bytes
     }
 
-/*
-    pub fn bytes_mut(&mut self) -> &mut ParamLimits {
-        &mut self.bytes
-    }
-*/
     pub fn gas(&self) -> &ParamLimits {
         &self.gas
     }
-
-/*
-    pub fn gas_mut(&mut self) -> &mut ParamLimits {
-        &mut self.gas
-    }
-*/
 
     pub fn lt_delta(&self) -> &ParamLimits {
         &self.lt_delta
     }
 
-/*
-    pub fn lt_delta_mut(&mut self) -> &mut ParamLimits {
-        &mut self.lt_delta
-    }
-
-    pub fn start_lt(&self) -> u64 {
-        self.start_lt
-    }
-*/
-
     pub fn fits(&self, level: ParamLimitIndex, bytes: u32, gas: u32, lt_delta: u32) -> bool {
-        let level = level as usize;
-        (level >= LIMIT_COUNT) ||
-        (gas < self.gas.limits[level]) &&
-        (bytes < self.bytes.limits[level]) &&
-        (lt_delta < self.lt_delta.limits[level])
+        self.gas.fits(level, gas) &&
+        self.bytes.fits(level, bytes) &&
+        self.lt_delta.fits(level, lt_delta)
     }
 
+    pub fn fits_normal(&self, bytes: u32, gas: u32, lt_delta: u32, percent: u32) -> bool {
+        self.gas.fits_normal(gas, percent) &&
+        self.bytes.fits_normal(bytes, percent) &&
+        self.lt_delta.fits_normal(lt_delta, percent)
+    }
 }
 
 impl Deserializable for BlockLimits {

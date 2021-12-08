@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -333,7 +333,7 @@ impl McShardRecord {
                     want_split: info.want_split(),
                     want_merge: info.want_merge(),
                     nx_cc_updated: false, // by t-node
-                    flags: info.flags(),
+                    flags: info.flags() & !7,
                     next_catchain_seqno: info.gen_catchain_seqno(),
                     next_validator_shard: info.shard().shard_prefix_with_tag(),
                     min_ref_mc_seqno: info.min_ref_mc_seqno(),
@@ -1361,6 +1361,10 @@ impl Deserializable for ShardDescr {
         self.want_merge = (flags >> 4) & 1 == 1;
         self.nx_cc_updated = (flags >> 3) & 1 == 1;
 
+        if (flags & 7) != 0 {
+            fail!("flags & 7 in ShardDescr must be zero, but {}", flags)
+        }
+
         self.next_catchain_seqno.read_from(slice)?;
         self.next_validator_shard.read_from(slice)?;
         self.min_ref_mc_seqno.read_from(slice)?;
@@ -1405,7 +1409,9 @@ impl Serializable for ShardDescr {
         if self.nx_cc_updated {
             flags |= 1 << 3;
         }
-        flags |= self.flags & 0x7;
+        if (self.flags & 7) != 0 {
+            fail!("flags & 7 must be zero, but it {}", self.flags)
+        }
         
         flags.write_to(cell)?;
 

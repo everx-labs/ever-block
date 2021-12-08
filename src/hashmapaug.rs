@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -178,6 +178,17 @@ macro_rules! define_HashmapAugE {
             }
             fn set_root_extra(&mut self, aug: $y_type) {
                 self.extra = aug;
+            }
+        }
+
+        impl ton_types::HashmapRemover for $varname {
+            fn after_remove(&mut self) -> Result<()> {
+                let aug = match self.data() {
+                    Some(root) => Self::find_extra(&mut root.into(), self.bit_len())?,
+                    None => <$y_type>::default()
+                };
+                self.set_root_extra(aug);
+                Ok(())
             }
         }
 
@@ -741,13 +752,7 @@ where K: Deserializable + Serializable, X: Deserializable + Serializable, Y: Aug
             let key = K::construct_from_cell(key.clone().into_cell()?)?;
             let (val, aug) = Self::value_aug(&mut aug_val)?;
             func(key, val, aug)
-        })?;
-        let aug = match self.data() {
-            Some(root) => Self::find_extra(&mut root.into(), self.bit_len())?,
-            None => Y::default()
-        };
-        self.set_root_extra(aug);
-        Ok(())
+        })
     }
 }
 

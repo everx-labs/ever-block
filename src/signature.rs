@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -12,13 +12,14 @@
 */
 
 use crate::{
+    define_HashmapE,
     Serializable, Deserializable,
     blocks::BlockIdExt,
     error::BlockError,
     validators::ValidatorBaseInfo,
     validators::ValidatorDescr
 };
-use ed25519::signature::{Signature, Verifier};
+use ed25519::signature::Verifier;
 use std::{
     io::{Cursor, Write},
     collections::HashMap,
@@ -128,11 +129,11 @@ impl Serializable for CryptoSignature {
 
 impl Deserializable for CryptoSignature {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let tag = cell.get_next_bits(4)?;
-        if tag[0] != 5 << 4 {
+        let tag = cell.get_next_int(4)? as u8;
+        if tag != CRYPTO_SIGNATURE_TAG {
             fail!(
                 BlockError::InvalidConstructorTag {
-                    t: tag[0] as u32,
+                    t: tag as u32,
                     s: "CryptoSignature".to_string()
                 }
             )
@@ -295,11 +296,14 @@ block_signatures_pure#_
     signatures:(HashmapE 16 CryptoSignaturePair) 
 = BlockSignaturesPure;
 */
+
+define_HashmapE!{CryptoSignaturePairDict, 16, CryptoSignaturePair}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BlockSignaturesPure {
     sig_count: u32, 
     sig_weight: u64, 
-    signatures: HashmapE,
+    signatures: CryptoSignaturePairDict,
 }
 
 impl Default for BlockSignaturesPure {
@@ -314,7 +318,7 @@ impl BlockSignaturesPure {
         Self {
             sig_count: 0,
             sig_weight: 0,
-            signatures: HashmapE::with_bit_len(16),
+            signatures: CryptoSignaturePairDict::new(),
         }
     }
     pub const fn default() -> Self { Self::new() }
@@ -324,7 +328,7 @@ impl BlockSignaturesPure {
         Self {
             sig_count: 0,
             sig_weight,
-            signatures: HashmapE::with_bit_len(16),
+            signatures: CryptoSignaturePairDict::new(),
         }
     }
 
@@ -344,13 +348,12 @@ impl BlockSignaturesPure {
 
     /// Add crypto signature pair to BlockSignaturesPure
     pub fn add_sigpair(&mut self, signature: CryptoSignaturePair) {
+        self.signatures.set(&(self.sig_count as u16), &signature).unwrap();
         self.sig_count += 1;
-        let key = (self.sig_count as u16).serialize().unwrap();
-        self.signatures.set_builder(key.into(), &signature.write_to_new_cell().unwrap()).unwrap();
     }
 
     pub fn signatures(&self) -> &HashmapE {
-        &self.signatures
+        &self.signatures.0
     }
 
     pub fn check_signatures(&self, validators_list: &[ValidatorDescr], data: &[u8]) -> Result<u64> {

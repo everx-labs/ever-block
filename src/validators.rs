@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -164,6 +164,15 @@ pub struct ValidatorDescr {
     // Total weight of the previous validators in the list.
     // The field is not serialized.
     pub prev_weight_sum: u64,
+}
+
+impl std::hash::Hash for ValidatorDescr {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.public_key.key_bytes().hash(state);
+        if let Some(aa) = &self.adnl_addr {
+            aa.hash(state)
+        }
+    }
 }
 
 impl ValidatorDescr {

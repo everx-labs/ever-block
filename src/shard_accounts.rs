@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -23,7 +23,7 @@ use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, IBitstring,
-    HashmapType, HashmapRemover, SliceData, hm_label, HashmapSubtree,
+    HashmapType, SliceData, hm_label, HashmapSubtree,
 };
 
 
@@ -32,7 +32,6 @@ use ton_types::{
 // of the shardchain state (cf. 1.2.1 and 1.2.2) is given by (upd from Lite Client v11):
 // _ (HashmapAugE 256 ShardAccount DepthBalanceInfo) = ShardAccounts;
 define_HashmapAugE!(ShardAccounts, 256, UInt256, ShardAccount, DepthBalanceInfo);
-impl HashmapRemover for ShardAccounts {}
 impl HashmapSubtree for ShardAccounts {}
 
 impl ShardAccounts {

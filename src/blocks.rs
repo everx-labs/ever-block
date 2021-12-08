@@ -1,5 +1,5 @@
 /*
-* Copyright 2018-2020 TON DEV SOLUTIONS LTD.
+* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -888,6 +888,21 @@ impl fmt::Display for ValueFlow {
     }
 }
 
+impl ValueFlow {
+    pub fn read_in_full_depth(&self) -> Result<()> {
+        self.from_prev_blk.other.iterate(|_value| Ok(true))?;
+        self.to_next_blk.other.iterate(|_value| Ok(true))?;
+        self.imported.other.iterate(|_value| Ok(true))?;
+        self.exported.other.iterate(|_value| Ok(true))?;
+        self.fees_collected.other.iterate(|_value| Ok(true))?;
+        self.fees_imported.other.iterate(|_value| Ok(true))?;
+        self.recovered.other.iterate(|_value| Ok(true))?;
+        self.created.other.iterate(|_value| Ok(true))?;
+        self.minted.other.iterate(|_value| Ok(true))?;
+        Ok(())
+    }
+}
+
 /*
 ext_blk_ref$_ start_lt:uint64 end_lt:uint64
     seq_no:uint32 hash:uint256 = ExtBlkRef;
@@ -1328,17 +1343,17 @@ impl Serializable for TopBlockDescrSet {
 }
 
 impl Deserializable for TopBlockDescrSet {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let tag = cell.get_next_u32()?;
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let tag = slice.get_next_u32()?;
         if tag != TOPBLOCK_DESCR_SET_TAG {
             fail!(
                 BlockError::InvalidConstructorTag {
-                    t: tag as u32,
+                    t: tag,
                     s: "TopBlockDescrSet".to_string()
                 }
             )
         }
-        self.collection = TopBlockDescrCollection::construct_from(cell)?;
-        Ok(())
+        let collection = Deserializable::construct_from(slice)?;
+        Ok(Self { collection })
     }
 }
