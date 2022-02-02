@@ -1026,7 +1026,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
                         BlockError::PrunedCellAccess(std::any::type_name::<T>().into())
                     )
                 }
-                T::construct_from(&mut SliceData::from(cell))
+                T::construct_from_cell(cell)
             }
             None => Ok(T::default())
         }
