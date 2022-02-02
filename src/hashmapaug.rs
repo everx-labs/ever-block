@@ -234,6 +234,9 @@ macro_rules! define_HashmapAugE {
                     false => None
                 };
                 let extra = <$y_type>::construct_from(slice)?;
+                if data.is_none() && extra != <$y_type>::default() {
+                    fail!("root extra for empty HashmapAugE {} is not default", std::any::type_name::<Self>())
+                }
                 Ok(Self {
                     extra,
                     bit_len: $bit_len,
@@ -753,6 +756,10 @@ where K: Deserializable + Serializable, X: Deserializable + Serializable, Y: Aug
             let (val, aug) = Self::value_aug(&mut aug_val)?;
             func(key, val, aug)
         })
+    }
+    fn del(&mut self, key: &Y) -> Result<()> {
+        self.remove(key.serialize()?.into())?;
+        Ok(())
     }
 }
 

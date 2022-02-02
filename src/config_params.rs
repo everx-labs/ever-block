@@ -324,6 +324,7 @@ pub enum GlobalCapabilities {
     CapFastStorageStat = 128,
     CapInitCodeHash = 256,
     CapOffHypercube = 512,
+    CapMycode = 1024,
 }
 
 impl ConfigParams {
