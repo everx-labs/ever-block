@@ -2,7 +2,7 @@
 edition = '2018'
 build = 'build.rs'
 name = 'ton_block'
-version = '1.7.39'
+version = '1.7.41'
 
 [dependencies]
 base64 = '0.13'
@@ -16,4 +16,4 @@ num = '0.4'
 num-traits = '0.2'
 rand = '0.7.2'
 sha2 = '0.8.0'
-ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.10.12' }
+ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.10.13' }

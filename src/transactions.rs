@@ -1609,7 +1609,7 @@ impl Serializable for Transaction {
         match &self.in_msg {
             Some(in_msg) => {
                 builder1.append_bit_one()?;
-                builder1.append_reference_cell(in_msg.serialize()?);
+                builder1.append_reference_cell(in_msg.cell());
             },
             None => {
                 builder1.append_bit_zero()?;
@@ -1618,8 +1618,8 @@ impl Serializable for Transaction {
         self.out_msgs.write_to(&mut builder1)?;
         builder.append_reference_cell(builder1.into_cell()?);
         self.total_fees.write_to(builder)?; // total_fees
-        builder.append_reference_cell(self.state_update.serialize()?); // ^(HASH_UPDATE Account)
-        builder.append_reference_cell(self.description.serialize()?); // ^TransactionDescr
+        builder.append_reference_cell(self.state_update.cell()); // ^(HASH_UPDATE Account)
+        builder.append_reference_cell(self.description.cell()); // ^TransactionDescr
 
         Ok(())
     }
@@ -1823,7 +1823,7 @@ impl Serializable for AccountBlock {
         cell.append_bits(ACCOUNT_BLOCK_TAG, 4)?;
         self.account_addr.write_to(cell)?;                                  // account_addr: AccountId,
         self.transactions.write_hashmap_root(cell)?;
-        cell.append_reference_cell(self.state_update.serialize()?);      // ^(HASH_UPDATE Account)
+        cell.append_reference_cell(self.state_update.cell());      // ^(HASH_UPDATE Account)
         Ok(())
     }
 }

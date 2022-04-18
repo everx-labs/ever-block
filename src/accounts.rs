@@ -895,12 +895,20 @@ impl Account {
 
     /// getting to the root of the cell with Code of Smart Contract
     pub fn get_code(&self) -> Option<Cell> {
-        self.state_init().and_then(|s| s.code.clone())
+        self.state_init()?.code.clone()
+    }
+
+    pub fn get_code_hash(&self) -> Option<UInt256> {
+        Some(self.state_init()?.code.as_ref()?.repr_hash())
     }
 
     /// getting to the root of the cell with persistent Data of Smart Contract
     pub fn get_data(&self) -> Option<Cell> {
-        self.state_init().and_then(|s| s.data.clone())
+        self.state_init()?.data.clone()
+    }
+
+    pub fn get_data_hash(&self) -> Option<UInt256> {
+        Some(self.state_init()?.data.as_ref()?.repr_hash())
     }
 
     /// save persistent data of smart contract 
@@ -1321,7 +1329,7 @@ impl ShardAccount {
 
 impl Serializable for ShardAccount {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.account.serialize()?)?;
+        cell.checked_append_reference(self.account.cell())?;
         self.last_trans_hash.write_to(cell)?;
         self.last_trans_lt.write_to(cell)?;
         Ok(())

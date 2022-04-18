@@ -541,8 +541,8 @@ impl Serializable for BlkPrevInfo {
                 prev.write_to(cell)?;
             }
             BlkPrevInfo::Blocks{prev1, prev2} => {
-                cell.append_reference_cell(prev1.serialize()?);
-                cell.append_reference_cell(prev2.serialize()?);
+                cell.append_reference_cell(prev1.cell());
+                cell.append_reference_cell(prev2.cell());
             },
         }
         Ok(())
@@ -818,15 +818,15 @@ impl Deserializable for BlockExtra {
 impl Serializable for BlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u32(BLOCK_EXTRA_TAG)?;
-        cell.append_reference_cell(self.in_msg_descr.serialize()?);
-        cell.append_reference_cell(self.out_msg_descr.serialize()?);
-        cell.append_reference_cell(self.account_blocks.serialize()?);
+        cell.append_reference_cell(self.in_msg_descr.cell());
+        cell.append_reference_cell(self.out_msg_descr.cell());
+        cell.append_reference_cell(self.account_blocks.cell());
 
         self.rand_seed.write_to(cell)?;
         self.created_by.write_to(cell)?;
         if let Some(custrom) = &self.custom {
             cell.append_bit_one()?;
-            cell.append_reference_cell(custrom.serialize()?);
+            cell.append_reference_cell(custrom.cell());
         } else {
             cell.append_bit_zero()?;
         }
@@ -1011,11 +1011,11 @@ impl Serializable for BlockInfo {
         }
 
         if let Some(ref master) = self.master_ref {
-            cell.append_reference_cell(master.serialize()?);
+            cell.append_reference_cell(master.cell());
         }
-        cell.append_reference_cell(self.prev_ref.serialize()?);
+        cell.append_reference_cell(self.prev_ref.cell());
         if let Some(prev_vert_ref) = self.prev_vert_ref.as_ref() {
-            cell.append_reference_cell(prev_vert_ref.serialize()?);
+            cell.append_reference_cell(prev_vert_ref.cell());
         }
 
         Ok(())
@@ -1165,10 +1165,10 @@ impl Serializable for Block {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_u32(BLOCK_TAG)?;
         builder.append_i32(self.global_id)?;
-        builder.append_reference_cell(self.info.serialize()?); // info:^BlockInfo
-        builder.append_reference_cell(self.value_flow.serialize()?); // value_flow:^ValueFlow
-        builder.append_reference_cell(self.state_update.serialize()?); // state_update:^(MERKLE_UPDATE ShardState)
-        builder.append_reference_cell(self.extra.serialize()?); // extra:^BlockExtra
+        builder.append_reference_cell(self.info.cell()); // info:^BlockInfo
+        builder.append_reference_cell(self.value_flow.cell()); // value_flow:^ValueFlow
+        builder.append_reference_cell(self.state_update.cell()); // state_update:^(MERKLE_UPDATE ShardState)
+        builder.append_reference_cell(self.extra.cell()); // extra:^BlockExtra
         Ok(())
     }
 }
