@@ -2023,6 +2023,16 @@ pub enum MsgAddress {
     AddrVar(MsgAddrVar),
 }
 
+impl MsgAddress {
+    pub fn to_msg_addr_int(self) -> Option<MsgAddressInt> {
+        match self {
+            MsgAddress::AddrStd(addr) => Some(MsgAddressInt::AddrStd(addr)),
+            MsgAddress::AddrVar(addr) => Some(MsgAddressInt::AddrVar(addr)),
+            MsgAddress::AddrNone | MsgAddress::AddrExt(_) => None,
+        }
+    }
+}
+
 impl Deserializable for MsgAddress {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let bits = cell.get_next_bits(2)?[0] >> 6;

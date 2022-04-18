@@ -531,14 +531,14 @@ impl Serializable for McBlockExtra {
         self.prev_blk_signatures.write_to(&mut cell1)?;
         if let Some(msg) = self.recover_create_msg.as_ref() {
             cell1.append_bit_one()?;
-            cell1.append_reference_cell(msg.serialize()?);
+            cell1.append_reference_cell(msg.cell());
         } else {
             cell1.append_bit_zero()?;
         }
         
         if let Some(msg) = self.mint_msg.as_ref() {
             cell1.append_bit_one()?;
-            cell1.append_reference_cell(msg.serialize()?);
+            cell1.append_reference_cell(msg.cell());
         } else {
             cell1.append_bit_zero()?;
         }
@@ -1106,7 +1106,7 @@ impl Deserializable for McStateExtra {
 
         let cell1 = &mut cell.checked_drain_reference()?.into();
         let mut flags = 0u16;
-        flags.read_from(cell1)?;
+        flags.read_from(cell1)?; // 16 + 0
         if flags > 1 {
             fail!(
                 BlockError::InvalidData(
@@ -1114,17 +1114,15 @@ impl Deserializable for McStateExtra {
                 )
             )
         }
-        self.validator_info.read_from(cell1)?;
-        self.prev_blocks.read_from(cell1)?;
-        self.after_key_block.read_from(cell1)?;
-        self.last_key_block = ExtBlkRef::read_maybe_from(cell1)?;
-        if flags & 1 == 0 {
-            self.block_create_stats = None;
+        self.validator_info.read_from(cell1)?; // 65 + 0
+        self.prev_blocks.read_from(cell1)?; // 1 + 1
+        self.after_key_block.read_from(cell1)?; // 1 + 0
+        self.last_key_block = ExtBlkRef::read_maybe_from(cell1)?; // 609 + 0
+        self.block_create_stats = if flags & 1 == 0 {
+            None
         } else {
-            let mut block_create_stats = BlockCreateStats::default();
-            block_create_stats.read_from(cell1)?;
-            self.block_create_stats = Some(block_create_stats);
-        }
+            Some(BlockCreateStats::construct_from(cell1)?) // 1 + 1
+        };
         self.global_balance.read_from(cell)?;
         Ok(())
     }

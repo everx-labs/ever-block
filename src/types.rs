@@ -1106,18 +1106,3 @@ impl<T: Default + Serializable + Deserializable> PartialEq for ChildCell<T> {
         }
     }
 }
-
-impl<T: Default + Serializable + Deserializable> Serializable for ChildCell<T> {
-    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-        if !builder.is_empty() {
-            fail!(
-                BlockError::InvalidArg("The `builder` must be empty".to_string())
-            )
-        }
-        *builder = match self.cell.clone() {
-            Some(cell) => BuilderData::from(cell),
-            None => T::default().write_to_new_cell()?
-        };
-        Ok(())
-    }
-}
