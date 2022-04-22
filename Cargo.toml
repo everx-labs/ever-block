@@ -16,4 +16,4 @@ num = '0.4'
 num-traits = '0.2'
 rand = '0.7.2'
 sha2 = '0.8.0'
-ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.10.13' }
+ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.10.14' }
