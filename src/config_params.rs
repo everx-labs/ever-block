@@ -321,20 +321,23 @@ impl ConfigParams {
 
 #[repr(u64)]
 pub enum GlobalCapabilities {
-    CapIhrEnabled             = 0x0001,
-    CapCreateStatsEnabled     = 0x0002,
-    CapBounceMsgBody          = 0x0004,
-    CapReportVersion          = 0x0008,
-    CapSplitMergeTransactions = 0x0010,
-    CapShortDequeue           = 0x0020,
-    CapMbppEnabled            = 0x0040,
-    CapFastStorageStat        = 0x0080,
-    CapInitCodeHash           = 0x0100,
-    CapOffHypercube           = 0x0200,
-    CapMycode                 = 0x0400,
-    CapSetLibCode             = 0x0800,
-    CapFixTupleIndexBug       = 0x1000,
-    CapDelections             = 0x4000
+    CapIhrEnabled             = 0x00001,
+    CapCreateStatsEnabled     = 0x00002,
+    CapBounceMsgBody          = 0x00004,
+    CapReportVersion          = 0x00008,
+    CapSplitMergeTransactions = 0x00010,
+    CapShortDequeue           = 0x00020,
+    CapMbppEnabled            = 0x00040,
+    CapFastStorageStat        = 0x00080,
+    CapInitCodeHash           = 0x00100,
+    CapOffHypercube           = 0x00200,
+    CapMycode                 = 0x00400,
+    CapSetLibCode             = 0x00800,
+    CapFixTupleIndexBug       = 0x01000,
+    CapRemp                   = 0x02000,
+    CapDelections             = 0x04000,
+    CapFullBodyInBounced      = 0x10000,
+    CapStorageFeeToTvm        = 0x20000,
 }
 
 impl ConfigParams {
