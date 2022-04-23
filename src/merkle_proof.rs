@@ -22,7 +22,7 @@ use crate::{
     transactions::Transaction,
     messages::Message,
 };
-use std::{cmp::max, collections::HashSet};
+use std::{cmp::max, collections::{HashMap, HashSet}};
 use ton_types::{
     Cell, CellType, BuilderData, error, fail, IBitstring, LevelMask, SliceData, Result, 
     UsageTree, types::UInt256
@@ -98,13 +98,13 @@ impl MerkleProof {
                 )
             )
         }
-
-        let proof = Self::create_raw(root, &is_include, 0, &mut None)?;
+        let mut done_cells = HashMap::new();
+        let proof = Self::create_raw(root, &is_include, 0, &mut None, &mut done_cells)?;
 
         Ok(MerkleProof {
             hash: root.repr_hash(),
             depth: root.repr_depth(),
-            proof: proof.into_cell()?,
+            proof: proof,
         })
     }
 
@@ -119,7 +119,8 @@ impl MerkleProof {
         is_include: &impl Fn(&UInt256) -> bool,
         merkle_depth: u8,
         pruned_branches: &mut Option<HashSet<UInt256>>,
-    ) -> Result<BuilderData> {
+        done_cells: &mut HashMap<UInt256, Cell>,
+    ) -> Result<Cell> {
 
         let child_merkle_depth = if cell.is_merkle() { 
             merkle_depth + 1 
@@ -131,17 +132,20 @@ impl MerkleProof {
         proof_cell.set_type(cell.cell_type());
         let mut child_mask = cell.level_mask();
         for child in cell.clone_references().iter() {
-            let proof_child = if child.references_count() == 0 || is_include(&child.repr_hash()) {
-                Self::create_raw(child, is_include, child_merkle_depth, pruned_branches)?
+            let child_repr_hash = child.repr_hash();
+            let proof_child = if let Some(c) = done_cells.get(&child_repr_hash) {
+                c.clone()
+            } else if child.references_count() == 0 || is_include(&child.repr_hash()) {
+                Self::create_raw(child, is_include, child_merkle_depth, pruned_branches, done_cells)?
             } else {
                 let pbc = MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?;
                 if let Some(pruned_branches) = pruned_branches.as_mut() {
-                    pruned_branches.insert(child.repr_hash());
+                    pruned_branches.insert(child_repr_hash);
                 }
-                pbc
+                pbc.into_cell()?
             };
             child_mask |= proof_child.level_mask();
-            proof_cell.append_reference_cell(proof_child.into_cell()?);
+            proof_cell.append_reference_cell(proof_child);
         }
         
         proof_cell.set_level_mask(if cell.is_merkle() {
@@ -153,8 +157,10 @@ impl MerkleProof {
         let slice = cell.into();
         proof_cell.append_bytestring(&slice).unwrap();
 
+        let cell = proof_cell.into_cell()?;
+        done_cells.insert(cell.repr_hash().clone(), cell.clone());
 
-        Ok(proof_cell)
+        Ok(cell)
     }
 }
 

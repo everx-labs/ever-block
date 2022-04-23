@@ -171,8 +171,9 @@ impl MerkleUpdate {
             })
         } else {
             let mut pruned_branches = Some(HashSet::new());
+            let mut done_cells = HashMap::new();
             let new_update_cell = MerkleProof::create_raw(
-                new, &|hash| !is_visited_old(hash), 0, &mut pruned_branches)?;
+                new, &|hash| !is_visited_old(hash), 0, &mut pruned_branches, &mut done_cells)?;
             let pruned_branches = pruned_branches.unwrap();
 
             let mut used_paths_cells = HashSet::new();
@@ -181,16 +182,17 @@ impl MerkleUpdate {
                 used_paths_cells.insert(old.repr_hash());
             }
 
+            let mut done_cells = HashMap::new();
             let old_update_cell = MerkleProof::create_raw(
-                old, &|hash| used_paths_cells.contains(hash), 0, &mut None)?;
+                old, &|hash| used_paths_cells.contains(hash), 0, &mut None, &mut done_cells)?;
 
             Ok(MerkleUpdate {
                 old_hash: old.repr_hash(),
                 new_hash: new.repr_hash(),
                 old_depth: old.repr_depth(),
                 new_depth: new.repr_depth(),
-                old: old_update_cell.into_cell()?,
-                new: new_update_cell.into_cell()?,
+                old: old_update_cell,
+                new: new_update_cell,
             })
         }
     }
