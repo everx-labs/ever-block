@@ -157,10 +157,10 @@ impl MerkleProof {
         let slice = cell.into();
         proof_cell.append_bytestring(&slice).unwrap();
 
-        let cell = proof_cell.into_cell()?;
-        done_cells.insert(cell.repr_hash().clone(), cell.clone());
+        let proof_cell = proof_cell.into_cell()?;
+        done_cells.insert(cell.repr_hash(), proof_cell.clone());
 
-        Ok(cell)
+        Ok(proof_cell)
     }
 }
 
