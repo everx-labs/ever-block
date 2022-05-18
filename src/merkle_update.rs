@@ -177,8 +177,9 @@ impl MerkleUpdate {
             let pruned_branches = pruned_branches.unwrap();
 
             let mut used_paths_cells = HashSet::new();
+            let mut visited = HashSet::new();
             if Self::collect_used_paths_cells(old, &is_visited_old, &pruned_branches, 
-                &mut HashSet::new(), &mut used_paths_cells) {
+                &mut HashSet::new(), &mut used_paths_cells, &mut visited) {
                 used_paths_cells.insert(old.repr_hash());
             }
 
@@ -202,9 +203,15 @@ impl MerkleUpdate {
         is_visited_old: &impl Fn(&UInt256) -> bool,
         pruned_branches: &HashSet<UInt256>,
         visited_pruned_branches: &mut HashSet<UInt256>,
-        used_paths_cells: &mut HashSet<UInt256>
+        used_paths_cells: &mut HashSet<UInt256>,
+        visited: &mut HashSet<UInt256>,
     ) -> bool {
         let repr_hash = cell.repr_hash();
+
+        if visited.contains(&repr_hash) {
+            return false;
+        }
+        visited.insert(repr_hash.clone());
 
         if used_paths_cells.contains(&repr_hash) {
             return false;
@@ -228,7 +235,8 @@ impl MerkleUpdate {
                     is_visited_old,
                     pruned_branches,
                     visited_pruned_branches,
-                    used_paths_cells
+                    used_paths_cells,
+                    visited
                 );
             }
             if collect {
