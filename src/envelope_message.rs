@@ -172,17 +172,9 @@ impl Deserializable for IntermediateAddress{
 /// interm_addr_regular$0 use_dest_bits:(#<= 96) = IntermediateAddress;
 /// 
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct IntermediateAddressRegular {
     use_dest_bits: u8,
-}
-
-impl Default for IntermediateAddressRegular {
-    fn default() -> Self {
-        IntermediateAddressRegular {
-            use_dest_bits: 0
-        }
-    }
 }
 
 pub static FULL_BITS: u8 = 96;
@@ -385,6 +377,9 @@ impl MsgEnvelope {
     /// Create Envelope with message and remainig_fee
     ///
     pub fn with_message_and_fee(msg: &Message, fwd_fee_remaining: Grams) -> Result<Self> {
+        if !msg.is_internal() {
+            fail!("MsgEnvelope can be made only for internal messages")
+        }
         Ok(Self::with_routing(
             msg.serialize()?,
             fwd_fee_remaining,

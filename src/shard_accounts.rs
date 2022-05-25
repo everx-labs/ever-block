@@ -78,7 +78,7 @@ pub struct DepthBalanceInfo {
 impl DepthBalanceInfo {
     pub fn new(split_depth: u8, balance: &CurrencyCollection) -> Result<Self> {
         Ok(Self {
-            split_depth: Number5::from_u32(split_depth as u32, 30)?,
+            split_depth: Number5::new_checked(split_depth as u32, 30)?,
             balance: balance.clone(),
         })
     }
@@ -91,7 +91,7 @@ impl DepthBalanceInfo {
 }
 
 impl Augmentable for DepthBalanceInfo {
-    fn calc(&mut self, other: &Self) -> Result<()> {
+    fn calc(&mut self, other: &Self) -> Result<bool> {
         self.balance.calc(&other.balance)
         // TODO: do something with split_depth
     }

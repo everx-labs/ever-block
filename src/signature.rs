@@ -52,7 +52,7 @@ impl CryptoSignature {
     }
 
     // #[deprecated]
-    pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
+    // pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
 
     pub fn from_r_s(r: &[u8], s: &[u8]) -> Result<Self>
     {
@@ -213,7 +213,7 @@ impl SigPubKey {
     }
 
     // #[deprecated]
-    pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
+    // pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
 
     pub fn key(&self) -> &ed25519_dalek::PublicKey {
         &self.0

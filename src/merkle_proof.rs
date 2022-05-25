@@ -104,7 +104,7 @@ impl MerkleProof {
         Ok(MerkleProof {
             hash: root.repr_hash(),
             depth: root.repr_depth(),
-            proof: proof,
+            proof
         })
     }
 
@@ -312,7 +312,7 @@ pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt25
             if let Ok(msg_cell) = in_msg.message_cell() {
                 if msg_cell.repr_hash() != msg_hash {
                     fail!(
-                        BlockError::WrongMerkleProof("Wrong message's hash in proof".to_string())
+                        BlockError::WrongMerkleProof(format!("Wrong message's hash in proof {:x} but {:x}", msg_cell.repr_hash(), msg_hash))
                     )
                 } else {
                     return Ok(())

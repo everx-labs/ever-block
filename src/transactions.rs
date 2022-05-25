@@ -12,23 +12,21 @@
 */
 
 use crate::{
-    define_HashmapE, define_HashmapAugE,
     accounts::{Account, AccountStatus, StorageUsedShort},
     blocks::Block,
+    define_HashmapAugE, define_HashmapE,
     error::BlockError,
     hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     merkle_proof::MerkleProof,
     messages::{generate_big_msg, Message},
     shard::ShardStateUnsplit,
     types::{AddSub, ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
-    MaybeSerialize, MaybeDeserialize, Serializable, Deserializable,
+    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
 };
 use std::{fmt, sync::Arc};
 use ton_types::{
-    error, fail, Result,
-    AccountId, UInt256, UsageTree,
-    BuilderData, Cell, IBitstring, SliceData,
-    HashmapE, HashmapType, hm_label,
+    error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
+    SliceData, UInt256, UsageTree,
 };
 
 
@@ -317,7 +315,7 @@ impl TrStoragePhase {
             storage_fees_collected: Grams::default(),
             storage_fees_due: None,
             status_change: AccStatusChange::default()
-        
+
         }
     }
     pub const fn with_params(collected: Grams, due: Option<Grams>, status: AccStatusChange) -> Self {
@@ -570,6 +568,7 @@ pub struct TrActionPhase {
     pub valid: bool,
     pub no_funds: bool,
     pub status_change: AccStatusChange,
+    // TODO: remove two next Options and store if it is not zero
     pub total_fwd_fees: Option<Grams>,
     pub total_action_fees: Option<Grams>,
     pub result_code: i32,
@@ -580,6 +579,25 @@ pub struct TrActionPhase {
     pub msgs_created: i16,
     pub action_list_hash: UInt256,
     pub tot_msg_size: StorageUsedShort,
+}
+
+impl TrActionPhase {
+    pub fn add_fwd_fees(&mut self, fees: Grams) {
+        if !fees.is_zero() {
+            self.total_fwd_fees.get_or_insert(Grams::zero()).add_checked(fees.as_u128());
+        }
+    }
+    pub fn total_fwd_fees(&self) -> Grams {
+        self.total_fwd_fees.clone().unwrap_or_default()
+    }
+    pub fn add_action_fees(&mut self, fees: Grams) {
+        if !fees.is_zero() {
+            self.total_action_fees.get_or_insert(Grams::zero()).add_checked(fees.as_u128());
+        }
+    }
+    pub fn total_action_fees(&self) -> Grams {
+        self.total_action_fees.clone().unwrap_or_default()
+    }
 }
 
 impl Serializable for TrActionPhase {
@@ -650,7 +668,7 @@ impl Serializable for SplitMergeInfo {
         }
         if 0 != self.acc_split_depth & 0b11000000 {
             fail!(
-                BlockError::InvalidData("self.acc_split_depth is too long".to_string()) 
+                BlockError::InvalidData("self.acc_split_depth is too long".to_string())
             )
         } else {
             cell.append_bits(self.acc_split_depth as usize, 6)?;
@@ -987,6 +1005,12 @@ impl Deserializable for TransactionDescrMergeInstall {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct CopyleftReward {
+    pub reward: Grams,
+    pub address: AccountId,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransactionDescr {
     Ordinary(TransactionDescrOrdinary),
@@ -1056,8 +1080,8 @@ impl TransactionDescr {
             TransactionDescr::Ordinary(ref mut desc) => {
                 if let Some(ref mut bounce) = desc.bounce {
                     match bounce {
-                        TrBouncePhase::Nofunds(ref mut no_funds) => { no_funds.msg_size.append(cell);},
-                        TrBouncePhase::Ok(ref mut ok) => { ok.msg_size.append(cell);},
+                        TrBouncePhase::Nofunds(ref mut no_funds) => { no_funds.msg_size.append(cell); },
+                        TrBouncePhase::Ok(ref mut ok) => { ok.msg_size.append(cell); },
                         _ => (),
                     };
                 }
@@ -1262,20 +1286,20 @@ define_HashmapE!{OutMessages, 15, InRefValue<Message>}
 pub type TransactionId = UInt256;
 
 /*
-transaction$0111 
-    account_addr:bits256 
-    lt:uint64 
+transaction$0111
+    account_addr:bits256
+    lt:uint64
     prev_trans_hash:bits256
     prev_trans_lt:uint64
     now:uint32
     outmsg_cnt:uint15
     orig_status:AccountStatus
     end_status:AccountStatus
-    ^[  in_msg:(Maybe ^(Message Any)) 
+    ^[  in_msg:(Maybe ^(Message Any))
         out_msgs:(HashmapE 15 ^(Message Any)) ]
     total_fees:CurrencyCollection
     state_update:^(HASH_UPDATE Account)
-    description:^TransactionDescr 
+    description:^TransactionDescr
 = Transaction;
 */
 #[derive(Debug, Clone)]
@@ -1293,6 +1317,7 @@ pub struct Transaction {
     total_fees: CurrencyCollection,
     state_update: ChildCell<HashUpdate>,
     description: ChildCell<TransactionDescr>,
+    copyleft_reward: Option<CopyleftReward>, // don't serialised
 }
 
 impl Transaction {
@@ -1313,6 +1338,7 @@ impl Transaction {
             total_fees: CurrencyCollection::default(),
             state_update: ChildCell::default(),
             description: ChildCell::default(),
+            copyleft_reward: None,
         }
     }
 
@@ -1335,6 +1361,7 @@ impl Transaction {
             total_fees: CurrencyCollection::default(),
             state_update: ChildCell::default(),
             description: ChildCell::default(),
+            copyleft_reward: None,
         })
     }
 
@@ -1377,7 +1404,7 @@ impl Transaction {
     }
 
     /// add fee
-    pub fn add_fee_grams(&mut self, fee: &Grams) -> Result<()> {
+    pub fn add_fee_grams(&mut self, fee: &Grams) -> Result<bool> {
         self.total_fees.grams.add(fee)
     }
 
@@ -1390,7 +1417,7 @@ impl Transaction {
     pub fn total_fees(&self) -> &CurrencyCollection { &self.total_fees }
 
     /// get total fees mutable
-    pub fn total_fees_mut(&mut self) -> &mut CurrencyCollection { 
+    pub fn total_fees_mut(&mut self) -> &mut CurrencyCollection {
         &mut self.total_fees
     }
 
@@ -1420,7 +1447,7 @@ impl Transaction {
     }
 
     pub fn write_in_msg(&mut self, value: Option<&Message>) -> Result<()> {
-        self.in_msg = value.map(|v| ChildCell::with_struct(v)).transpose()?;
+        self.in_msg = value.map(ChildCell::with_struct).transpose()?;
         Ok(())
     }
 
@@ -1498,6 +1525,14 @@ impl Transaction {
         self.now = now;
     }
 
+    pub fn copyleft_reward(&self) -> &Option<CopyleftReward> {
+        &self.copyleft_reward
+    }
+
+    pub fn set_copyleft_reward(&mut self, reward: Option<CopyleftReward>) {
+        self.copyleft_reward = reward;
+    }
+
     pub fn prepare_proof(&self, block_root: &Cell) -> Result<Cell> {
         // proof for transaction and block info in block
 
@@ -1510,15 +1545,15 @@ impl Transaction {
             .read_extra()?
             .read_account_blocks()?
             .get_serialized(self.account_id().clone())?
-            .ok_or_else(|| 
+            .ok_or_else(||
                 BlockError::InvalidArg(
                     "Transaction doesn't belong to given block \
-                     (can't find account block)".to_string() 
+                     (can't find account block)".to_string()
                 )
             )?
             .transactions()
             .get(&self.logical_time())?
-            .ok_or_else(|| 
+            .ok_or_else(||
                 BlockError::InvalidArg(
                     "Transaction doesn't belong to given block".to_string()
                 )
@@ -1543,7 +1578,7 @@ impl Transaction {
     pub fn gas_used(&self) -> Option<u64> {
         if let Ok(description) = self.read_description() {
             if let Some(TrComputePhase::Vm(compute_ph)) = description.compute_phase_ref() {
-                return Some(compute_ph.gas_used.0 as u64)
+                return Some(compute_ph.gas_used.as_u64())
             }
         }
         None
@@ -1578,7 +1613,7 @@ impl Default for Transaction {
             lt: 0,
             prev_trans_hash: UInt256::default(),
             prev_trans_lt: 0,
-            now: 0,            
+            now: 0,
             outmsg_cnt: 0,
             orig_status: AccountStatus::AccStateUninit,
             end_status: AccountStatus::AccStateUninit,
@@ -1586,7 +1621,8 @@ impl Default for Transaction {
             out_msgs: OutMessages::default(),
             total_fees: CurrencyCollection::default(),
             state_update: ChildCell::default(),
-            description: ChildCell::default()
+            description: ChildCell::default(),
+            copyleft_reward: None,
         }
     }
 }

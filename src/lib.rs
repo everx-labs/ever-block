@@ -81,7 +81,7 @@ pub use self::config_params::*;
 
 use std::{collections::HashMap, hash::Hash};
 use ton_types::{
-    fail, Result,
+    error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
 };
@@ -173,6 +173,7 @@ pub trait Deserializable: Default {
     }
     fn construct_from_cell(cell: Cell) -> Result<Self> {
         Self::construct_from(&mut cell.into())
+            .map_err(|err| error!("bad deserialization {}: {:?}", std::any::type_name::<Self>(), err))
     }
     fn construct_from_reference(slice: &mut SliceData) -> Result<Self> {
         Self::construct_from_cell(slice.checked_drain_reference()?)
@@ -180,7 +181,7 @@ pub trait Deserializable: Default {
     /// adapter for tests
     fn construct_from_bytes(bytes: &[u8]) -> Result<Self> {
         let cell = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(bytes))?;
-        Self::construct_from(&mut cell.into())
+        Self::construct_from_cell(cell)
     }
     /// adapter for tests
     fn construct_from_file(file_name: impl AsRef<std::path::Path>) -> Result<Self> {

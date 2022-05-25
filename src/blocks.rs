@@ -11,30 +11,31 @@
 * limitations under the License.
 */
 
+use crate::types::AddSub;
 use crate::{
+    config_params::{CatchainConfig, GlobalVersion},
     define_HashmapE,
-    config_params::{GlobalVersion, CatchainConfig},
     error::BlockError,
     inbound_messages::InMsgDescr,
     master::{BlkMasterInfo, McBlockExtra},
     merkle_update::MerkleUpdate,
     outbound_messages::OutMsgDescr,
-    signature::BlockSignatures,
     shard::ShardIdent,
+    signature::BlockSignatures,
     transactions::ShardAccountBlocks,
-    types::{ChildCell, CurrencyCollection, InRefValue, UnixTime32},
-    Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
+    types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32},
     validators::ValidatorSet,
+    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
 };
 use std::{
     cmp::Ordering,
-    io::{Cursor, Write},
     fmt::{self, Display, Formatter},
-    str::FromStr
+    io::{Cursor, Write},
+    str::FromStr,
 };
 use ton_types::{
-    error, fail, Result,
-    ExceptionCode, UInt256, BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
+    error, fail, AccountId, BuilderData, Cell, ExceptionCode, HashmapE, HashmapType, IBitstring,
+    Result, SliceData, UInt256,
 };
 
 
@@ -122,9 +123,9 @@ impl Deserializable for BlockIdExt {
 
 impl Display for BlockIdExt {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "({}:{}, {}, rh {:x}, fh {:x})", 
-            self.shard_id.workchain_id(), 
-            self.shard_id.shard_prefix_as_str_with_tag(), 
+        write!(f, "({}:{}, {}, rh {:x}, fh {:x})",
+            self.shard_id.workchain_id(),
+            self.shard_id.shard_prefix_as_str_with_tag(),
             self.seq_no,
             self.root_hash,
             self.file_hash)
@@ -187,28 +188,28 @@ pub struct BlockSeqNoAndShard {
 
 const GEN_SOFTWARE_EXISTS_FLAG: u8 = 1;
 
-/* 
-block_info#9bc7a987 
+/*
+block_info#9bc7a987
 
-  version:uint32 
-  not_master:(## 1) 
+  version:uint32
+  not_master:(## 1)
   after_merge:(## 1)
-  before_split:(## 1) 
-  after_split:(## 1) 
+  before_split:(## 1)
+  after_split:(## 1)
   want_split:Bool
   want_merge:Bool
-  key_block:Bool 
+  key_block:Bool
 
   vert_seqno_incr:(## 1)
   flags:(## 8) { flags <= 1 }
-  seq_no:# 
-  vert_seq_no:# 
-  { vert_seq_no >= vert_seqno_incr } 
-  { prev_seq_no:# } { ~prev_seq_no + 1 = seq_no } 
+  seq_no:#
+  vert_seq_no:#
+  { vert_seq_no >= vert_seqno_incr }
+  { prev_seq_no:# } { ~prev_seq_no + 1 = seq_no }
 
   shard:ShardIdent
   gen_utime:uint32
-  start_lt:uint64 
+  start_lt:uint64
   end_lt:uint64
   gen_validator_list_hash_short:uint32
   gen_catchain_seqno:uint32
@@ -216,7 +217,7 @@ block_info#9bc7a987
   prev_key_block_seqno:uint32
   gen_software:flags . 0?GlobalVersion
 
-  master_ref:not_master?^BlkMasterInfo 
+  master_ref:not_master?^BlkMasterInfo
   prev_ref:^(BlkPrevInfo after_merge)
   prev_vert_ref:vert_seqno_incr?^(BlkPrevInfo 0)
 
@@ -361,7 +362,7 @@ impl BlockInfo {
     }
 
     pub fn write_master_ref(&mut self, value: Option<&BlkMasterInfo>) -> Result<()> {
-        self.master_ref = value.map(|v| ChildCell::with_struct(v)).transpose()?;
+        self.master_ref = value.map(ChildCell::with_struct).transpose()?;
         Ok(())
     }
 
@@ -378,8 +379,8 @@ impl BlockInfo {
     }
     pub fn read_prev_ref(&self) -> Result<BlkPrevInfo> {
         let mut prev_ref = if self.after_merge {
-            BlkPrevInfo::default_blocks() 
-        } else { 
+            BlkPrevInfo::default_blocks()
+        } else {
             BlkPrevInfo::default_block()
         };
         prev_ref.read_from(&mut self.prev_ref.cell().into())?;
@@ -438,8 +439,8 @@ prev_blk_info$_
     = BlkPrevInfo 0;
 
 prev_blks_info$_
-    prev1:^ExtBlkRef 
-    prev2:^ExtBlkRef 
+    prev1:^ExtBlkRef
+    prev2:^ExtBlkRef
     = BlkPrevInfo 1;
 */
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -834,6 +835,60 @@ impl Serializable for BlockExtra {
     }
 }
 
+define_HashmapE!{CopyleftRewards, 256, Grams}
+
+impl CopyleftRewards {
+    pub fn add_copyleft_reward(&mut self, reward_address: &AccountId, reward: &Grams) -> Result<()> {
+        if let Some(mut value) = self.get(reward_address)? {
+            value.add(reward)?;
+            self.set(reward_address, &value)?;
+        } else {
+            self.set(reward_address, reward)?;
+        }
+        Ok(())
+    }
+
+    pub fn merge_rewards(&mut self, other: &Self) -> Result<()> {
+        // if map size is big, iterating will be long
+        other.iterate_with_keys(|key: AccountId, mut value| {
+            if let Some(new_value) = self.get(&key)? {
+                value.add(&new_value)?;
+            }
+            self.set(&key, &value)?;
+            Ok(true)
+        })?;
+        Ok(())
+    }
+
+    pub fn merge_rewards_with_threshold(&mut self, other: &Self, threshold: &Grams) -> Result<Vec<(AccountId, Grams)>> {
+        // if map size is big, iterating will be long
+        let mut send_rewards = vec!();
+        other.iterate_with_keys(|key: AccountId, mut value| {
+            if let Some(new_value) = self.get(&key)? {
+                value.add(&new_value)?;
+            }
+            if &value >= threshold {
+                self.remove(&key)?;
+                send_rewards.push((key, value));
+            } else {
+                self.set(&key, &value)?;
+            }
+            Ok(true)
+        })?;
+        Ok(send_rewards)
+    }
+
+    pub fn debug(&self) -> Result<String> {
+        let mut str = "".to_string();
+        self.iterate_with_keys(|key: AccountId, value| {
+            str = format!("{} key: {:?}, value: {}; ", str, key, value);
+            Ok(true)
+        })?;
+        str = format!("{}.", str);
+        Ok(str)
+    }
+}
+
 /// value_flow ^[ from_prev_blk:CurrencyCollection
 ///   to_next_blk:CurrencyCollection
 ///   imported:CurrencyCollection
@@ -861,6 +916,7 @@ pub struct ValueFlow {
     pub recovered: CurrencyCollection,     // serialized into another cell 2
     pub created: CurrencyCollection,       // serialized into another cell 2
     pub minted: CurrencyCollection,        // serialized into another cell 2
+    pub copyleft_rewards: CopyleftRewards,
 }
 
 impl fmt::Display for ValueFlow {
@@ -899,6 +955,7 @@ impl ValueFlow {
         self.recovered.other.iterate(|_value| Ok(true))?;
         self.created.other.iterate(|_value| Ok(true))?;
         self.minted.other.iterate(|_value| Ok(true))?;
+        self.copyleft_rewards.iterate(|_value| Ok(true))?;
         Ok(())
     }
 }
@@ -1023,10 +1080,16 @@ impl Serializable for BlockInfo {
 }
 
 const VALUE_FLOW_TAG: u32 = 0xb8e48dfb;
+const VALUE_FLOW_TAG_V2: u32 = 0xe0864f6d;
 
 impl Serializable for ValueFlow {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_u32(VALUE_FLOW_TAG)?;
+        let tag = if self.copyleft_rewards.is_empty() {
+            VALUE_FLOW_TAG
+        } else {
+            VALUE_FLOW_TAG_V2
+        };
+        cell.append_u32(tag)?;
 
         let mut cell1 = BuilderData::new();
         self.from_prev_blk.write_to(&mut cell1)?;
@@ -1043,6 +1106,10 @@ impl Serializable for ValueFlow {
         self.minted.write_to(&mut cell2)?;
         cell.append_reference_cell(cell2.into_cell()?);
 
+        if !self.copyleft_rewards.is_empty() {
+            self.copyleft_rewards.write_to(cell)?;
+        }
+
         Ok(())
     }
 }
@@ -1050,7 +1117,7 @@ impl Serializable for ValueFlow {
 impl Deserializable for ValueFlow {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        if tag != VALUE_FLOW_TAG {
+        if tag != VALUE_FLOW_TAG && tag != VALUE_FLOW_TAG_V2 {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
@@ -1070,6 +1137,11 @@ impl Deserializable for ValueFlow {
         self.recovered.read_from(cell2)?;
         self.created.read_from(cell2)?;
         self.minted.read_from(cell2)?;
+
+        if tag == VALUE_FLOW_TAG_V2 {
+            self.copyleft_rewards.read_from(cell)?;
+        }
+
         Ok(())
     }
 }
@@ -1086,7 +1158,7 @@ impl Deserializable for BlockInfo {
             )
         }
         self.version = cell.get_next_u32()?;
-        
+
         let next_byte = cell.get_next_byte()?;
         let not_master = (next_byte >> 7) & 1 == 1;
         let after_merge = (next_byte >> 6) & 1 == 1;
@@ -1118,13 +1190,13 @@ impl Deserializable for BlockInfo {
             let mut bli = BlkMasterInfo::default();
             bli.read_from_reference(cell)?;
             Some(ChildCell::with_struct(&bli)?)
-        } else { 
+        } else {
             None
         };
 
         let mut prev_ref = if after_merge {
-            BlkPrevInfo::default_blocks() 
-        } else { 
+            BlkPrevInfo::default_blocks()
+        } else {
             BlkPrevInfo::default_block()
         };
         prev_ref.read_from_reference(cell)?;

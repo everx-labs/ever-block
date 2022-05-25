@@ -211,6 +211,12 @@ impl ConfigParams {
             _ => fail!("no elector params in config")
         }
     }
+    pub fn stakes_config(&self) -> Result<ConfigParam17> {
+        match self.config(17)? {
+            Some(ConfigParamEnum::ConfigParam17(param)) => Ok(param),
+            _ => fail!("no stakes params in config")
+        }
+    }
     // TODO 16 validators count
     // TODO 17 stakes config
     pub fn storage_prices(&self) -> Result<ConfigParam18> {
@@ -316,28 +322,39 @@ impl ConfigParams {
             self.catchain_config()?
         ))
     }
+    pub fn copyleft_config(&self) -> Result<ConfigCopyleft> {
+        match self.config(42)? {
+            Some(ConfigParamEnum::ConfigParam42(cp)) => Ok(cp),
+            _ => fail!("no config 42 (copyleft)")
+        }
+    }
     // TODO 39 validator signed temp keys
 }
 
+#[derive(Clone, Copy, Debug)]
 #[repr(u64)]
 pub enum GlobalCapabilities {
-    CapIhrEnabled             = 0x00001,
-    CapCreateStatsEnabled     = 0x00002,
-    CapBounceMsgBody          = 0x00004,
-    CapReportVersion          = 0x00008,
-    CapSplitMergeTransactions = 0x00010,
-    CapShortDequeue           = 0x00020,
-    CapMbppEnabled            = 0x00040,
-    CapFastStorageStat        = 0x00080,
-    CapInitCodeHash           = 0x00100,
-    CapOffHypercube           = 0x00200,
-    CapMycode                 = 0x00400,
-    CapSetLibCode             = 0x00800,
-    CapFixTupleIndexBug       = 0x01000,
-    CapRemp                   = 0x02000,
-    CapDelections             = 0x04000,
-    CapFullBodyInBounced      = 0x10000,
-    CapStorageFeeToTvm        = 0x20000,
+    CapNone                   = 0,
+    CapIhrEnabled             = 0x000001,
+    CapCreateStatsEnabled     = 0x000002,
+    CapBounceMsgBody          = 0x000004,
+    CapReportVersion          = 0x000008,
+    CapSplitMergeTransactions = 0x000010,
+    CapShortDequeue           = 0x000020,
+    CapMbppEnabled            = 0x000040,
+    CapFastStorageStat        = 0x000080,
+    CapInitCodeHash           = 0x000100,
+    CapOffHypercube           = 0x000200,
+    CapMycode                 = 0x000400,
+    CapSetLibCode             = 0x000800,
+    CapFixTupleIndexBug       = 0x001000,
+    CapRemp                   = 0x002000,
+    CapDelections             = 0x004000,
+    CapFullBodyInBounced      = 0x010000,
+    CapStorageFeeToTvm        = 0x020000,
+    CapCopyleft               = 0x040000,
+    CapIndexAccounts          = 0x080000,
+    CapDiff                   = 0x100000,
 }
 
 impl ConfigParams {
@@ -358,7 +375,7 @@ impl ConfigParams {
     }
     pub fn has_capability(&self, capability: GlobalCapabilities) -> bool {
         match self.get_global_version() {
-            Ok(gb) => (gb.capabilities & (capability as u64)) != 0,
+            Ok(gb) => gb.has_capability(capability),
             Err(_) => false
         }
     }
@@ -514,6 +531,7 @@ pub enum ConfigParamEnum {
     ConfigParam37(ConfigParam37),
     ConfigParam39(ConfigParam39),
     ConfigParam40(ConfigParam40),
+    ConfigParam42(ConfigCopyleft),
     ConfigParamAny(u32, SliceData),
 }
 
@@ -572,6 +590,7 @@ impl ConfigParamEnum {
             37 => { read_config!(ConfigParam37, ConfigParam37, slice) },
             39 => { read_config!(ConfigParam39, ConfigParam39, slice) },
             40 => { read_config!(ConfigParam40, ConfigParam40, slice) },
+            42 => { read_config!(ConfigParam42, ConfigCopyleft, slice) },
             index => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
         }
     }
@@ -615,7 +634,8 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam37(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(37)},
             ConfigParamEnum::ConfigParam39(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(39)},
             ConfigParamEnum::ConfigParam40(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(40)},
-            ConfigParamEnum::ConfigParamAny(index, slice) => {
+            ConfigParamEnum::ConfigParam42(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(42)},
+            ConfigParamEnum::ConfigParamAny(index, slice) => { 
                 cell.append_reference_cell(slice.clone().into_cell()); 
                 Ok(*index)
             },
@@ -843,8 +863,14 @@ pub struct GlobalVersion {
 }
 
 impl GlobalVersion {
-    pub fn new() -> Self {
-        Self::default()
+    pub const fn new() -> Self {
+        GlobalVersion {
+            version: 0,
+            capabilities: 0
+        }
+    }
+    pub fn has_capability(&self, capability: GlobalCapabilities) -> bool {
+        (self.capabilities & (capability as u64)) != 0
     }
 }
 
@@ -3141,4 +3167,49 @@ impl Serializable for BlockLimits {
 
 type ConfigParam22 = BlockLimits;
 type ConfigParam23 = BlockLimits;
+
+const COPYLEFT_TAG: u8 = 0x9A;
+
+///
+/// ConfigParam 42 struct
+///
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct ConfigCopyleft {
+    pub copyleft_reward_threshold: Grams,
+    pub license_rates: LicenseRates,
+}
+
+define_HashmapE!(LicenseRates, 8, u8);
+
+impl ConfigCopyleft {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Deserializable for ConfigCopyleft {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        let tag = cell.get_next_byte()?;
+        if tag != COPYLEFT_TAG {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: "Copyleft".to_string()
+                }
+            )
+        }
+        self.copyleft_reward_threshold.read_from(cell)?;
+        self.license_rates.read_from(cell)?;
+        Ok(())
+    }
+}
+
+impl Serializable for ConfigCopyleft {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        cell.append_u8(COPYLEFT_TAG)?;
+        self.copyleft_reward_threshold.write_to(cell)?;
+        self.license_rates.write_to(cell)?;
+        Ok(())
+    }
+}
 

@@ -12,25 +12,25 @@
 */
 
 use crate::{
-    define_HashmapE,
     accounts::ShardAccount,
     config_params::CatchainConfig,
-    error::BlockError,
+    define_HashmapE,
     envelope_message::FULL_BITS,
+    error::BlockError,
     hashmapaug::{Augmentation, HashmapAugType},
     master::{BlkMasterInfo, LibDescr, McStateExtra},
     messages::MsgAddressInt,
     outbound_messages::OutMsgQueueInfo,
     shard_accounts::ShardAccounts,
     types::{ChildCell, CurrencyCollection},
-    Serializable, Deserializable, MaybeSerialize, MaybeDeserialize, IntermediateAddress,
     validators::ValidatorSet,
+    CopyleftRewards, Deserializable, IntermediateAddress, MaybeDeserialize, MaybeSerialize,
+    Serializable,
 };
 use std::fmt::{self, Display, Formatter};
 use ton_types::{
-    error, fail, Result,
-    AccountId, UInt256,
-    BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData
+    error, fail, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
+    SliceData, UInt256,
 };
 
 
@@ -229,7 +229,7 @@ impl fmt::Display for AccountIdPrefixFull {
 }
 
 /*
-shard_ident$00 
+shard_ident$00
     shard_pfx_bits: (#<= 60)
     workchain_id: int32
     shard_prefix: uint64
@@ -335,7 +335,7 @@ impl ShardIdent {
             ))
         }
         Ok(())
-    } 
+    }
 
     /// Get bitstring-key for BinTree operation for Shard
     pub fn shard_key(&self, include_workchain: bool) -> SliceData {
@@ -413,13 +413,13 @@ impl ShardIdent {
         let x = Self::lower_bits(parent);
         ((parent ^ child) & (Self::negate_bits(x) << 1)) == 0
     }
-    
+
     pub fn is_ancestor(parent: u64, child: u64) -> bool {
         let x = Self::lower_bits(parent);
         let y = Self::lower_bits(child);
         x >= y && ((parent ^ child) & (Self::negate_bits(x) << 1)) == 0
     }
-    
+
     pub fn intersect_with(&self, other: &Self) -> bool {
         if self.workchain_id != other.workchain_id {
             return false
@@ -503,7 +503,7 @@ impl ShardIdent {
             if self.prefix == SHARD_FULL {
                 true
             } else {
-                // compare shard prefix and first bits of address 
+                // compare shard prefix and first bits of address
                 // (take as many bits of the address as the bits in the prefix)
                 let len = self.prefix_len();
                 let addr_pfx = acc_addr.get_next_int(len as usize)?;
@@ -615,7 +615,7 @@ impl ShardIdent {
 
     pub fn prefix_len(&self) -> u8 {
         match self.prefix {
-            0 => 64, 
+            0 => 64,
             prefix => 63 - prefix.trailing_zeros() as u8
         }
     }
@@ -682,6 +682,7 @@ split_state#5f327da5
 /// Enum ShardState
 ///
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum ShardState {
     UnsplitState(ShardStateUnsplit),
     SplitState(ShardStateSplit),
@@ -937,7 +938,7 @@ impl ShardStateUnsplit {
     pub fn write_accounts(&mut self, value: &ShardAccounts) -> Result<()> {
         self.accounts.write_struct(value)
     }
-    
+
     pub fn insert_account(&mut self, account_id: &UInt256, acc: &ShardAccount) -> Result<()> {
         let account = acc.read_account()?;
         let mut accounts = self.read_accounts()?;
@@ -1013,6 +1014,32 @@ impl ShardStateUnsplit {
         self.custom.is_some()
     }
 
+    pub fn set_copyleft_reward(&mut self, rewards: CopyleftRewards) -> Result<()> {
+        if self.custom.is_some() {
+            let mut custom = self
+                .read_custom()?
+                .ok_or_else(|| error!(BlockError::InvalidArg(
+                    "State doesn't contain `custom` field".to_string()
+            )))?;
+            custom.state_copyleft_rewards = rewards;
+            self.write_custom(Some(&custom))?;
+        } else if !rewards.is_empty() {
+            fail!(BlockError::InvalidArg(
+                "State doesn't contain `custom` field".to_string()
+            ))
+        }
+        Ok(())
+    }
+
+    pub fn copyleft_rewards(&self) -> Result<CopyleftRewards> {
+        Ok(self
+            .read_custom()?
+            .ok_or_else(|| error!(BlockError::InvalidArg(
+                "State doesn't contain `custom` field".to_string()
+            )))?
+            .state_copyleft_rewards)
+    }
+
     pub fn read_custom(&self) -> Result<Option<McStateExtra>> {
         match self.custom {
             None => Ok(None),
@@ -1062,16 +1089,8 @@ impl ShardStateUnsplit {
         let mut shard_config_smc = accounts.get(&config.config_addr)?
             .ok_or_else(|| error!("config SMC isn't present"))?;
         let mut config_smc = shard_config_smc.read_account()?;
-        let data = config_smc.get_data()
-            .ok_or_else(|| error!("config SMC doesn't contain data"))?;
-        let mut data = SliceData::from(data);
-        data.checked_drain_reference()
-            .map_err(|_| error!("config SMC data doesn't contain reference with old config"))?;
-        let mut builder = BuilderData::from_slice(&data);
-        let cell = config.config_params.data()
-            .ok_or_else(|| error!("configs musn't be empty"))?;
-        builder.prepend_reference_cell(cell.clone());
-        config_smc.set_data(builder.into_cell()?);
+
+        config_smc.update_config_smc(&config)?;
         shard_config_smc.write_account(&config_smc)?;
         accounts.set(&config.config_addr, &shard_config_smc, &config_smc.aug()?)?;
         self.write_accounts(&accounts)
@@ -1121,7 +1140,8 @@ impl Deserializable for ShardStateUnsplit {
 
 impl Serializable for ShardStateUnsplit {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-        builder.append_u32(SHARD_STATE_UNSPLIT_PFX)?;
+        let tag = SHARD_STATE_UNSPLIT_PFX;
+        builder.append_u32(tag)?;
         self.global_id.write_to(builder)?;
         self.shard_id.write_to(builder)?;
         self.seq_no.write_to(builder)?;

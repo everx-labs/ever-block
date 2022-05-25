@@ -21,7 +21,7 @@ use sha2::Digest;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::io::{Write, Read, Cursor};
+use std::io::{Write, Read, Cursor, Seek};
 use ton_types::{
     BuilderData, error, fail, Result, SliceData,
     BagOfCells, deserialize_tree_of_cells,
@@ -145,7 +145,7 @@ impl SignedBlock {
 	pub fn add_signature(&mut self, key: &ed25519_dalek::Keypair) {
 		let signature = key.sign(self.combined_hash.as_slice());
 		let key = super::id_from_key(&key.public);
-		self.signatures.insert(key, BlockSignature {0: signature});
+		self.signatures.insert(key, BlockSignature(signature));
 	}
 
 	pub fn verify_signature(&self, key: &ed25519_dalek::PublicKey) -> Result<bool> {
@@ -182,7 +182,7 @@ impl SignedBlock {
 		Ok(())
 	}
 
-	pub fn read_from<T>(src: &mut T) -> Result<Self> where T: Read {
+	pub fn read_from<T>(src: &mut T) -> Result<Self> where T: Read + Seek {
 		// first - signed block's bytes (with block hash instead block bytes)
 		let cell = deserialize_tree_of_cells(src)?;
 

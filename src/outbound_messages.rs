@@ -45,12 +45,11 @@ use ton_types::{
 const OUT_MSG_EXT: u8 = 0b000;
 const OUT_MSG_IMM: u8 = 0b010;
 const OUT_MSG_NEW: u8 = 0b001;
-const OUT_MSG_TR: u8 = 0b011;
+const OUT_MSG_TR: u8 = 0b011; // is not used due CapOffHypercube
 const OUT_MSG_DEQ_IMM: u8 = 0b100;
-const OUT_MSG_DEQ: u8 = 0b1100;
+const OUT_MSG_DEQ: u8 = 0b1100; // is not used due CapShortDequeue
 const OUT_MSG_DEQ_SHORT: u8 = 0b1101;
-const OUT_MSG_TRDEQ: u8 = 0b111;
-
+const OUT_MSG_TRDEQ: u8 = 0b111; // is not used due CapOffHypercube
 
 /*
 _ enqueued_lt:uint64 out_msg:^MsgEnvelope = EnqueuedMsg;
@@ -167,11 +166,11 @@ impl HashmapSubtree for OutMsgQueue {}
 pub type MsgTime = u64;
 
 impl Augmentable for MsgTime {
-    fn calc(&mut self, other: &Self) -> Result<()> {
+    fn calc(&mut self, other: &Self) -> Result<bool> {
         if *self > *other {
             *self = *other;
         }
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -371,28 +370,56 @@ impl Default for OutMsg {
 
 impl OutMsg {
     /// Create External
+    #[deprecated]
     pub fn external(msg: &Message, tr_cell: Cell) -> Result<OutMsg> {
-        Ok(OutMsg::External(OutMsgExternal::with_params(msg, tr_cell)?))
+        Ok(OutMsg::External(OutMsgExternal::with_cells(msg.serialize()?, tr_cell)))
+    }
+    /// Create External
+    pub fn external_msg(msg_cell: Cell, tr_cell: Cell) -> OutMsg {
+        OutMsg::External(OutMsgExternal::with_cells(msg_cell, tr_cell))
     }
     /// Create Ordinary internal message
+    #[deprecated]
     pub fn new(env: &MsgEnvelope, tr_cell: Cell) -> Result<OutMsg> {
-        Ok(OutMsg::New(OutMsgNew::with_params(env, tr_cell)?))
+        Ok(OutMsg::New(OutMsgNew::with_cells(env.serialize()?, tr_cell)))
+    }
+    /// Create Ordinary internal message
+    pub fn new_msg(env_cell: Cell, tr_cell: Cell) -> OutMsg {
+        OutMsg::New(OutMsgNew::with_cells(env_cell, tr_cell))
     }
     /// Create Immediately internal message
+    #[deprecated]
     pub fn immediately(env: &MsgEnvelope, tr_cell: Cell, reimport: &InMsg) -> Result<OutMsg> {
-        Ok(OutMsg::Immediately(OutMsgImmediately::with_params(env, tr_cell, reimport)?))
+        Ok(OutMsg::Immediately(OutMsgImmediately::with_cells(env.serialize()?, tr_cell, reimport.serialize()?)))
+    }
+    /// Create Immediately internal message
+    pub fn immediately_msg(env_cell: Cell, tr_cell: Cell, reimport_msg_cell: Cell) -> OutMsg {
+        OutMsg::Immediately(OutMsgImmediately::with_cells(env_cell, tr_cell, reimport_msg_cell))
     }
     /// Create Transit internal message
+    #[deprecated]
     pub fn transit(env: &MsgEnvelope, imported: &InMsg, requeue: bool) -> Result<OutMsg> {
         if requeue {
-            Ok(OutMsg::TransitRequeued(OutMsgTransitRequeued::with_params(env, imported)?))
+            Ok(OutMsg::TransitRequeued(OutMsgTransitRequeued::with_cells(env.serialize()?, imported.serialize()?)))
         } else {
-            Ok(OutMsg::Transit(OutMsgTransit::with_params(env, imported)?))
+            Ok(OutMsg::Transit(OutMsgTransit::with_cells(env.serialize()?, imported.serialize()?)))
+        }
+    }
+    /// Create Transit internal message
+    pub fn transit_msg(env_cell: Cell, imported_cell: Cell, requeue: bool) -> Result<OutMsg> {
+        if requeue {
+            Ok(OutMsg::TransitRequeued(OutMsgTransitRequeued::with_cells(env_cell, imported_cell)))
+        } else {
+            Ok(OutMsg::Transit(OutMsgTransit::with_cells(env_cell, imported_cell)))
         }
     }
     /// Create Dequeue internal message
     pub fn dequeue_long(env: &MsgEnvelope, import_block_lt: u64) -> Result<OutMsg> {
-        Ok(OutMsg::Dequeue(OutMsgDequeue::with_params(env, import_block_lt)?))
+        Ok(OutMsg::Dequeue(OutMsgDequeue::with_cells(env.serialize()?, import_block_lt)))
+    }
+    /// Create Dequeue internal message
+    pub fn dequeue_long_msg(env_cell: Cell, import_block_lt: u64) -> OutMsg {
+        OutMsg::Dequeue(OutMsgDequeue::with_cells(env_cell, import_block_lt))
     }
     /// Create Dequeue Short internal message
     pub fn dequeue_short(env: &MsgEnvelope, next_prefix: &AccountIdPrefixFull, import_block_lt: u64) -> Result<OutMsg> {
@@ -403,9 +430,22 @@ impl OutMsg {
             import_block_lt,
         }))
     }
+    /// Create Dequeue Short internal message
+    pub fn dequeue_short_msg(msg_env_hash: UInt256, next_prefix: &AccountIdPrefixFull, import_block_lt: u64) -> OutMsg {
+        OutMsg::DequeueShort(OutMsgDequeueShort {
+            msg_env_hash,
+            next_workchain: next_prefix.workchain_id,
+            next_addr_pfx: next_prefix.prefix,
+            import_block_lt,
+        })
+    }
     /// Create Dequeue immediately message
     pub fn dequeue_immediately(env: &MsgEnvelope, reimport: &InMsg) -> Result<OutMsg> {
-        Ok(OutMsg::DequeueImmediately(OutMsgDequeueImmediately::with_params(env, reimport)?))
+        Ok(OutMsg::DequeueImmediately(OutMsgDequeueImmediately::with_cells(env.serialize()?, reimport.serialize()?)))
+    }
+    /// Create Dequeue immediately message
+    pub fn dequeue_immediately_msg(env_cell: Cell, reimport_msg_cell: Cell) -> OutMsg {
+        OutMsg::DequeueImmediately(OutMsgDequeueImmediately::with_cells(env_cell, reimport_msg_cell))
     }
 
     /// Check if is valid message
@@ -490,12 +530,12 @@ impl OutMsg {
             match self {
                 OutMsg::External(ref x) => x.message_cell().repr_hash(),
                 OutMsg::Immediately(ref x) => x.read_out_message()?.message_cell().repr_hash(),
-                OutMsg::New(ref x) => x.read_out_message()?.message_cell().repr_hash(),
-                OutMsg::Transit(ref x) => x.read_out_message()?.message_cell().repr_hash(),
-                OutMsg::Dequeue(ref x) => x.read_out_message()?.message_cell().repr_hash(),
+                OutMsg::New(ref x) => x.read_out_message()?.message_hash(),
+                OutMsg::Transit(ref x) => x.read_out_message()?.message_hash(),
+                OutMsg::Dequeue(ref x) => x.read_out_message()?.message_hash(),
                 OutMsg::DequeueShort(_) => fail!("dequeue short out msg doesn't have message hash"),
-                OutMsg::DequeueImmediately(ref x) => x.read_out_message()?.message_cell().repr_hash(),
-                OutMsg::TransitRequeued(ref x) => x.read_out_message()?.message_cell().repr_hash(),
+                OutMsg::DequeueImmediately(ref x) => x.read_out_message()?.message_hash(),
+                OutMsg::TransitRequeued(ref x) => x.read_out_message()?.message_hash(),
                 OutMsg::None => fail!("wrong message type")
             }
         )
@@ -584,7 +624,7 @@ impl OutMsg {
 
 impl Augmentation<CurrencyCollection> for OutMsg {
     fn aug(&self) -> Result<CurrencyCollection> {
-        let mut exported = CurrencyCollection::default();
+        let mut exported = CurrencyCollection::new();
         match self {
             OutMsg::New(ref x) => {
                 let env = x.read_out_message()?;
@@ -705,13 +745,15 @@ pub struct OutMsgExternal {
 }
 
 impl OutMsgExternal {
+    #[deprecated]
     pub fn with_params(msg: &Message, tr_cell: Cell) -> Result<Self> {
-        Ok(
-            OutMsgExternal {
-                msg: ChildCell::with_struct(msg)?,
-                transaction: ChildCell::with_cell(tr_cell),
-            }
-        )
+        Ok(Self::with_cells(msg.serialize()?, tr_cell))
+    }
+    pub fn with_cells(msg_cell: Cell, tr_cell: Cell) -> Self {
+        OutMsgExternal {
+            msg: ChildCell::with_cell(msg_cell),
+            transaction: ChildCell::with_cell(tr_cell),
+        }
     }
 
     pub fn read_message(&self) -> Result<Message> {
@@ -759,14 +801,17 @@ pub struct OutMsgImmediately {
 }
 
 impl OutMsgImmediately {
+    #[deprecated]
     pub fn with_params(env: &MsgEnvelope, tr_cell: Cell, reimport: &InMsg) -> Result<Self> {
-        Ok(
-            OutMsgImmediately{
-                out_msg: ChildCell::with_struct(env)?,
-                transaction: ChildCell::with_cell(tr_cell),
-                reimport: ChildCell::with_struct(reimport)?,
-            }
-        )
+        Ok(Self::with_cells(env.serialize()?, tr_cell, reimport.serialize()?))
+    }
+
+    pub fn with_cells(env_cell: Cell, tr_cell: Cell, reimport_msg_cell: Cell) -> OutMsgImmediately {
+        OutMsgImmediately{
+            out_msg: ChildCell::with_cell(env_cell),
+            transaction: ChildCell::with_cell(tr_cell),
+            reimport: ChildCell::with_cell(reimport_msg_cell),
+        }
     }
 
     pub fn read_out_message(&self) -> Result<MsgEnvelope> {
@@ -823,13 +868,16 @@ pub struct OutMsgNew {
 }
 
 impl OutMsgNew {
+    #[deprecated]
     pub fn with_params(env: &MsgEnvelope, tr_cell: Cell) -> Result<Self> {
-        Ok(
-            OutMsgNew {
-                out_msg: ChildCell::with_struct(env)?,
-                transaction: ChildCell::with_cell(tr_cell),
-            }
-        )
+        Ok(Self::with_cells(env.serialize()?, tr_cell))
+    }
+
+    pub fn with_cells(env_cell: Cell, tr_cell: Cell) -> Self {
+        OutMsgNew {
+            out_msg: ChildCell::with_cell(env_cell),
+            transaction: ChildCell::with_cell(tr_cell),
+        }
     }
 
     pub fn read_out_message(&self) -> Result<MsgEnvelope> {
@@ -876,13 +924,16 @@ pub struct OutMsgTransit {
 }
 
 impl OutMsgTransit {
+    #[deprecated]
     pub fn with_params(env: &MsgEnvelope, imported: &InMsg) -> Result<Self> {
-        Ok(
-            OutMsgTransit{
-                out_msg: ChildCell::with_struct(env)?,
-                imported: ChildCell::with_struct(imported)?,
-            }
-        )
+        Ok(Self::with_cells(env.serialize()?, imported.serialize()?))
+    }
+
+    pub fn with_cells(env_cell: Cell, imported_cell: Cell) -> Self {
+        OutMsgTransit{
+            out_msg: ChildCell::with_cell(env_cell),
+            imported: ChildCell::with_cell(imported_cell),
+        }
     }
 
     pub fn read_out_message(&self) -> Result<MsgEnvelope> {
@@ -929,13 +980,16 @@ pub struct OutMsgDequeueImmediately {
 }
 
 impl OutMsgDequeueImmediately {
-    pub fn with_params(env: &MsgEnvelope, reimport: &InMsg) -> Result<Self> {
-        Ok(
-            OutMsgDequeueImmediately{
-                out_msg: ChildCell::with_struct(env)?,
-                reimport: ChildCell::with_struct(reimport)?,
-            }
-        )
+    #[deprecated]
+    pub fn with_params(env: &MsgEnvelope, reimport_msg: &InMsg) -> Result<Self> {
+        Ok(Self::with_cells(env.serialize()?, reimport_msg.serialize()?))
+    }
+
+    pub fn with_cells(env_cell: Cell, reimport_msg_cell: Cell) -> Self {
+        OutMsgDequeueImmediately{
+            out_msg: ChildCell::with_cell(env_cell),
+            reimport: ChildCell::with_cell(reimport_msg_cell),
+        }
     }
 
     pub fn read_out_message(&self) -> Result<MsgEnvelope> {
@@ -982,16 +1036,19 @@ pub struct OutMsgDequeue {
 }
 
 impl OutMsgDequeue {
+    #[deprecated]
     pub fn with_params(env: &MsgEnvelope, lt: u64) -> Result<Self> {
         if lt & 0x8000_0000_0000_0000 != 0 {
             fail!(BlockError::InvalidArg("`import_block_lt` can't have highest bit set".to_string()))
         }
-        Ok(
-            OutMsgDequeue{
-                out_msg: ChildCell::with_struct(env)?,
-                import_block_lt: lt,
-            }
-        )
+        Ok(Self::with_cells(env.serialize()?, lt))
+    }
+
+    pub fn with_cells(env_cell: Cell, lt: u64) -> Self {
+        OutMsgDequeue {
+            out_msg: ChildCell::with_cell(env_cell),
+            import_block_lt: lt,
+        }
     }
 
     pub fn read_out_message(&self) -> Result<MsgEnvelope> {
@@ -1074,13 +1131,16 @@ pub struct OutMsgTransitRequeued {
 }
 
 impl OutMsgTransitRequeued {
+    #[deprecated]
     pub fn with_params(env: &MsgEnvelope, imported: &InMsg) -> Result<Self> {
-        Ok(
-            OutMsgTransitRequeued{
-                out_msg: ChildCell::with_struct(env)?,
-                imported: ChildCell::with_struct(imported)?,
-            }
-        )
+        Ok(Self::with_cells(env.serialize()?, imported.serialize()?))
+    }
+
+    pub fn with_cells(env_cell: Cell, imported_cell: Cell) -> Self {
+        OutMsgTransitRequeued{
+            out_msg: ChildCell::with_cell(env_cell),
+            imported: ChildCell::with_cell(imported_cell),
+        }
     }
 
     pub fn read_out_message(&self) -> Result<MsgEnvelope> {

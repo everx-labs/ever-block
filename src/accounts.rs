@@ -19,12 +19,12 @@ use crate::{
     types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
     shard::{ShardIdent, ShardStateUnsplit},
     shard_accounts::DepthBalanceInfo,
-    GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize,
+    GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize, ConfigParams,
 };
 use std::{collections::HashSet, fmt};
 use ton_types::{
     error, fail, Result,
-    UInt256, AccountId, BuilderData, Cell, IBitstring, SliceData, UsageTree,
+    UInt256, AccountId, BuilderData, Cell, IBitstring, SliceData, UsageTree, HashmapType,
 };
 
 
@@ -100,16 +100,21 @@ impl StorageUsed {
             public_cells: VarUInteger7::default(),
         }
     }
-    pub const fn bits(&self) -> u64 { self.bits.0 }
-    pub const fn cells(&self) -> u64 { self.cells.0 }
-    pub const fn public_cells(&self) -> u64 { self.public_cells.0 }
+    pub const fn bits(&self) -> u64 { self.bits.as_u64() }
+    pub const fn cells(&self) -> u64 { self.cells.as_u64() }
+    pub const fn public_cells(&self) -> u64 { self.public_cells.as_u64() }
 
-    pub const fn with_values(cells: u64, bits: u64, public_cells: u64) -> Self {
-        Self {
-            cells: VarUInteger7(cells),
-            bits: VarUInteger7(bits),
-            public_cells: VarUInteger7(public_cells),
-        }
+    #[deprecated]
+    pub fn with_values(cells: u64, bits: u64, public_cells: u64) -> Self {
+        Self::with_values_checked(cells, bits, public_cells).unwrap()
+    }
+
+    pub fn with_values_checked(cells: u64, bits: u64, public_cells: u64) -> Result<Self> {
+        Ok(Self {
+            cells: VarUInteger7::new(cells)?,
+            bits: VarUInteger7::new(bits)?,
+            public_cells: VarUInteger7::new(public_cells)?,
+        })
     }
 
     pub fn calculate_for_struct<T: Serializable>(value: &T) -> Result<StorageUsed> {
@@ -121,8 +126,8 @@ impl StorageUsed {
 
     fn calculate_for_cell(&mut self, hashes: &mut HashSet<UInt256>, cell: &Cell) {
         if hashes.insert(cell.repr_hash()) {
-            self.cells.0 += 1;
-            self.bits.0 += cell.bit_length() as u64;
+            self.cells.add_checked(1);
+            self.bits.add_checked(cell.bit_length() as u64);
             for i in 0..cell.references_count() {
                 self.calculate_for_cell(hashes, &cell.reference(i).unwrap())
             }
@@ -181,14 +186,19 @@ impl StorageUsedShort {
             bits: VarUInteger7::default(),
         }
     }
-    pub const fn bits(&self) -> u64 { self.bits.0 }
-    pub const fn cells(&self) -> u64 { self.cells.0 }
+    pub const fn bits(&self) -> u64 { self.bits.as_u64() }
+    pub const fn cells(&self) -> u64 { self.cells.as_u64() }
 
-    pub const fn with_values(cells: u64, bits: u64) -> Self {
-        Self {
-            cells: VarUInteger7(cells),
-            bits: VarUInteger7(bits),
-        }
+    #[deprecated]
+    pub fn with_values(cells: u64, bits: u64) -> Self {
+        Self::with_values_checked(cells, bits).unwrap()
+    }
+
+    pub fn with_values_checked(cells: u64, bits: u64) -> Result<Self> {
+        Ok(Self {
+            cells: VarUInteger7::new(cells)?,
+            bits: VarUInteger7::new(bits)?,
+        })
     }
 
     pub fn calculate_for_struct<T: Serializable>(value: &T) -> Result<StorageUsedShort> {
@@ -200,8 +210,8 @@ impl StorageUsedShort {
 
     fn calculate_for_cell(&mut self, hashes: &mut HashSet<UInt256>, cell: &Cell) {
         if hashes.insert(cell.repr_hash()) {
-            self.cells.0 += 1;
-            self.bits.0 += cell.bit_length() as u64;
+            self.cells.add_checked(1);
+            self.bits.add_checked(cell.bit_length() as u64);
             for i in 0..cell.references_count() {
                 self.calculate_for_cell(hashes, &cell.reference(i).unwrap())
             }
@@ -562,9 +572,9 @@ impl AccountStuff {
     }
     fn update_storage_stat_fast(&mut self) -> Result<()> {
         let cell = self.storage.serialize()?;
-        self.storage_stat.used.bits.0 = cell.tree_bits_count();
-        self.storage_stat.used.cells.0 = cell.tree_cell_count();
-        self.storage_stat.used.public_cells.0 = 0;
+        self.storage_stat.used.bits = VarUInteger7::new(cell.tree_bits_count())?;
+        self.storage_stat.used.cells = VarUInteger7::new(cell.tree_cell_count())?;
+        self.storage_stat.used.public_cells = 0u32.into();
         Ok(())
     }
 }
@@ -771,7 +781,7 @@ impl Account {
         };
         let bits = storage.write_to_new_cell().unwrap().length_in_bits();
         let storage_stat = StorageInfo {
-            used: StorageUsed::with_values(1, bits as u64, 0),
+            used: StorageUsed::with_values_checked(1, bits as u64, 0).unwrap(),
             last_paid,
             due_payment: None,
         };
@@ -1041,7 +1051,7 @@ impl Account {
         }
     }
 
-    /// calculate storage fee and sub funds, freeze if not enought
+    /// calculate storage fee and sub funds, freeze if not enough
     pub fn set_last_paid(&mut self, last_paid: u32) {
         if let Some(stuff) = self.stuff_mut() {
             stuff.storage_stat.last_paid = last_paid;
@@ -1182,7 +1192,35 @@ impl Account {
         };
         Ok(Account::with_stuff(stuff))
     }
-    
+}
+
+// functions for testing purposes
+impl Account {
+    pub fn set_addr(&mut self, addr: MsgAddressInt) {
+        if let Some(s) = self.stuff_mut() {
+            s.addr = addr;
+        }
+    }
+
+    pub fn set_init_code_hash(&mut self, init_code_hash: UInt256) {
+        if let Some(s) = self.stuff_mut() {
+            s.storage.init_code_hash = Some(init_code_hash);
+        }
+    }
+
+    pub fn update_config_smc(&mut self, config: &ConfigParams) -> Result<()> {
+        let data = self.get_data()
+            .ok_or_else(|| error!("config SMC doesn't contain data"))?;
+        let mut data = SliceData::from(data);
+        data.checked_drain_reference()
+            .map_err(|_| error!("config SMC data doesn't contain reference with old config"))?;
+        let mut builder = BuilderData::from_slice(&data);
+        let cell = config.config_params.data()
+            .ok_or_else(|| error!("configs musn't be empty"))?;
+        builder.prepend_reference_cell(cell.clone());
+        self.set_data(builder.into_cell()?);
+        Ok(())
+    }
 }
 
 impl Augmentation<DepthBalanceInfo> for Account {
@@ -1212,7 +1250,7 @@ impl Serializable for Account {
                 return stuff.write_to(builder)
             }
         }
-        Self::write_original_format(&self, builder)
+        Self::write_original_format(self, builder)
     }
 }
 
@@ -1360,12 +1398,12 @@ pub fn generate_test_account_by_init_code_hash(init_code_hash: bool) -> Account 
                                       0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F]);
 
     //let st_used = StorageUsed::with_values(1,2,3,4,5);
-    let g = Some(Grams(111u32.into()));
+    let g = Some(111u32.into());
     let st_info = StorageInfo::with_values(123456789, g);
     
     let mut stinit = StateInit::default();
     
-    stinit.set_split_depth(Number5(23));
+    stinit.set_split_depth(Number5::new(23).unwrap());
     stinit.set_special(TickTock::with_values(false, true));
     
     let mut code = SliceData::new(vec![0b00111111, 0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11110100]);
@@ -1385,7 +1423,7 @@ pub fn generate_test_account_by_init_code_hash(init_code_hash: bool) -> Account 
     stinit.set_library_code(library.into_cell(), true).unwrap();
 
     let mut balance = CurrencyCollection::default();
-    balance.grams = Grams(100000000000u64.into());
+    balance.grams = 100000000000u64.into();
     balance.set_other(1, 100).unwrap();
     balance.set_other(2, 200).unwrap();
     balance.set_other(3, 300).unwrap();
