@@ -896,12 +896,12 @@ impl CommonMsgInfo {
     pub fn fee(&self) -> Result<Option<Grams>> {
         match self  {
             CommonMsgInfo::IntMsgInfo(header) => {
-                let mut result = header.ihr_fee.clone();
+                let mut result = header.ihr_fee;
                 result.add(&header.fwd_fee)?;
                 Ok(Some(result))
             },
             CommonMsgInfo::ExtInMsgInfo(header) => {
-                Ok(Some(header.import_fee.clone()))
+                Ok(Some(header.import_fee))
             }
             _ => Ok(None),
         }

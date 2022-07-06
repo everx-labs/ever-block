@@ -199,7 +199,7 @@ ed25519_pubkey#8e81278a pubkey:bits256 = SigPubKey;
 /// SigPubKey
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct SigPubKey(ed25519_dalek::PublicKey);
+pub struct SigPubKey(UInt256);
 
 const SIG_PUB_KEY_TAG: u32 = 0x8e81278a;
 
@@ -209,26 +209,25 @@ impl SigPubKey {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        Ok(SigPubKey(ed25519_dalek::PublicKey::from_bytes(bytes)?))
+        Ok(SigPubKey(UInt256::from_le_bytes(bytes)))
     }
 
     // #[deprecated]
     // pub fn from_str(s: &str) -> Result<Self> { FromStr::from_str(s) }
 
-    pub fn key(&self) -> &ed25519_dalek::PublicKey {
-        &self.0
-    }
-
     pub fn key_bytes(&self) -> &[u8; ed25519_dalek::PUBLIC_KEY_LENGTH] {
-        self.0.as_bytes()
+        self.0.as_slice()
     }
 
     pub fn verify_signature(&self, data: &[u8], signature: &CryptoSignature) -> bool {
-        self.0.verify(data, signature.signature()).is_ok()
+        match ed25519_dalek::PublicKey::from_bytes(self.0.as_slice()) {
+            Ok(public_key) => public_key.verify(data, signature.signature()).is_ok(),
+            Err(_) => false
+        }
     }
 
     pub fn as_slice(&self) -> &[u8; 32] {
-        self.0.as_bytes()
+        self.0.as_slice()
     }
 }
 
@@ -238,25 +237,11 @@ impl PartialEq<UInt256> for SigPubKey {
     }
 }
 
-impl AsRef<[u8]> for SigPubKey {
-    fn as_ref(&self) -> &[u8] {
-        self.as_slice()
-    }
-}
-
-impl AsRef<[u8; 32]> for SigPubKey {
-    fn as_ref(&self) -> &[u8; 32] {
-        self.as_slice()
-    }
-}
-
 impl FromStr for SigPubKey {
     type Err = failure::Error;
     fn from_str(s: &str) -> Result<Self> {
-        let key_buf = hex::decode(s).map_err(
-            |err| BlockError::InvalidData(format!("error parsing hex string {}: {}", s, err))
-        )?;
-        Self::from_bytes(&key_buf)
+        let pub_key = UInt256::from_str(s)?;
+        Ok(Self(pub_key))
     }
 }
 
@@ -269,8 +254,8 @@ impl Serializable for SigPubKey {
 }
 
 impl Deserializable for SigPubKey {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let tag = cell.get_next_u32()?;
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let tag = slice.get_next_u32()?;
         if tag != SIG_PUB_KEY_TAG {
             fail!(
                 BlockError::InvalidConstructorTag {
@@ -279,9 +264,8 @@ impl Deserializable for SigPubKey {
                 } 
             )
         }
-        let key_buf = cell.get_next_bits(ed25519_dalek::PUBLIC_KEY_LENGTH * 8)?;
-        self.0 = ed25519_dalek::PublicKey::from_bytes(&key_buf)?;
-        Ok(())
+        let public_key = slice.get_next_hash()?;
+        Ok(Self(public_key))
     }
 }
 

@@ -588,7 +588,7 @@ impl TrActionPhase {
         }
     }
     pub fn total_fwd_fees(&self) -> Grams {
-        self.total_fwd_fees.clone().unwrap_or_default()
+        self.total_fwd_fees.unwrap_or_default()
     }
     pub fn add_action_fees(&mut self, fees: Grams) {
         if !fees.is_zero() {
@@ -596,7 +596,7 @@ impl TrActionPhase {
         }
     }
     pub fn total_action_fees(&self) -> Grams {
-        self.total_action_fees.clone().unwrap_or_default()
+        self.total_action_fees.unwrap_or_default()
     }
 }
 

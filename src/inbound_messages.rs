@@ -395,14 +395,14 @@ impl Augmentation<ImportFees> for InMsg {
             }
             InMsg::IHR(_) =>  {
                 //println!("InMsg::IHR");
-                fees.fees_collected = header.ihr_fee.clone();
+                fees.fees_collected = header.ihr_fee;
 
                 fees.value_imported = header.value.clone();
                 fees.value_imported.grams.add(&header.ihr_fee)?;
             }
             InMsg::Immediatelly(_) => {
                 //println!("InMsg::Immediatelly");
-                fees.fees_collected = header.fwd_fee.clone();
+                fees.fees_collected = header.fwd_fee;
             }
             InMsg::Final(ref x) => {
                 //println!("InMsg::Final");
@@ -410,7 +410,7 @@ impl Augmentation<ImportFees> for InMsg {
                 if env.fwd_fee_remaining() != x.fwd_fee() {
                     fail!("fwd_fee_remaining not equal to fwd_fee")
                 }
-                fees.fees_collected = env.fwd_fee_remaining().clone();
+                fees.fees_collected = *env.fwd_fee_remaining();
 
                 fees.value_imported = header.value.clone();
                 fees.value_imported.grams.add(env.fwd_fee_remaining())?;
@@ -423,7 +423,7 @@ impl Augmentation<ImportFees> for InMsg {
                     fail!("fwd_fee_remaining less than transit_fee")
                 }
 
-                fees.fees_collected = x.transit_fee().clone();
+                fees.fees_collected = *x.transit_fee();
 
                 fees.value_imported = header.value.clone();
                 fees.value_imported.grams.add(&header.ihr_fee)?;
@@ -431,15 +431,15 @@ impl Augmentation<ImportFees> for InMsg {
             }
             InMsg::DiscardedFinal(_) => {
                 //println!("InMsg::DiscardedFinal");
-                fees.fees_collected = header.fwd_fee.clone();
+                fees.fees_collected = header.fwd_fee;
 
-                fees.value_imported.grams = header.fwd_fee.clone();
+                fees.value_imported.grams = header.fwd_fee;
             }
             InMsg::DiscardedTransit(_) => {
                 //println!("InMsg::DiscardedTransit");
-                fees.fees_collected = header.fwd_fee.clone();
+                fees.fees_collected = header.fwd_fee;
 
-                fees.value_imported.grams = header.fwd_fee.clone();
+                fees.value_imported.grams = header.fwd_fee;
             }
             InMsg::None => fail!("wrong InMsg type")
         }

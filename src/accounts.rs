@@ -399,9 +399,7 @@ impl AccountStorage {
     /// Construct storage for uninit account
     pub fn unint(balance: CurrencyCollection) -> Self {
         Self {
-            last_trans_lt: 0,
             balance,
-            state: AccountState::AccountUninit,
             ..Self::default()
         }
     }

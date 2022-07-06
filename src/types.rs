@@ -137,8 +137,8 @@ macro_rules! define_VarIntegerN {
             type Err = failure::Error;
 
             fn from_str(string: &str) -> Result<Self> {
-                let result = if let Some(strip) = string.strip_prefix("0x") {
-                    BigInt::parse_bytes(strip.as_bytes(), 16)
+                let result = if let Some(stripped) = string.strip_prefix("0x") {
+                    BigInt::parse_bytes(stripped.as_bytes(), 16)
                 } else {
                     BigInt::parse_bytes(string.as_bytes(), 10)
                 };

@@ -389,6 +389,18 @@ impl MsgEnvelope {
     }
 
     ///
+    /// Create Envelope with message cell and remainig_fee
+    ///
+    pub fn with_message_cell_and_fee(msg_cell: Cell, fwd_fee_remaining: Grams) -> Self {
+        Self::with_routing(
+            msg_cell,
+            fwd_fee_remaining,
+            IntermediateAddress::full_dest(),
+            IntermediateAddress::full_dest()
+        )
+    }
+
+    ///
     /// Create Envelope with message and remainig_fee and routing settings
     ///
     pub fn with_routing(

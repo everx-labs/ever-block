@@ -489,7 +489,7 @@ impl McBlockExtra {
         Ok(result)
     }
     pub fn write_copyleft_msgs(&mut self, value: &[InMsg]) -> Result<()> {
-        for (i, rec) in value.into_iter().enumerate() {
+        for (i, rec) in value.iter().enumerate() {
             self.copyleft_msgs.setref(&U15(i as i16), &rec.serialize()?)?;
         }
         Ok(())
