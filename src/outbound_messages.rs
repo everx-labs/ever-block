@@ -191,7 +191,7 @@ impl OutMsgQueue {
 /// 
 
 #[derive(Clone,Eq,Hash,Debug,PartialEq,Default)]
-pub struct OutMsgQueueKey{
+pub struct OutMsgQueueKey {
     pub workchain_id: i32,
     pub prefix: u64,
     pub hash: UInt256,

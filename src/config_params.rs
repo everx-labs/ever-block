@@ -71,7 +71,7 @@ impl ConfigParams {
 
     /// get config by index
     pub fn config(&self, index: u32) -> Result<Option<ConfigParamEnum>> {
-        let key = index.serialize().unwrap();
+        let key = index.serialize()?;
         if let Some(slice) = self.config_params.get(key.into())? {
             if let Some(cell) = slice.reference_opt(0) {
                 return Ok(Some(ConfigParamEnum::construct_from_slice_and_number(&mut cell.into(), index)?));
@@ -82,7 +82,7 @@ impl ConfigParams {
 
     /// get config by index
     pub fn config_present(&self, index: u32) -> Result<bool> {
-        let key = index.serialize().unwrap();
+        let key = index.serialize()?;
         if let Some(slice) = self.config_params.get(key.into())? {
             if slice.remaining_references() != 0 {
                 return Ok(true)
