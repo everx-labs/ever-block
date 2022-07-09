@@ -1,19 +1,18 @@
 [package]
-edition = '2018'
+edition = '2021'
 build = 'build.rs'
 name = 'ton_block'
-version = '1.7.53'
+version = '1.8.0'
 
 [dependencies]
 base64 = '0.13'
 crc = '3.0'
-ed25519 = '1.0.1'
+ed25519 = '1.0'
 ed25519-dalek = '1.0'
-failure = '0.1.7'
-hex = '^0.4.0'
-log = '0.4.8'
+failure = '0.1'
+hex = '0.4'
+log = '0.4'
 num = '0.4'
 num-traits = '0.2'
-rand = '0.7.2'
-sha2 = '0.10.0'
+sha2 = '0.10'
 ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.11.3' }

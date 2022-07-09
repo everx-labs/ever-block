@@ -1704,9 +1704,18 @@ impl Transactions {
         let total_fees = tr.total_fees();
         self.setref(&lt, &cell, total_fees)
     }
+    pub fn total_fees(&self) -> &CurrencyCollection {
+        self.root_extra()
+    }
 }
 
 impl Augmentation<CurrencyCollection> for Transaction {
+    fn aug(&self) -> Result<CurrencyCollection> {
+        Ok(self.total_fees.clone())
+    }
+}
+
+impl Augmentation<CurrencyCollection> for InRefValue<Transaction> {
     fn aug(&self) -> Result<CurrencyCollection> {
         Ok(self.total_fees.clone())
     }
@@ -1891,6 +1900,12 @@ impl Deserializable for AccountBlock {
 // _ (HashmapAugE 256 AccountBlock CurrencyCollection) = ShardAccountBlocks;
 define_HashmapAugE!(ShardAccountBlocks, 256, UInt256, AccountBlock, CurrencyCollection);
 
+impl Augmentation<CurrencyCollection> for AccountBlock {
+    fn aug(&self) -> Result<CurrencyCollection> {
+        Ok(self.transactions.total_fees().clone())
+    }
+}
+
 /// external interface for ShardAccountBlock
 impl ShardAccountBlocks {
 
@@ -1925,12 +1940,11 @@ impl ShardAccountBlocks {
                 }
                 account_state_update.new_hash = state_update.new_hash;
                 account_block.write_state_update(&account_state_update)?;
+                account_block.add_serialized_transaction(transaction, transaction_cell)?;
             }
             None => account_block = AccountBlock::with_transaction(account_id.clone(), transaction)?
         };
-        // append transaction to AccountBlock
-        account_block.add_serialized_transaction(transaction, transaction_cell)?;
-        self.set_builder_serialized(account_id.clone(), &account_block.write_to_new_cell()?, transaction.total_fees())?;
+        self.set_builder_serialized(account_id.clone(), &account_block.write_to_new_cell()?, &account_block.aug()?)?;
         Ok(())
     }
 

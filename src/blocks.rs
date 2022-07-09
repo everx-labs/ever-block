@@ -59,12 +59,6 @@ pub struct BlockIdExt {
 }
 
 impl BlockIdExt {
-    /// New instance of BlockIdExt structure
-    #[deprecated]
-    pub const fn new(shard_id: ShardIdent, seq_no: u32) -> Self {
-        Self::with_params(shard_id, seq_no, UInt256::default(), UInt256::default())
-    }
-
     // New instance of BlockIdExt structure
     pub const fn with_params(
         shard_id: ShardIdent,
