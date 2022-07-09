@@ -1138,13 +1138,6 @@ impl Message {
         self.init = Some(init);
     }
 
-    #[deprecated]
-    pub fn state_init_mut(&mut self) -> &mut Option<StateInit> {
-        self.body_to_ref = None;
-        self.init_to_ref = None;
-        &mut self.init
-    }
-
     pub fn has_body(&self) -> bool {
         match &self.body {
             Some(body) => !body.is_empty(),
@@ -1160,13 +1153,6 @@ impl Message {
         self.body_to_ref = None;
         self.init_to_ref = None;
         self.body = Some(body);
-    }
-
-    #[deprecated]
-    pub fn body_mut(&mut self) -> &mut Option<SliceData> {
-        self.body_to_ref = None;
-        self.init_to_ref = None;
-        &mut self.body
     }
 
     ///

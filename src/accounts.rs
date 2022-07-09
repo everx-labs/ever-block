@@ -104,11 +104,6 @@ impl StorageUsed {
     pub const fn cells(&self) -> u64 { self.cells.as_u64() }
     pub const fn public_cells(&self) -> u64 { self.public_cells.as_u64() }
 
-    #[deprecated]
-    pub fn with_values(cells: u64, bits: u64, public_cells: u64) -> Self {
-        Self::with_values_checked(cells, bits, public_cells).unwrap()
-    }
-
     pub fn with_values_checked(cells: u64, bits: u64, public_cells: u64) -> Result<Self> {
         Ok(Self {
             cells: VarUInteger7::new(cells)?,
@@ -188,11 +183,6 @@ impl StorageUsedShort {
     }
     pub const fn bits(&self) -> u64 { self.bits.as_u64() }
     pub const fn cells(&self) -> u64 { self.cells.as_u64() }
-
-    #[deprecated]
-    pub fn with_values(cells: u64, bits: u64) -> Self {
-        Self::with_values_checked(cells, bits).unwrap()
-    }
 
     pub fn with_values_checked(cells: u64, bits: u64) -> Result<Self> {
         Ok(Self {
@@ -400,17 +390,6 @@ impl AccountStorage {
     pub fn unint(balance: CurrencyCollection) -> Self {
         Self {
             balance,
-            ..Self::default()
-        }
-    }
-
-    /// Construct storage for active account
-    #[deprecated]
-    pub fn active(last_trans_lt: u64, balance: CurrencyCollection, state_init: StateInit) -> Self {
-        Self {
-            last_trans_lt,
-            balance,
-            state: AccountState::AccountActive { state_init },
             ..Self::default()
         }
     }
@@ -625,16 +604,6 @@ impl Account {
         }
     }
 
-    #[deprecated]
-    pub fn active(
-        addr: MsgAddressInt,
-        balance: CurrencyCollection,
-        last_paid: u32,
-        state_init: StateInit,
-    ) -> Result<Self> {
-        Self::active_by_init_code_hash(addr, balance, last_paid, state_init, false)
-    }
-
     pub fn active_by_init_code_hash(
         addr: MsgAddressInt,
         balance: CurrencyCollection,
@@ -671,14 +640,6 @@ impl Account {
             storage_stat: StorageInfo::default(),
             storage: AccountStorage::default(),
         })
-    }
-
-    ///
-    /// Create initialized account from "constructor internal message"
-    ///
-    #[deprecated]
-    pub fn from_message(msg: &Message) -> Option<Self> {
-        Self::from_message_by_init_code_hash(msg, false)
     }
 
     ///
@@ -971,12 +932,6 @@ impl Account {
     }
 
     /// Try to activate account with new StateInit
-    #[deprecated]
-    pub fn try_activate(&mut self, state_init: &StateInit) -> Result<()> {
-        self.try_activate_by_init_code_hash(state_init, false)
-    }
-    
-    /// Try to activate account with new StateInit
     pub fn try_activate_by_init_code_hash(
         &mut self, 
         state_init: &StateInit, 
@@ -1075,6 +1030,14 @@ impl Account {
 
     /// deprecated: getting balance of the account
     pub fn get_balance(&self) -> Option<&CurrencyCollection> { self.balance() }
+
+    /// getting balance of the account or empty balance
+    pub fn balance_checked(&self) -> CurrencyCollection {
+        match self.stuff() {
+            Some(s) => s.storage.balance.clone(),
+            None => CurrencyCollection::default()
+        }
+    }
 
     /// setting balance of the account
     pub fn set_balance(&mut self, balance: CurrencyCollection) {
@@ -1382,18 +1345,14 @@ impl Deserializable for ShardAccount {
 }
 
 #[allow(dead_code)]
-#[deprecated]
-pub fn generate_test_account() -> Account {
-    generate_test_account_by_init_code_hash(false)
-}
-
-#[allow(dead_code)]
 pub fn generate_test_account_by_init_code_hash(init_code_hash: bool) -> Account {
     let mut anc = AnycastInfo::default();
     anc.set_rewrite_pfx(SliceData::new(vec![0x98,0x32,0x17,0x80])).unwrap();
 
-    let acc_id = AccountId::from([0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,
-                                      0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F]);
+    let acc_id = AccountId::from(
+        [0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F,
+         0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1C,0x1D,0x1E,0x1F]
+    );
 
     //let st_used = StorageUsed::with_values(1,2,3,4,5);
     let g = Some(111u32.into());

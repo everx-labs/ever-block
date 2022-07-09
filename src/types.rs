@@ -556,20 +556,6 @@ impl From<&BigUint> for Grams {
     }
 }
 
-// TBD in future
-impl Grams {
-    #[deprecated]
-    pub const fn shr(mut self, shr: u8) -> Self {
-        self.0 >>= shr as usize;
-        self
-    }
-
-    #[deprecated]
-    pub fn value(&self) -> BigInt {
-        BigInt::from(self.0)
-    }
-}
-
 impl FromStr for Grams {
     type Err = failure::Error;
 
@@ -1036,6 +1022,13 @@ impl<X: Deserializable + Serializable> InRefValue<X> {
 
 impl<X: Deserializable + Serializable> AsRef<X> for InRefValue<X> {
     fn as_ref(&self) -> &X {
+        &self.0
+    }
+}
+
+impl<X: Deserializable + Serializable> Deref for InRefValue<X> {
+    type Target = X;
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }

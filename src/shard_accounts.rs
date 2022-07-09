@@ -16,7 +16,7 @@ use crate::{
     accounts::{Account, ShardAccount},
     hashmapaug::{Augmentable, HashmapAugType},
     types::{CurrencyCollection, Number5},
-    Serializable, Deserializable,
+    Serializable, Deserializable, Augmentation,
 };
 use std::fmt;
 use ton_types::{
@@ -65,6 +65,18 @@ impl ShardAccounts {
     pub fn split_for(&mut self, split_key: &SliceData) -> Result<&DepthBalanceInfo> {
         self.into_subtree_with_prefix(split_key, &mut 0)?;
         self.update_root_extra()
+    }
+}
+
+impl Augmentation<DepthBalanceInfo> for ShardAccount {
+    fn aug(&self) -> Result<DepthBalanceInfo> {
+        let account = self.read_account()?;
+        let balance = account.balance().cloned().unwrap_or_default();
+        let split_depth = account.split_depth().unwrap_or_default();
+        Ok(DepthBalanceInfo {
+            split_depth,
+            balance,
+        })
     }
 }
 

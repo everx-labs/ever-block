@@ -120,7 +120,7 @@ pub enum InMsg {
     IHR(InMsgIHR),
     /// Internal messages with destinations in this block
     /// msg_import_imm$011 in_msg:^MsgEnvelope transaction:^Transaction fwd_fee:Grams = InMsg;
-    Immediatelly(InMsgFinal),
+    Immediate(InMsgFinal),
     /// Immediately routed internal messages
     /// msg_import_fin$100 in_msg:^MsgEnvelope transaction:^Transaction fwd_fee:Grams = InMsg;
     Final(InMsgFinal),
@@ -144,7 +144,7 @@ impl fmt::Display for InMsg {
                 msg_hash, tr_hash),
             InMsg::IHR(_x) => write!(f, "InMsg msg_import_ihr$010 msg: {:x} tr: {:x}",
                 msg_hash, tr_hash),
-            InMsg::Immediatelly(x) => write!(f, "InMsg msg_import_imm$011 msg: {:x} tr: {:x} fee: {}",
+            InMsg::Immediate(x) => write!(f, "InMsg msg_import_imm$011 msg: {:x} tr: {:x} fee: {}",
                 msg_hash, tr_hash, x.fwd_fee),
             InMsg::Transit(x) => write!(f, "InMsg msg_import_tr$101 in_msg: {:x} out_msg: {:x} fee: {}",
                 msg_hash, x.out_msg.read_struct().unwrap_or_default().message_hash(), x.transit_fee),
@@ -167,59 +167,33 @@ impl Default for InMsg {
 
 
 impl InMsg {
-    #[deprecated]
-    pub fn external(msg: &Message, tr: &Transaction) -> Result<InMsg> {
-        Ok(InMsg::External(InMsgExternal::with_cells(msg.serialize()?, tr.serialize()?)))
-    }
     /// Create external
-    pub fn external_msg(msg_cell: Cell, tr_cell: Cell) -> InMsg {
+    pub fn external(msg_cell: Cell, tr_cell: Cell) -> InMsg {
         InMsg::External(InMsgExternal::with_cells(msg_cell, tr_cell))
     }
     /// Create IHR
-    #[deprecated]
-    pub fn ihr(msg_cell: Cell, tr_cell: Cell, ihr_fee: Grams, proof: Cell) -> Result<InMsg> {
-        Ok(InMsg::IHR(InMsgIHR::with_cells(msg_cell, tr_cell, ihr_fee, proof)))
+    pub fn ihr(msg_cell: Cell, tr_cell: Cell, ihr_fee: Grams, proof: Cell) -> InMsg {
+        InMsg::IHR(InMsgIHR::with_cells(msg_cell, tr_cell, ihr_fee, proof))
     }
-    /// Create Immediatelly
-    #[deprecated]
-    pub fn immediatelly(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<InMsg> {
-        Ok(InMsg::Immediatelly(InMsgFinal::with_cells(env.serialize()?, tr.serialize()?, fwd_fee)))
-    }
-    /// Create Immediatelly
-    pub fn immediatelly_msg(env_cell: Cell, tr_cell: Cell, fwd_fee: Grams) -> InMsg {
-        InMsg::Immediatelly(InMsgFinal::with_cells(env_cell, tr_cell, fwd_fee))
+    /// Create Immediate
+    pub fn immediate(env_cell: Cell, tr_cell: Cell, fwd_fee: Grams) -> InMsg {
+        InMsg::Immediate(InMsgFinal::with_cells(env_cell, tr_cell, fwd_fee))
     }
     /// Create Final
-    #[deprecated]
-    pub fn finally(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<InMsg> {
-        Ok(InMsg::Final(InMsgFinal::with_cells(env.serialize()?, tr.serialize()?, fwd_fee)))
-    }
-    /// Create Final
-    pub fn finally_msg(env_cell: Cell, tr_cell: Cell, fwd_fee: Grams) -> InMsg {
+    pub fn final_msg(env_cell: Cell, tr_cell: Cell, fwd_fee: Grams) -> InMsg {
         InMsg::Final(InMsgFinal::with_cells(env_cell, tr_cell, fwd_fee))
     }
     /// Create Transit
-    #[deprecated]
-    pub fn transit(in_msg: &MsgEnvelope, out_msg: &MsgEnvelope, fwd_fee: Grams) -> Result<InMsg> {
-        Ok(InMsg::Transit(InMsgTransit::with_cells(in_msg.serialize()?, out_msg.serialize()?, fwd_fee)))
-    }
-    /// Create Transit
-    pub fn transit_msg(in_msg_cell: Cell, out_msg_cell: Cell, fwd_fee: Grams) -> InMsg {
+    pub fn transit(in_msg_cell: Cell, out_msg_cell: Cell, fwd_fee: Grams) -> InMsg {
         InMsg::Transit(InMsgTransit::with_cells(in_msg_cell, out_msg_cell, fwd_fee))
     }
     /// Create DiscardedFinal
-    #[deprecated]
-    pub fn discard_final(in_msg: &MsgEnvelope, tr_id: u64, fwd_fee: Grams) -> Result<InMsg> {
-        Ok(InMsg::DiscardedFinal(InMsgDiscardedFinal::with_cells(in_msg.serialize()?, tr_id, fwd_fee)))
-    }
-    /// Create DiscardedFinal
-    pub fn discard_final_msg(env_cell: Cell, tr_id: u64, fwd_fee: Grams) -> InMsg {
+    pub fn discarded_final(env_cell: Cell, tr_id: u64, fwd_fee: Grams) -> InMsg {
         InMsg::DiscardedFinal(InMsgDiscardedFinal::with_cells(env_cell, tr_id, fwd_fee))
     }
     /// Create DiscardedTransit
-    #[deprecated]
-    pub fn discard_transit(msg: &MsgEnvelope, tr_id: u64, fwd_fee: Grams, proof: Cell) -> Result<InMsg> {
-        Ok(InMsg::DiscardedTransit(InMsgDiscardedTransit::with_cells(msg.serialize()?, tr_id, fwd_fee, proof)))
+    pub fn discarded_transit(env_cell: Cell, tr_id: u64, fwd_fee: Grams, proof: Cell) -> InMsg {
+        InMsg::DiscardedTransit(InMsgDiscardedTransit::with_cells(env_cell, tr_id, fwd_fee, proof))
     }
 
     /// Check if is valid message
@@ -231,7 +205,7 @@ impl InMsg {
         match self {
             InMsg::External(_)             => MSG_IMPORT_EXT,
             InMsg::IHR(_)                  => MSG_IMPORT_IHR,
-            InMsg::Immediatelly(_)         => MSG_IMPORT_IMM,
+            InMsg::Immediate(_)            => MSG_IMPORT_IMM,
             InMsg::Final(_)                => MSG_IMPORT_FIN,
             InMsg::Transit(_)              => MSG_IMPORT_TR,
             InMsg::DiscardedFinal(_)       => MSG_DISCARD_FIN,
@@ -242,7 +216,7 @@ impl InMsg {
 
     ///
     /// Get transaction from inbound message
-    /// Transaction exist only in External, IHR, Immediatlly and Final inbound messages.
+    /// Transaction exist only in External, IHR, Immediate and Final inbound messages.
     /// For other messages function returned None
     ///
     pub fn read_transaction(&self) -> Result<Option<Transaction>> {
@@ -250,7 +224,7 @@ impl InMsg {
             match self {
                 InMsg::External(ref x) => Some(x.read_transaction()?),
                 InMsg::IHR(ref x) => Some(x.read_transaction()?),
-                InMsg::Immediatelly(ref x) => Some(x.read_transaction()?),
+                InMsg::Immediate(ref x) => Some(x.read_transaction()?),
                 InMsg::Final(ref x) => Some(x.read_transaction()?),
                 InMsg::Transit(ref _x) => None,
                 InMsg::DiscardedFinal(ref _x) => None,
@@ -262,14 +236,14 @@ impl InMsg {
 
     ///
     /// Get transaction cell from inbound message
-    /// Transaction exist only in External, IHR, Immediatlly and Final inbound messages.
+    /// Transaction exist only in External, IHR, Immediate and Final inbound messages.
     /// For other messages function returned None
     ///
     pub fn transaction_cell(&self) -> Option<Cell> {
         match self {
             InMsg::External(ref x) => Some(x.transaction_cell()),
             InMsg::IHR(ref x) => Some(x.transaction_cell()),
-            InMsg::Immediatelly(ref x) => Some(x.transaction_cell()),
+            InMsg::Immediate(ref x) => Some(x.transaction_cell()),
             InMsg::Final(ref x) => Some(x.transaction_cell()),
             InMsg::Transit(ref _x) => None,
             InMsg::DiscardedFinal(ref _x) => None,
@@ -285,7 +259,7 @@ impl InMsg {
         match self {
             InMsg::External(ref x) => x.read_message(),
             InMsg::IHR(ref x) => x.read_message(),
-            InMsg::Immediatelly(ref x) => x.read_envelope_message()?.read_message(),
+            InMsg::Immediate(ref x) => x.read_envelope_message()?.read_message(),
             InMsg::Final(ref x) => x.read_envelope_message()?.read_message(),
             InMsg::Transit(ref x) => x.read_in_message()?.read_message(),
             InMsg::DiscardedFinal(ref x) => x.read_envelope_message()?.read_message(),
@@ -302,7 +276,7 @@ impl InMsg {
             match self {
                 InMsg::External(ref x) => x.message_cell(),
                 InMsg::IHR(ref x) => x.message_cell(),
-                InMsg::Immediatelly(ref x) => x.read_envelope_message()?.message_cell(),
+                InMsg::Immediate(ref x) => x.read_envelope_message()?.message_cell(),
                 InMsg::Final(ref x) => x.read_envelope_message()?.message_cell(),
                 InMsg::Transit(ref x) => x.read_in_message()?.message_cell(),
                 InMsg::DiscardedFinal(ref x) => x.read_envelope_message()?.message_cell(),
@@ -319,7 +293,7 @@ impl InMsg {
         match self {
             InMsg::External(_) => None,
             InMsg::IHR(_) => None,
-            InMsg::Immediatelly(ref x) => Some(x.envelope_message_cell()),
+            InMsg::Immediate(ref x) => Some(x.envelope_message_cell()),
             InMsg::Final(ref x) => Some(x.envelope_message_cell()),
             InMsg::Transit(ref x) => Some(x.in_msg.cell()),
             InMsg::DiscardedFinal(ref x) => Some(x.envelope_message_cell()),
@@ -336,7 +310,7 @@ impl InMsg {
             match self {
                 InMsg::External(_) => None,
                 InMsg::IHR(_) => None,
-                InMsg::Immediatelly(ref x) => Some(x.read_envelope_message()?),
+                InMsg::Immediate(ref x) => Some(x.read_envelope_message()?),
                 InMsg::Final(ref x) => Some(x.read_envelope_message()?),
                 InMsg::Transit(ref x) => Some(x.read_in_message()?),
                 InMsg::DiscardedFinal(ref x) => Some(x.read_envelope_message()?),
@@ -353,7 +327,7 @@ impl InMsg {
         match self {
             InMsg::External(_) => None,
             InMsg::IHR(_) => None,
-            InMsg::Immediatelly(_) => None,
+            InMsg::Immediate(_) => None,
             InMsg::Final(_) => None,
             InMsg::Transit(ref x) => Some(x.out_msg.cell()),
             InMsg::DiscardedFinal(_) => None,
@@ -369,7 +343,7 @@ impl InMsg {
         match self {
             InMsg::External(_) => Ok(None),
             InMsg::IHR(_) => Ok(None),
-            InMsg::Immediatelly(_) => Ok(None),
+            InMsg::Immediate(_) => Ok(None),
             InMsg::Final(_) => Ok(None),
             InMsg::Transit(ref x) => Some(x.read_out_message()).transpose(),
             InMsg::DiscardedFinal(_) => Ok(None),
@@ -400,8 +374,8 @@ impl Augmentation<ImportFees> for InMsg {
                 fees.value_imported = header.value.clone();
                 fees.value_imported.grams.add(&header.ihr_fee)?;
             }
-            InMsg::Immediatelly(_) => {
-                //println!("InMsg::Immediatelly");
+            InMsg::Immediate(_) => {
+                //println!("InMsg::Immediate");
                 fees.fees_collected = header.fwd_fee;
             }
             InMsg::Final(ref x) => {
@@ -452,7 +426,7 @@ impl Serializable for InMsg {
         match self {
             InMsg::External(ref x) => x.write_to(write_ctor_tag!(cell, MSG_IMPORT_EXT)),
             InMsg::IHR(ref x) => x.write_to(write_ctor_tag!(cell, MSG_IMPORT_IHR)),
-            InMsg::Immediatelly(ref x) => x.write_to(write_ctor_tag!(cell, MSG_IMPORT_IMM)),
+            InMsg::Immediate(ref x) => x.write_to(write_ctor_tag!(cell, MSG_IMPORT_IMM)),
             InMsg::Final(ref x) => x.write_to(write_ctor_tag!(cell, MSG_IMPORT_FIN)),
             InMsg::Transit(ref x) => x.write_to(write_ctor_tag!(cell, MSG_IMPORT_TR)),
             InMsg::DiscardedFinal(ref x) => x.write_to(write_ctor_tag!(cell, MSG_DISCARD_FIN)),
@@ -468,7 +442,7 @@ impl Deserializable for InMsg {
         *self =  match tag {
             MSG_IMPORT_EXT => read_msg_descr!(cell, InMsgExternal, External),
             MSG_IMPORT_IHR => read_msg_descr!(cell, InMsgIHR, IHR),
-            MSG_IMPORT_IMM => read_msg_descr!(cell, InMsgFinal, Immediatelly),
+            MSG_IMPORT_IMM => read_msg_descr!(cell, InMsgFinal, Immediate),
             MSG_IMPORT_FIN => read_msg_descr!(cell, InMsgFinal, Final),
             MSG_IMPORT_TR =>  read_msg_descr!(cell, InMsgTransit, Transit),
             MSG_DISCARD_FIN => read_msg_descr!(cell, InMsgDiscardedFinal, DiscardedFinal),
@@ -491,11 +465,6 @@ pub struct InMsgExternal {
 }
 
 impl InMsgExternal {
-    #[deprecated]
-    pub fn with_params(msg: &Message, tr: &Transaction) -> Result<Self> {
-        Ok(Self::with_cells(msg.serialize()?, tr.serialize()?))
-    }
-
     pub fn with_cells(msg_cell: Cell, tr_cell: Cell) -> Self {
         InMsgExternal {
             msg: ChildCell::with_cell(msg_cell),
@@ -546,21 +515,6 @@ pub struct InMsgIHR {
 
 
 impl InMsgIHR {
-    #[deprecated]
-    pub fn with_params(
-        msg: &Message,
-        tr: &Transaction,
-        ihr_fee: Grams,
-        proof_created: Cell
-    ) -> Result<Self> {
-        Ok(Self::with_cells(
-            msg.serialize()?,
-            tr.serialize()?,
-            ihr_fee,
-            proof_created
-        ))
-    }
-
     pub fn with_cells(msg_cell: Cell, tr_cell: Cell, ihr_fee: Grams, proof_created: Cell) -> Self {
         InMsgIHR {
             msg: ChildCell::with_cell(msg_cell),
@@ -624,11 +578,6 @@ pub struct InMsgFinal {
 }
 
 impl InMsgFinal {
-    #[deprecated]
-    pub fn with_params(env: &MsgEnvelope, tr: &Transaction, fwd_fee: Grams) -> Result<Self> {
-        Ok(Self::with_cells(env.serialize()?, tr.serialize()?, fwd_fee))
-    }
-
     pub fn with_cells(msg_cell: Cell, tr_cell: Cell, fwd_fee: Grams) -> Self {
         InMsgFinal {
             in_msg: ChildCell::with_cell(msg_cell),
@@ -647,16 +596,6 @@ impl InMsgFinal {
 
     pub fn envelope_message_hash(&self) -> UInt256 {
         self.in_msg.hash()
-    }
-
-    #[deprecated]
-    pub fn read_message(&self) -> Result<MsgEnvelope> {
-        self.in_msg.read_struct()
-    }
-
-    #[deprecated]
-    pub fn message_cell(&self)-> Cell {
-        self.in_msg.cell()
     }
 
     pub fn read_transaction(&self) -> Result<Transaction> {
@@ -698,11 +637,6 @@ pub struct InMsgTransit {
 }
 
 impl InMsgTransit {
-    #[deprecated]
-    pub fn with_params(in_msg: &MsgEnvelope, out_msg: &MsgEnvelope, fee: Grams) -> Result<Self> {
-        Ok(Self::with_cells(in_msg.serialize()?, out_msg.serialize()?, fee))
-    }
-
     pub fn with_cells(in_msg_cell: Cell, out_msg_cell: Cell, fee: Grams) -> Self {
         InMsgTransit {
             in_msg: ChildCell::with_cell(in_msg_cell),
@@ -715,11 +649,6 @@ impl InMsgTransit {
         self.in_msg.read_struct()
     }
 
-    #[deprecated]
-    pub fn in_message_cell(&self)-> Cell {
-        self.in_msg.cell()
-    }
-
     pub fn read_out_message(&self) -> Result<MsgEnvelope> {
         self.out_msg.read_struct()
     }
@@ -730,11 +659,6 @@ impl InMsgTransit {
 
     pub fn in_envelope_message_hash(&self)-> UInt256 {
         self.in_msg.hash()
-    }
-
-    #[deprecated]
-    pub fn out_message_cell(&self)-> Cell {
-        self.out_msg.cell()
     }
 
     pub fn out_envelope_message_cell(&self)-> Cell {
@@ -772,11 +696,6 @@ pub struct InMsgDiscardedFinal {
 }
 
 impl InMsgDiscardedFinal {
-    #[deprecated]
-    pub fn with_params(in_msg: &MsgEnvelope, transaction_id: u64, fee: Grams) -> Result<Self> {
-        Ok(Self::with_cells(in_msg.serialize()?, transaction_id, fee))
-    }
-
     pub fn with_cells(in_msg_cell: Cell, transaction_id: u64, fee: Grams) -> Self {
         InMsgDiscardedFinal {
             in_msg: ChildCell::with_cell(in_msg_cell),
@@ -795,11 +714,6 @@ impl InMsgDiscardedFinal {
 
     pub fn envelope_message_hash(&self) -> UInt256 {
         self.in_msg.hash()
-    }
-
-    #[deprecated]
-    pub fn read_message(&self) -> Result<MsgEnvelope> {
-        self.in_msg.read_struct()
     }
 
     pub fn message_cell(&self)-> Result<Cell> {
@@ -842,14 +756,9 @@ pub struct InMsgDiscardedTransit {
 }
 
 impl InMsgDiscardedTransit {
-    #[deprecated]
-    pub fn with_params(msg: &MsgEnvelope, transaction_id: u64, fee: Grams, proof: Cell) -> Result<Self> {
-        Ok(Self::with_cells(msg.serialize()?, transaction_id, fee, proof))
-    }
-
-    pub fn with_cells(msg_cell: Cell, transaction_id: u64, fee: Grams, proof: Cell) -> Self {
+    pub fn with_cells(env_cell: Cell, transaction_id: u64, fee: Grams, proof: Cell) -> Self {
         InMsgDiscardedTransit {
-            in_msg: ChildCell::with_cell(msg_cell),
+            in_msg: ChildCell::with_cell(env_cell),
             transaction_id,
             fwd_fee: fee,
             proof_delivered: proof
@@ -866,11 +775,6 @@ impl InMsgDiscardedTransit {
 
     pub fn envelope_message_hash(&self) -> UInt256 {
         self.in_msg.hash()
-    }
-
-    #[deprecated]
-    pub fn read_message(&self) -> Result<MsgEnvelope> {
-        self.in_msg.read_struct()
     }
 
     pub fn message_cell(&self)-> Result<Cell> {

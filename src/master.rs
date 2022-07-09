@@ -23,7 +23,7 @@ use crate::{
     signature::CryptoSignaturePair,
     types::{ChildCell, CurrencyCollection, InRefValue},
     validators::ValidatorInfo,
-    CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15,
+    CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15, Augmentation,
 };
 use std::{collections::HashMap, fmt};
 use ton_types::{
@@ -50,17 +50,16 @@ define_HashmapE!{ShardHashes, 32, InRefValue<BinTree<ShardDescr>>}
 define_HashmapE!{CryptoSignatures, 16, CryptoSignaturePair}
 define_HashmapAugE!{ShardFees, 96, ShardIdentFull, ShardFeeCreated, ShardFeeCreated}
 
+impl Augmentation<ShardFeeCreated> for ShardFeeCreated {
+    fn aug(&self) -> Result<ShardFeeCreated> {
+        Ok(self.clone())
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ShardIdentFull {
     pub workchain_id: i32,
     pub prefix: u64, // with terminated bit!
-}
-
-impl ShardIdentFull {
-    // #[deprecated(note = "use Display converter in format!")]
-    pub fn to_hex_string(&self) -> String {
-        format!("{}:{:016X}", self.workchain_id, self.prefix)
-    }
 }
 
 impl Serializable for ShardIdentFull {
@@ -414,13 +413,6 @@ pub struct McBlockExtra {
     config: Option<ConfigParams>
 }
 
-pub fn shard_ident_to_u64(shard: &[u8]) -> u64 {
-    let mut shard_key = [0; 8];
-    let len = std::cmp::min(shard.len(), 8);
-    shard_key[..len].copy_from_slice(&shard[..len]);
-    u64::from_be_bytes(shard_key)
-}
-
 impl McBlockExtra {
 
     ///
@@ -639,6 +631,15 @@ impl Serializable for KeyExtBlkRef {
         self.key.write_to(cell)?;
         self.blk_ref.write_to(cell)?;
         Ok(())
+    }
+}
+
+impl Augmentation<KeyMaxLt> for KeyExtBlkRef {
+    fn aug(&self) -> Result<KeyMaxLt> {
+        Ok(KeyMaxLt {
+            key: self.key,
+            max_end_lt: self.blk_ref.end_lt
+        })
     }
 }
 

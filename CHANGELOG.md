@@ -2,10 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## Version: 1.7.53
+## Version: 1.8.0
+
+### New
+ - Update version
+
+
+## Version: 1.8.0
 
 ### New
 
+- Deprecated functions removed
+- Refactor in message types naming
+- Switched to Rust 2021 edition
 
 ## Version: 1.7.52
 
