@@ -24,6 +24,7 @@ use crate::{
 use crc::{Crc, CRC_32_ISCSI};
 use std::{
     io::{Write, Cursor},
+    convert::TryInto,
     cmp::{min, Ordering},
     borrow::Cow,
 };
@@ -33,6 +34,7 @@ use ton_types::{
     error, fail, Result,
     UInt256, BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData,
 };
+use ever_bls_lib::bls::BLS_PUBLIC_KEY_LEN;
 
 pub const CASTAGNOLI: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
@@ -162,6 +164,7 @@ pub struct ValidatorDescr {
     pub weight: u64,
     pub adnl_addr: Option<UInt256>,
     pub mc_seq_no_since: u32,
+    pub bls_public_key: Option<[u8; BLS_PUBLIC_KEY_LEN]>,
 
     // Total weight of the previous validators in the list.
     // The field is not serialized.
@@ -186,13 +189,15 @@ impl ValidatorDescr {
             adnl_addr: None,
             prev_weight_sum: 0,
             mc_seq_no_since: 0,
+            bls_public_key: None
         }
     }
 
     pub const fn with_params(
         public_key: SigPubKey,
         weight: u64,
-        adnl_addr: Option<UInt256>) -> Self
+        adnl_addr: Option<UInt256>, 
+        bls_public_key: Option<[u8; BLS_PUBLIC_KEY_LEN]>) -> Self
     {
         ValidatorDescr {
             public_key,
@@ -200,6 +205,7 @@ impl ValidatorDescr {
             adnl_addr,
             prev_weight_sum: 0,
             mc_seq_no_since: 0,
+            bls_public_key,
         }
     }
 
@@ -223,6 +229,7 @@ impl ValidatorDescr {
 const VALIDATOR_DESC_TAG: u8 = 0x53;
 const VALIDATOR_DESC_ADDR_TAG: u8 = 0x73;
 const VALIDATOR_DESC_ADDR_SEQNO_TAG: u8 = 0x93;
+const VALIDATOR_DESC_BLS_KEY_TAG: u8 = 0x74;
 
 impl Serializable for ValidatorDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -231,6 +238,8 @@ impl Serializable for ValidatorDescr {
                 fail!("if mc_seq_no_since is not zero ADNL address must be specified too")
             }
             VALIDATOR_DESC_ADDR_SEQNO_TAG
+        } else if self.bls_public_key.is_some() {
+            VALIDATOR_DESC_BLS_KEY_TAG
         } else if self.adnl_addr.is_some() {
             VALIDATOR_DESC_ADDR_TAG
         } else {
@@ -245,6 +254,9 @@ impl Serializable for ValidatorDescr {
         if self.mc_seq_no_since != 0 {
             self.mc_seq_no_since.write_to(cell)?;
         }
+        if let Some(bls_key) = self.bls_public_key.as_ref() {
+            cell.append_raw(bls_key, BLS_PUBLIC_KEY_LEN * 8)?;
+        }
         Ok(())
     }
 }
@@ -252,25 +264,35 @@ impl Serializable for ValidatorDescr {
 impl Deserializable for ValidatorDescr {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         let tag = slice.get_next_byte()?;
-        let (public_key, weight, adnl_addr, mc_seq_no_since);
+        let (public_key, weight, adnl_addr, mc_seq_no_since, bls_public_key);
         match tag {
             VALIDATOR_DESC_TAG => {
                 public_key = Deserializable::construct_from(slice)?;
                 weight = Deserializable::construct_from(slice)?;
                 adnl_addr = None;
                 mc_seq_no_since = 0;
+                bls_public_key = None;
             }
             VALIDATOR_DESC_ADDR_TAG => {
                 public_key = Deserializable::construct_from(slice)?;
                 weight = Deserializable::construct_from(slice)?;
                 adnl_addr = Some(Deserializable::construct_from(slice)?);
                 mc_seq_no_since = 0;
+                bls_public_key = None;
             }
             VALIDATOR_DESC_ADDR_SEQNO_TAG => {
                 public_key = Deserializable::construct_from(slice)?;
                 weight = Deserializable::construct_from(slice)?;
                 adnl_addr = Some(Deserializable::construct_from(slice)?);
                 mc_seq_no_since = Deserializable::construct_from(slice)?;
+                bls_public_key = None;
+            }
+            VALIDATOR_DESC_BLS_KEY_TAG => {
+                public_key = Deserializable::construct_from(slice)?;
+                weight = Deserializable::construct_from(slice)?;
+                adnl_addr = None;
+                mc_seq_no_since = 0;
+                bls_public_key = Some(slice.get_next_bits(BLS_PUBLIC_KEY_LEN * 8)?.as_slice().try_into()?);
             }
             tag => fail!(Self::invalid_tag(tag as u32))
         }
@@ -279,6 +301,7 @@ impl Deserializable for ValidatorDescr {
             weight,
             adnl_addr,
             mc_seq_no_since,
+            bls_public_key,
             prev_weight_sum: 0,
         })
     }
@@ -537,7 +560,9 @@ impl ValidatorSet {
                 subset.push(ValidatorDescr::with_params(
                     next_validator.public_key.clone(),
                     1, // NB: shardchain validator lists have all weights = 1
-                    next_validator.adnl_addr.clone()));
+                    next_validator.adnl_addr.clone(),
+                    next_validator.bls_public_key.clone(),
+                ));
                 debug_assert!(weight_remainder >= next_validator.weight);
                 weight_remainder -= next_validator.weight;
 

@@ -5,12 +5,6 @@ All notable changes to this project will be documented in this file.
 ## Version: 1.8.0
 
 ### New
- - Update version
-
-
-## Version: 1.8.0
-
-### New
 
 - Deprecated functions removed
 - Refactor in message types naming

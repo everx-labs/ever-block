@@ -1,6 +1,6 @@
 [package]
 edition = '2021'
-build = 'build.rs'
+build = "build.rs"
 name = 'ton_block'
 version = '1.8.0'
 
@@ -15,4 +15,6 @@ log = '0.4'
 num = '0.4'
 num-traits = '0.2'
 sha2 = '0.10'
-ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.11.3' }
+ton_types = { git = 'https://github.com/tonlabs/ton-labs-types' }
+ever_bls_lib = { git = 'https://github.com/tonlabs/ever-labs-bls-lib.git' }
+
