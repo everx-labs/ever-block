@@ -2,10 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## Version: 1.8.0
+## Version: 1.8.1
 
 ### New
- - Update version
+ - Add gosh feature
 
 
 ## Version: 1.8.0

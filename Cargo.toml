@@ -2,7 +2,7 @@
 edition = '2021'
 build = 'build.rs'
 name = 'ton_block'
-version = '1.8.0'
+version = '1.8.1'
 
 [dependencies]
 base64 = '0.13'
