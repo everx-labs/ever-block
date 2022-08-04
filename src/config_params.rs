@@ -354,6 +354,8 @@ pub enum GlobalCapabilities {
     CapStorageFeeToTvm        = 0x020000,
     CapCopyleft               = 0x040000,
     CapIndexAccounts          = 0x080000,
+    #[cfg(feature = "gosh")]
+    CapDiff                   = 0x100000,
 }
 
 impl ConfigParams {
