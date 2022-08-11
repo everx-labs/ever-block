@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Version: 1.8.1
+## Version: 1.8.3
 
 ### New
 
