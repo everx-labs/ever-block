@@ -29,6 +29,9 @@ use crate::{
     Serializable, Deserializable,
 };
 
+#[cfg(test)]
+#[path = "tests/test_config_params.rs"]
+mod tests;
 /*
 1.6.3. Quick access through the header of masterchain blocks
 _ config_addr:uint256
@@ -354,6 +357,7 @@ pub enum GlobalCapabilities {
     CapStorageFeeToTvm        = 0x020000,
     CapCopyleft               = 0x040000,
     CapIndexAccounts          = 0x080000,
+    #[cfg(feature = "gosh")]
     CapDiff                   = 0x100000,
 }
 
@@ -3213,3 +3217,26 @@ impl Serializable for ConfigCopyleft {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn dump_config(params: &HashmapE) {
+    params.iterate_slices(|ref mut key, ref mut slice| -> Result<bool> {
+        let key = key.get_next_u32()?;
+        match ConfigParamEnum::construct_from_slice_and_number(&mut slice.reference(0)?.into(), key)? {
+            ConfigParamEnum::ConfigParam31(ref mut cfg) => {
+                println!("\tConfigParam31.fundamental_smc_addr");
+                cfg.fundamental_smc_addr.iterate_keys(|addr: UInt256| -> Result<bool> {
+                    println!("\t\t{}", addr);
+                    Ok(true)
+                })?;
+            }
+            ConfigParamEnum::ConfigParam34(ref mut cfg) => {
+                println!("\tConfigParam34.cur_validators");
+                for validator in cfg.cur_validators.list() {
+                    println!("\t\t{:?}", validator);
+                };
+            }
+            x => println!("\t{:?}", x)
+        }
+        Ok(true)
+    }).unwrap();
+}

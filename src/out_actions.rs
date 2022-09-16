@@ -25,6 +25,9 @@ pub const ACTION_RESERVE:    u32 = 0x36e6b809;
 pub const ACTION_CHANGE_LIB: u32 = 0x26fa1dd4;
 pub const ACTION_COPYLEFT:   u32 = 0x24486f7a;
 
+#[cfg(test)]
+#[path = "tests/test_out_actions.rs"]
+mod tests;
 
 /*
 out_list_empty$_ = OutList 0;

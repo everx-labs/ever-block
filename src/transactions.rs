@@ -29,6 +29,9 @@ use ton_types::{
     SliceData, UInt256, UsageTree,
 };
 
+#[cfg(test)]
+#[path = "tests/test_transactions.rs"]
+pub mod tests;
 
 /*
 acst_unchanged$0 = AccStatusChange;  // x -> x

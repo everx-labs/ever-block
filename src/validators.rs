@@ -747,3 +747,6 @@ impl ValidatorSetPRNG {
     }
 }
 
+#[cfg(test)]
+#[path = "tests/test_validators.rs"]
+mod tests;

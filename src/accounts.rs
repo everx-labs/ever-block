@@ -27,6 +27,9 @@ use ton_types::{
     UInt256, AccountId, BuilderData, Cell, IBitstring, SliceData, UsageTree, HashmapType,
 };
 
+#[cfg(test)]
+#[path = "tests/test_accounts.rs"]
+mod tests;
 
 ///////////////////////////////////////////////////////////////////////////////
 ///
@@ -817,6 +820,14 @@ impl Account {
     }
 
     /// getting statistic using storage for calculate storage/transfer fee
+    #[cfg(test)]
+    fn get_storage_stat(&self) -> Result<StorageUsed> {
+        if let Some(stuff) = self.stuff() {
+            StorageUsed::calculate_for_struct(&stuff.storage)
+        } else {
+            Ok(StorageUsed::new())
+        }
+    }
 
     /// Getting account ID
     pub fn get_id(&self) -> Option<AccountId> {

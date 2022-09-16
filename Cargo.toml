@@ -1,8 +1,8 @@
 [package]
 edition = '2021'
-build = "build.rs"
+build = 'build.rs'
 name = 'ton_block'
-version = '1.8.0'
+version = '1.8.4'
 
 [dependencies]
 base64 = '0.13'
@@ -15,6 +15,13 @@ log = '0.4'
 num = '0.4'
 num-traits = '0.2'
 sha2 = '0.10'
-ton_types = { git = 'https://github.com/tonlabs/ton-labs-types' }
-ever_bls_lib = { git = 'https://github.com/tonlabs/ever-labs-bls-lib.git' }
+ton_types = { git = 'ssh://git@github.com/tonlabs/ton-types.git' }
+ever_bls_lib = { git = 'ssh://git@github.com/tonlabs/ever-bls-lib.git' }
 
+[dev-dependencies]
+pretty_assertions = '1.2'
+rand = '0.7'
+
+[features]
+ci_run = [  ]
+gosh = [  ]

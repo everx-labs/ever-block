@@ -23,6 +23,9 @@ use ton_types::{
     BuilderData, Cell, CellType, IBitstring, LevelMask, SliceData,
 };
 
+#[cfg(test)]
+#[path = "tests/test_merkle_update.rs"]
+pub mod tests;
 
 /*
 !merkle_update {X:Type} old_hash:uint256 new_hash:uint256

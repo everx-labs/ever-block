@@ -26,6 +26,9 @@ use ton_types::{
     HashmapType, SliceData, hm_label, HashmapSubtree,
 };
 
+#[cfg(test)]
+#[path = "tests/test_shard_accounts.rs"]
+mod tests;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // 4.1.9. The combined state of all accounts in a shard. The split part

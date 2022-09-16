@@ -31,6 +31,9 @@ use ton_types::{
     BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType
 };
 
+#[cfg(test)]
+#[path = "tests/test_signature.rs"]
+mod tests;
 /*
 ed25519_signature#5 R:bits256 s:bits256 = CryptoSignature; 
 */

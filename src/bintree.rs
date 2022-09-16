@@ -22,6 +22,9 @@ use ton_types::{
     BuilderData, Cell, IBitstring, SliceData
 };
 
+#[cfg(test)]
+#[path = "tests/test_bintree.rs"]
+mod tests;
 
 pub trait BinTreeType<X: Default + Serializable + Deserializable> {
     fn get_data(&self) -> SliceData;

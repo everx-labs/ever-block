@@ -24,6 +24,9 @@ use ton_types::{
     error, fail, Result,
     BuilderData, Cell, IBitstring, SliceData, UInt256,
 };
+#[cfg(test)]
+#[path = "tests/test_envelope_message.rs"]
+mod tests;
 
 /*
 

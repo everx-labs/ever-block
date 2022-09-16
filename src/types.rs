@@ -33,6 +33,9 @@ use crate::{
     Serializable, Deserializable,
 };
 
+#[cfg(test)]
+#[path = "tests/test_types.rs"]
+mod tests;
 
 ///
 /// var_uint$_ {n:#} len:(#< n) value:(uint (len * 8)) = VarUInteger n;

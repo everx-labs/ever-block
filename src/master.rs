@@ -31,6 +31,9 @@ use ton_types::{
     SliceData, UInt256,
 };
 
+#[cfg(test)]
+#[path = "tests/test_master.rs"]
+mod tests;
 
 /*
 _ (HashmapE 32 ^(BinTree ShardDescr)) = ShardHashes;

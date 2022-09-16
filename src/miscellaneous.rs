@@ -20,6 +20,9 @@ use ton_types::{
     HashmapE, HashmapType, HashmapSubtree,
 };
 
+#[cfg(test)]
+#[path = "tests/test_miscellaneous.rs"]
+mod tests;
 
 
 /*
