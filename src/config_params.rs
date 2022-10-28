@@ -501,6 +501,7 @@ pub enum ConfigParamEnum {
     ConfigParam2(ConfigParam2),
     ConfigParam3(ConfigParam3),
     ConfigParam4(ConfigParam4),
+    ConfigParam5(ConfigParam5),
     ConfigParam6(ConfigParam6),
     ConfigParam7(ConfigParam7),
     ConfigParam8(ConfigParam8),
@@ -539,8 +540,7 @@ pub enum ConfigParamEnum {
 macro_rules! read_config {
     ( $cpname:ident, $cname:ident, $slice:expr ) => {
         {
-            let mut c = $cname::default();
-            c.read_from($slice)?;
+            let c = $cname::construct_from($slice)?;
             Ok(ConfigParamEnum::$cpname(c))
         }
     }
@@ -560,6 +560,7 @@ impl ConfigParamEnum {
             2 => { read_config!(ConfigParam2, ConfigParam2, slice) },
             3 => { read_config!(ConfigParam3, ConfigParam3, slice) },
             4 => { read_config!(ConfigParam4, ConfigParam4, slice) },
+            5 => { read_config!(ConfigParam5, ConfigParam5, slice) },
             6 => { read_config!(ConfigParam6, ConfigParam6, slice) },
             7 => { read_config!(ConfigParam7, ConfigParam7, slice) },
             8 => { read_config!(ConfigParam8, ConfigParam8, slice) },
@@ -604,6 +605,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam2(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(2)},
             ConfigParamEnum::ConfigParam3(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(3)},
             ConfigParamEnum::ConfigParam4(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(4)},
+            ConfigParamEnum::ConfigParam5(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(5)},
             ConfigParamEnum::ConfigParam6(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(6)},
             ConfigParamEnum::ConfigParam7(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(7)},
             ConfigParamEnum::ConfigParam8(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(8)},
@@ -788,6 +790,28 @@ impl Deserializable for ConfigParam4 {
 impl Serializable for ConfigParam4 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.dns_root_addr.write_to(cell)?;
+        Ok(())
+    }
+}
+
+///
+/// Config Param 5 structure
+/// 
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct ConfigParam5 {
+    pub owner_addr: UInt256,
+}
+
+impl Deserializable for ConfigParam5 {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let owner_addr = Deserializable::construct_from(slice)?;
+        Ok(ConfigParam5 { owner_addr })
+    }
+}
+
+impl Serializable for ConfigParam5 {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.owner_addr.write_to(cell)?;
         Ok(())
     }
 }
@@ -3195,7 +3219,7 @@ impl Deserializable for ConfigCopyleft {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
-                    s: "Copyleft".to_string()
+                    s: std::any::type_name::<Self>().to_string()
                 }
             )
         }

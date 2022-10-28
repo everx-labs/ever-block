@@ -2,7 +2,7 @@
 build = 'build.rs'
 edition = '2021'
 name = 'ton_block'
-version = '1.8.9'
+version = '1.8.11'
 
 [dependencies]
 base64 = '0.13'
@@ -20,4 +20,3 @@ ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.11
 [features]
 ci_run = [  ]
 gosh = [  ]
-

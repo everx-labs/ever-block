@@ -110,8 +110,7 @@ impl MerkleProof {
 
     /// Creating of a Merkle proof which includes cells whose hashes contain in `proof_for`.
     pub fn create_by_usage_tree(root: &Cell, usage_tree: UsageTree) -> Result<Self> {
-        let visited = usage_tree.visited();
-        MerkleProof::create(root, |h| visited.contains(h))
+        MerkleProof::create(root, |h| usage_tree.contains(h))
     }
 
     pub fn create_raw(
