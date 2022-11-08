@@ -15,8 +15,8 @@ log = '0.4'
 num = '0.4'
 num-traits = '0.2'
 sha2 = '0.10'
-ton_types = { git = 'ssh://git@github.com/tonlabs/ton-labs-types.git' }
-ever_bls_lib = { git = 'ssh://git@github.com/tonlabs/ever-labs-bls-lib.git' }
+ton_types = { git = 'https://github.com/tonlabs/ton-labs-types.git', tag = '1.11.4' }
+ever_bls_lib = { git = 'https://github.com/tonlabs/ever-labs-bls-lib.git', tag = '0.1.24' }
 
 [dev-dependencies]
 pretty_assertions = '1.2'
