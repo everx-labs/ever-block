@@ -2,12 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-## Version: 1.8.11
-
-### New
- - Up version
-
-
 ## Version: 1.8.0
 
 ### New
