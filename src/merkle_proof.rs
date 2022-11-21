@@ -127,24 +127,26 @@ impl MerkleProof {
             merkle_depth 
         };
 
-        let mut proof_cell = BuilderData::new();
-        proof_cell.set_type(cell.cell_type());
+        let mut proof_cell = BuilderData::from(cell);
         let mut child_mask = cell.level_mask();
-        for child in cell.clone_references().iter() {
+        let n = cell.references_count();
+        for i in 0..n {
+            let child = cell.reference(i)?;
             let child_repr_hash = child.repr_hash();
             let proof_child = if let Some(c) = done_cells.get(&child_repr_hash) {
                 c.clone()
             } else if child.references_count() == 0 || is_include(&child.repr_hash()) {
-                Self::create_raw(child, is_include, child_merkle_depth, pruned_branches, done_cells)?
+                Self::create_raw(&child, is_include, child_merkle_depth, 
+                    pruned_branches, done_cells)?
             } else {
-                let pbc = MerkleUpdate::make_pruned_branch_cell(child, child_merkle_depth)?;
+                let pbc = MerkleUpdate::make_pruned_branch_cell(&child, child_merkle_depth)?;
                 if let Some(pruned_branches) = pruned_branches.as_mut() {
                     pruned_branches.insert(child_repr_hash);
                 }
                 pbc.into_cell()?
             };
             child_mask |= proof_child.level_mask();
-            proof_cell.append_reference_cell(proof_child);
+            proof_cell.replace_reference_cell(i, proof_child);
         }
         
         proof_cell.set_level_mask(if cell.is_merkle() {
@@ -152,9 +154,6 @@ impl MerkleProof {
         } else {
             child_mask
         });
-
-        let slice = cell.into();
-        proof_cell.append_bytestring(&slice).unwrap();
 
         let proof_cell = proof_cell.into_cell()?;
         done_cells.insert(cell.repr_hash(), proof_cell.clone());
