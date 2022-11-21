@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version: 1.8.19
+
+### Fix
+
+- Merkle proof pruned cell access fix
+
 ## Version: 1.8.0
 
 ### New
