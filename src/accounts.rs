@@ -1083,7 +1083,7 @@ impl Account {
                 // proof for account in shard state
 
                 let usage_tree = UsageTree::with_root(state_root.clone());
-                let ss = ShardStateUnsplit::construct_from(&mut usage_tree.root_slice())?;
+                let ss = ShardStateUnsplit::construct_from_cell(usage_tree.root_cell())?;
 
                 ss
                     .read_accounts()?
@@ -1172,7 +1172,7 @@ impl Account {
     pub fn update_config_smc(&mut self, config: &ConfigParams) -> Result<()> {
         let data = self.get_data()
             .ok_or_else(|| error!("config SMC doesn't contain data"))?;
-        let mut data = SliceData::from(data);
+        let mut data = SliceData::load_cell(data)?;
         data.checked_drain_reference()
             .map_err(|_| error!("config SMC data doesn't contain reference with old config"))?;
         let mut builder = BuilderData::from_slice(&data);

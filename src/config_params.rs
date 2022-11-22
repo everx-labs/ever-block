@@ -71,10 +71,10 @@ impl ConfigParams {
 
     /// get config by index
     pub fn config(&self, index: u32) -> Result<Option<ConfigParamEnum>> {
-        let key = index.serialize()?;
-        if let Some(slice) = self.config_params.get(key.into())? {
+        let key = SliceData::load_builder(index.write_to_new_cell()?)?;
+        if let Some(slice) = self.config_params.get(key)? {
             if let Some(cell) = slice.reference_opt(0) {
-                return Ok(Some(ConfigParamEnum::construct_from_slice_and_number(&mut cell.into(), index)?));
+                return Ok(Some(ConfigParamEnum::construct_from_slice_and_number(&mut SliceData::load_cell(cell)?, index)?));
             }
         }
         Ok(None)
@@ -82,8 +82,8 @@ impl ConfigParams {
 
     /// get config by index
     pub fn config_present(&self, index: u32) -> Result<bool> {
-        let key = index.serialize()?;
-        if let Some(slice) = self.config_params.get(key.into())? {
+        let key = SliceData::load_builder(index.write_to_new_cell()?)?;
+        if let Some(slice) = self.config_params.get(key)? {
             if slice.remaining_references() != 0 {
                 return Ok(true)
             }
@@ -96,8 +96,8 @@ impl ConfigParams {
 
         let mut value = BuilderData::new();
         let index = config.write_to_cell(&mut value)?;
-        let key = index.serialize()?;
-        self.config_params.set_builder(key.into(), &value)?;
+        let key = SliceData::load_builder(index.write_to_new_cell()?)?;
+        self.config_params.set_builder(key, &value)?;
         Ok(())
     }
 
@@ -357,6 +357,7 @@ pub enum GlobalCapabilities {
     #[cfg(feature = "gosh")]
     CapDiff                   = 0x100000,
     CapsTvmBugfixes2022       = 0x200000, // popsave, exception handler, loops
+    CapWc2WcQueueUpdates      = 0x400000,
 }
 
 impl ConfigParams {
@@ -550,7 +551,7 @@ macro_rules! read_config {
 impl ConfigParamEnum {
     
     pub fn construct_from_cell_and_number(cell: Cell, index: u32) -> Result<ConfigParamEnum> {
-        Self::construct_from_slice_and_number(&mut cell.into(), index)
+        Self::construct_from_slice_and_number(&mut SliceData::load_cell(cell)?, index)
     }
 
     /// read config from cell
@@ -1303,7 +1304,7 @@ impl ConfigParam18 {
     /// insert value
     pub fn insert(&mut self, sp: &StoragePrices) -> Result<()> {
         let index = match self.map.0.get_max(false, &mut 0)? {
-            Some((key, _value)) => SliceData::from(key.into_cell()?).get_next_u32()? + 1,
+            Some((key, _value)) => SliceData::load_builder(key)?.get_next_u32()? + 1,
             None => 0
         };
         self.map.set(&index, sp)
@@ -2658,7 +2659,7 @@ impl Deserializable for ConfigParam13 {
 
 impl Serializable for ConfigParam13 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_references_and_data(&self.cell.clone().into())?;
+        cell.checked_append_references_and_data(&SliceData::load_cell_ref(&self.cell)?)?;
         Ok(())
     }
 }

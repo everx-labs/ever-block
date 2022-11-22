@@ -19,17 +19,17 @@ use crate::{
     inbound_messages::InMsg,
     messages::{CommonMsgInfo, Message},
     miscellaneous::{IhrPendingInfo, ProcessedInfo},
-    shard::AccountIdPrefixFull,
+    shard::{AccountIdPrefixFull, ShardState},
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
-    Serializable, Deserializable,
+    Serializable, Deserializable, ShardStateUnsplit, MerkleProof, MerkleUpdate,
 };
-use std::fmt;
+use std::{fmt, collections::HashSet};
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, SliceData, IBitstring,
-    HashmapType, HashmapSubtree, hm_label,
+    HashmapType, HashmapSubtree, hm_label, UsageTree,
 };
 
 
@@ -182,6 +182,20 @@ impl OutMsgQueue {
         let enq = EnqueuedMsg::with_param(msg_lt, env)?;
         self.set(&key, &enq, &msg_lt)
     }
+
+    pub fn queue_for_wc(&self, workchain_id: i32) -> Result<OutMsgQueue> {
+        let cell = workchain_id.serialize()?;
+        let mut subtree = self.clone();
+        subtree.into_subtree_without_prefix(&SliceData::load_cell(cell)?, &mut 0)?;
+        Ok(subtree)
+    }
+
+    pub fn queue_for_wc_with_prefix(&self, workchain_id: i32) -> Result<OutMsgQueue> {
+        let cell = workchain_id.serialize()?;
+        let mut subtree = self.clone();
+        subtree.subtree_with_prefix(&SliceData::load_cell(cell)?, &mut 0)?;
+        Ok(subtree)
+    }
 }
 
 ///
@@ -288,6 +302,10 @@ impl OutMsgQueueInfo {
         &self.proc_info
     }
 
+    pub fn proc_info_mut(&mut self) -> &mut ProcessedInfo {
+        &mut self.proc_info
+    }
+
     pub fn set_proc_info(&mut self, proc_info: ProcessedInfo) {
         self.proc_info = proc_info;
     }
@@ -304,6 +322,114 @@ impl OutMsgQueueInfo {
         result |= self.proc_info.combine_with(&other.proc_info)?;
         result |= self.ihr_pending.combine_with(&other.ihr_pending)?;
         Ok(result)
+    }
+
+    // Create proofs in state for
+    // - part of out queue related with given WC
+    // - proceseed info
+    pub fn prepare_proof_for_wc(
+        shard_state_root: &Cell,
+        workchain_id: i32
+    ) -> Result<MerkleProof> {
+        let (proof, _) = Self::prepare_proof_for_wc_internal(shard_state_root, workchain_id)?;
+        Ok(proof)
+    }
+
+    // Prepare update from one proof to another
+    pub fn prepare_update_for_wc(
+        old_shard_state_root: &Cell,
+        old_shard_state_usage_tree: &UsageTree,
+        new_shard_state_root: &Cell,
+        workchain_id: i32,
+    ) -> Result<MerkleUpdate> {
+        let (old_proof, subtrees_roots) =
+            Self::prepare_proof_for_wc_internal(old_shard_state_root, workchain_id)?;
+
+        let new_proof = Self::prepare_proof_for_wc(new_shard_state_root, workchain_id)?;
+
+        // Prepare visited cells set of the needed part of queue
+        let sub_queue_cells_hashes = old_shard_state_usage_tree.build_visited_subtree(
+            &|h| subtrees_roots.contains(h)
+        )?;
+
+        // Usage tree from state's root to subtree's root
+        let usage_tree = UsageTree::with_root(old_proof.proof.clone());
+        let visit_state = |state: &ShardStateUnsplit| -> Result<()> {
+            let out_msg_queue_info = state.read_out_msg_queue_info()?;
+            let _queue_for_wc = out_msg_queue_info.out_queue().queue_for_wc(1)?;
+            let _proc_info = out_msg_queue_info.proc_info().root();
+            Ok(())
+        };
+        match ShardState::construct_from_cell(usage_tree.root_cell())? {
+            ShardState::UnsplitState(state) => {
+                visit_state(&state)?;
+            }
+            ShardState::SplitState(split_state) => {
+                visit_state(&ShardStateUnsplit::construct_from_cell(split_state.left)?)?;
+                visit_state(&ShardStateUnsplit::construct_from_cell(split_state.right)?)?;
+            }
+        }
+
+        let old_proof_root = old_proof.serialize()?;
+        let old_proof_hash = old_proof_root.repr_hash();
+        let new_proof_root = new_proof.serialize()?;
+        MerkleUpdate::create_fast(
+            &old_proof_root,
+            &new_proof_root,
+            |h| {
+                sub_queue_cells_hashes.contains(h) ||
+                usage_tree.contains(h) ||
+                h == &old_proof_hash
+            }
+        )
+    }
+
+    pub fn prepare_first_update_for_wc(
+        zerostate_root: &Cell,
+        new_shard_state_root: &Cell,
+        workchain_id: i32,
+    ) -> Result<MerkleUpdate> {
+        let new_proof = Self::prepare_proof_for_wc(new_shard_state_root, workchain_id)?;
+        let new_proof_root = new_proof.serialize()?;
+        MerkleUpdate::create_fast(zerostate_root, &new_proof_root, |_| false)
+    }
+
+    fn prepare_proof_for_wc_internal(
+        shard_state_root: &Cell,
+        workchain_id: i32
+    ) -> Result<(MerkleProof, HashSet<UInt256>)> {
+        
+        let usage_tree = UsageTree::with_root(shard_state_root.clone());
+        let mut roots = HashSet::new();
+
+        let mut visit_state = |state: &ShardStateUnsplit| -> Result<()> {
+            let queue_info = state.read_out_msg_queue_info()?;
+            let sub_queue_root_hash = queue_info.out_queue()
+                .subtree_root_cell(&SliceData::load_builder(workchain_id.write_to_new_cell()?)?)?
+                .map(|c| c.repr_hash()).unwrap_or_default();
+            roots.insert(sub_queue_root_hash);
+            let proc_info_root_hash = queue_info.proc_info().root()
+                .map(|c| c.repr_hash()).unwrap_or_default();
+            roots.insert(proc_info_root_hash);
+            Ok(())
+        };
+
+        match ShardState::construct_from_cell(usage_tree.root_cell())? {
+            ShardState::UnsplitState(state) => {
+                visit_state(&state)?;
+            }
+            ShardState::SplitState(split_state) => {
+                visit_state(&ShardStateUnsplit::construct_from_cell(split_state.left)?)?;
+                visit_state(&ShardStateUnsplit::construct_from_cell(split_state.right)?)?;
+            }
+        }
+
+        let proof = MerkleProof::create_with_subtrees(
+            &shard_state_root,
+            |h| usage_tree.contains(h),
+            |h| roots.contains(h)
+        )?;
+        Ok((proof, roots))
     }
 }
 
@@ -547,7 +673,7 @@ impl OutMsg {
     }
 
     pub fn read_transaction(&self) -> Result<Option<Transaction>> {
-        self.transaction_cell().map(|cell| Transaction::construct_from(&mut cell.into())).transpose()
+        self.transaction_cell().map(|cell| Transaction::construct_from_cell(cell)).transpose()
     }
 
     pub fn read_reimport_message(&self) -> Result<Option<InMsg>> {

@@ -74,7 +74,7 @@ impl Deserializable for OutActions {
             let prev_cell = cell.checked_drain_reference()?;
             let action = OutAction::construct_from(&mut cell)?;
             self.push_front(action);
-            cell = prev_cell.into();
+            cell = SliceData::load_cell(prev_cell)?;
         }
         if !cell.is_empty() {
             fail!(BlockError::Other("cell is not empty".to_string()))

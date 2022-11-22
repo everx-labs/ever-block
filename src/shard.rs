@@ -86,7 +86,7 @@ impl AccountIdPrefixFull {
             cell.append_i32(self.workchain_id).unwrap();
         }
         cell.append_u64(self.prefix).unwrap();
-        cell.into_cell().unwrap().into()
+        SliceData::load_builder(cell).unwrap()
     }
 
     /// Constructs AccountIdPrefixFull prefix for specified address.
@@ -348,7 +348,7 @@ impl ShardIdent {
             let prefix = self.shard_prefix_with_tag() >> (64 - prefix_len);
             cell.append_bits(prefix as usize, prefix_len as usize).unwrap();
         }
-        cell.into_cell().unwrap().into()
+        SliceData::load_builder(cell).unwrap()
     }
 
     /// Get bitstring-key for BinTree operation for Shard
@@ -356,14 +356,14 @@ impl ShardIdent {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)?
             .append_u64(self.shard_prefix_without_tag())?;
-        Ok(cell.into_cell()?.into())
+        SliceData::load_builder(cell)
     }
 
     pub fn full_key_with_tag(&self) -> Result<SliceData> {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)?
             .append_u64(self.shard_prefix_with_tag())?;
-        Ok(cell.into_cell()?.into())
+        SliceData::load_builder(cell)
     }
 
     pub fn workchain_id(&self) -> i32 {
@@ -1120,7 +1120,7 @@ impl Deserializable for ShardStateUnsplit {
         self.before_split = cell.get_next_bit()?;
         self.accounts.read_from_reference(cell)?;
 
-        let cell1 = &mut cell.checked_drain_reference()?.into();
+        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         self.overload_history.read_from(cell1)?;
         self.underload_history.read_from(cell1)?;
         self.total_balance.read_from(cell1)?;
