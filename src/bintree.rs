@@ -34,7 +34,7 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
                 fail!(BlockError::InvalidData("Fork doesn't have two refs".to_string()))
             }
             match key.get_next_bit_opt() {
-                Some(x) => cursor = cursor.reference(x)?.into(),
+                Some(x) => cursor = SliceData::load_cell(cursor.reference(x)?)?,
                 _ => return Ok(None)
             }
         }
@@ -54,7 +54,7 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
                 fail!(BlockError::InvalidData("Fork doesn't have two refs".to_string()))
             }
             match key.get_next_bit_opt() {
-                Some(x) => cursor = cursor.reference(x)?.into(),
+                Some(x) => cursor = SliceData::load_cell(cursor.reference(x)?)?,
                 _ => return Ok(None) // key is shorter nothing to return
             }
         }
@@ -79,14 +79,14 @@ where F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable
     if data.remaining_bits() != 1 && data.remaining_references() < 2 {
         return Ok(None)
     } else if let Some(x) = key.get_next_bit_opt() {
-        if let Some(reference) = internal_merge(&data.reference(x)?.into(), key, merger)? {
+        if let Some(reference) = internal_merge(&SliceData::load_cell(data.reference(x)?)?, key, merger)? {
             let mut cell = BuilderData::from_slice(data);
             cell.replace_reference_cell(x, reference.into_cell()?);
             return Ok(Some(cell))
         }
     } else {
-        let mut right_slice = SliceData::from(&data.reference(1)?);
-        let mut left_slice = SliceData::from(&data.reference(0)?);
+        let mut right_slice = SliceData::load_cell(data.reference(1)?)?;
+        let mut left_slice = SliceData::load_cell(data.reference(0)?)?;
         if right_slice.get_next_bit()? | left_slice.get_next_bit()? {
             return Ok(None)
         }
@@ -108,7 +108,7 @@ where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
             return Ok(None)
         }
         if let Some(x) = key.get_next_bit_opt() {
-            if let Some(reference) = internal_split(&data.reference(x)?.into(), key, splitter)? {
+            if let Some(reference) = internal_split(&SliceData::load_cell(data.reference(x)?)?, key, splitter)? {
                 let mut cell = BuilderData::from_slice(data);
                 cell.replace_reference_cell(x, reference.into_cell()?);
                 return Ok(Some(cell))
@@ -144,7 +144,7 @@ where F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
             return Ok(None)
         }
         if let Some(x) = key.get_next_bit_opt() {
-            if let Some(reference) = internal_update(&data.reference(x)?.into(), key, mutator)? {
+            if let Some(reference) = internal_update(&SliceData::load_cell(data.reference(x)?)?, key, mutator)? {
                 let mut cell = BuilderData::from_slice(data);
                 cell.replace_reference_cell(x, reference.into_cell()?);
                 return Ok(Some(cell))
@@ -172,10 +172,10 @@ where
         let mut left_key = key.clone();
         left_key.append_bit_zero()?;
         key.append_bit_one()?;
-        iterate_internal(&mut cursor.checked_drain_reference()?.into(), left_key, p)? &&
-        iterate_internal(&mut cursor.checked_drain_reference()?.into(), key, p)?
+        iterate_internal(&mut SliceData::load_cell(cursor.checked_drain_reference()?)?, left_key, p)? &&
+        iterate_internal(&mut SliceData::load_cell(cursor.checked_drain_reference()?)?, key, p)?
     } else {
-        return p(key.into_cell()?.into(), X::construct_from(cursor)?)
+        return p(SliceData::load_builder(key)?, X::construct_from(cursor)?)
     };
     Ok(result)
 }
@@ -197,13 +197,13 @@ where
         key.append_bit_one()?;
         let left = cursor.checked_drain_reference()?;
         let right = cursor.checked_drain_reference()?;
-        iterate_internal_pairs(&mut left.clone().into(), left_key, Some(right.clone()), func, true)? &&
-        iterate_internal_pairs(&mut right.into(), key, Some(left), func, false)?
+        iterate_internal_pairs(&mut SliceData::load_cell(left.clone())?, left_key, Some(right.clone()), func, true)? &&
+        iterate_internal_pairs(&mut SliceData::load_cell(right.clone())?, key, Some(left), func, false)?
     } else {
         let left = X::construct_from(cursor)?;
         match sibling {
             Some(cell) => {
-                let mut cursor = SliceData::from(cell);
+                let mut cursor = SliceData::load_cell(cell)?;
                 if cursor.get_next_bit()? {
                     func(key, left, None)?
                 } else if check_sibling {
@@ -243,7 +243,7 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
         let mut leaf = false.write_to_new_cell()?;
         value.write_to(&mut leaf)?;
         Ok(Self {
-            data: leaf.into_cell()?.into(),
+            data: SliceData::load_builder(leaf)?,
             phantom: PhantomData::<X>,
         })
     }
@@ -255,7 +255,7 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
         splitter: impl FnOnce(X) -> Result<(X, X)>
     ) -> Result<bool> {
         if let Some(builder) = internal_split(&self.data, key, splitter)? {
-            self.data = builder.into_cell()?.into();
+            self.data = SliceData::load_builder(builder)?;
             Ok(true)
         } else {
             Ok(false)
@@ -269,7 +269,7 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
         merger: impl FnOnce(X, X) -> Result<X>
     ) -> Result<bool> {
         if let Some(builder) = internal_merge(&self.data, key, merger)? {
-            self.data = builder.into_cell()?.into();
+            self.data = SliceData::load_builder(builder)?;
             Ok(true)
         } else {
             Ok(false)
@@ -283,7 +283,7 @@ impl<X: Default + Serializable + Deserializable> BinTree<X> {
         mutator: impl FnOnce(X) -> Result<X>
     ) -> Result<bool> {
         if let Some(builder) = internal_update(&self.data, key, mutator)? {
-            self.data = builder.into_cell()?.into();
+            self.data = SliceData::load_builder(builder)?;
             Ok(true)
         } else {
             Ok(false)
@@ -339,7 +339,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
         aug.write_to(&mut leaf)?;
         Ok(Self {
             extra: aug.clone(),
-            data: leaf.into_cell()?.into(),
+            data: SliceData::load_builder(leaf)?,
             phantom: PhantomData::<X>,
         })
     }
@@ -355,7 +355,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
                 return Ok(None)
             }
             match key.get_next_bit_opt() {
-                Some(x) => cursor = cursor.reference(x)?.into(),
+                Some(x) => cursor = SliceData::load_cell(cursor.reference(x)?)?,
                 None => return Ok(None)
             }
         }
@@ -400,14 +400,14 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
                 return Ok(false)
             }
             if let Some(x) = key.get_next_bit_opt() {
-                let mut cursor = slice.reference(x)?.into();
+                let mut cursor = SliceData::load_cell(slice.reference(x)?)?;
                 if Self::internal_split(&mut cursor, key, value, aug)? {
                     let mut cell = BuilderData::from_slice(&original);
                     cell.replace_reference_cell(x, cursor.into_cell());
                     let mut fork_aug = Y::construct_from(slice)?;
                     fork_aug.calc(aug)?;
                     fork_aug.write_to(&mut cell)?;
-                    *slice = cell.into_cell()?.into();
+                    *slice = SliceData::load_builder(cell)?;
                     return Ok(true)
                 }
             }
@@ -423,7 +423,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
             aug.write_to(&mut cell)?;
             builder.append_reference_cell(cell.into_cell()?);
             fork_aug.write_to(&mut builder)?;
-            *slice = builder.into_cell()?.into();
+            *slice = SliceData::load_builder(builder)?;
             return Ok(true)
         }
         Ok(false)

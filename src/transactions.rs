@@ -264,7 +264,7 @@ impl Deserializable for TrComputePhase {
             let gas_fees = Deserializable::construct_from(cell)?; // gas_fees:Gram
 
             // fields below are serialized into separate cell
-            let sep_cell = &mut cell.checked_drain_reference()?.into();
+            let sep_cell = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
 
             let gas_used = Deserializable::construct_from(sep_cell)?; // gas_used:(VarUInteger 7)
             let gas_limit = Deserializable::construct_from(sep_cell)?; // gas_limit:(VarUInteger 7)
@@ -1537,7 +1537,7 @@ impl Transaction {
         // proof for transaction and block info in block
 
         let usage_tree = UsageTree::with_root(block_root.clone());
-        let block: Block = Block::construct_from(&mut usage_tree.root_slice())?;
+        let block = Block::construct_from_cell(usage_tree.root_cell())?;
 
         block.read_info()?;
 
@@ -1680,7 +1680,7 @@ impl Deserializable for Transaction {
         self.outmsg_cnt = cell.get_next_int(15)? as i16; // outmsg_cnt
         self.orig_status.read_from(cell)?; // orig_status
         self.end_status.read_from(cell)?; // end_status
-        let cell1 = &mut SliceData::from(cell.checked_drain_reference()?);
+        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         if cell1.get_next_bit()? {
             let mut msg = ChildCell::default();
             msg.read_from_reference(cell1)?;

@@ -99,7 +99,7 @@ impl MerkleProof {
             )
         }
         let mut done_cells = HashMap::new();
-        let proof = Self::create_raw(root, &is_include, 0, &mut None, &mut done_cells)?;
+        let proof = Self::create_raw(root, &is_include, &|_| false, 0, &mut None, &mut done_cells)?;
 
         Ok(MerkleProof {
             hash: root.repr_hash(),
@@ -113,9 +113,34 @@ impl MerkleProof {
         MerkleProof::create(root, |h| usage_tree.contains(h))
     }
 
+    pub fn create_with_subtrees(
+        root: &Cell,
+        is_include: impl Fn(&UInt256) -> bool,
+        is_include_subtree: impl Fn(&UInt256) -> bool,
+    ) -> Result<Self> {
+
+        let root_hash = root.repr_hash();
+        if !is_include(&root_hash) && !is_include_subtree(&root_hash) {
+            fail!(
+                BlockError::InvalidArg(
+                    "`bag` doesn't contain any cell to include into proof".to_string()
+                )
+            )
+        }
+        let mut done_cells = HashMap::new();
+        let proof = Self::create_raw(root, &is_include, &is_include_subtree, 0, &mut None, &mut done_cells)?;
+
+        Ok(MerkleProof {
+            hash: root_hash,
+            depth: root.repr_depth(),
+            proof
+        })
+    }
+
     pub fn create_raw(
         cell: &Cell,
         is_include: &impl Fn(&UInt256) -> bool,
+        is_include_subtree: &impl Fn(&UInt256) -> bool,
         merkle_depth: u8,
         pruned_branches: &mut Option<HashSet<UInt256>>,
         done_cells: &mut HashMap<UInt256, Cell>,
@@ -135,8 +160,10 @@ impl MerkleProof {
             let child_repr_hash = child.repr_hash();
             let proof_child = if let Some(c) = done_cells.get(&child_repr_hash) {
                 c.clone()
+            } else if is_include_subtree(&child_repr_hash) {
+                child.clone()
             } else if child.references_count() == 0 || is_include(&child.repr_hash()) {
-                Self::create_raw(&child, is_include, child_merkle_depth, 
+                Self::create_raw(&child, is_include, is_include_subtree, child_merkle_depth, 
                     pruned_branches, done_cells)?
             } else {
                 let pbc = MerkleUpdate::make_pruned_branch_cell(&child, child_merkle_depth)?;
@@ -160,6 +187,11 @@ impl MerkleProof {
 
         Ok(proof_cell)
     }
+
+    pub fn virtualize<T: Deserializable>(&self) -> Result<T> {
+        let virt_root = self.proof.clone().virtualize(1);
+        T::construct_from_cell(virt_root)
+    }
 }
 
 // checks if proof contains correct block info
@@ -176,9 +208,7 @@ pub fn check_block_info_proof(block: &Block, proof_hash: &UInt256, block_hash: &
 /// Proof must contain transaction's root cell and block info
 pub fn check_transaction_proof(proof: &MerkleProof, tr: &Transaction, block_id: &UInt256) -> Result<()> {
 
-    let block_virt_root = proof.proof.clone().virtualize(1);
-
-    let block: Block = Block::construct_from(&mut block_virt_root.into())
+    let block: Block = proof.virtualize()
         .map_err(
             |err| BlockError::WrongMerkleProof(
                 format!("Error extracting block from proof: {}", err)
@@ -281,9 +311,7 @@ fn check_transaction_id(given_id: Option<UInt256>, tr_cell: Option<Cell>) -> Res
 /// Proof must contain message's root cell and block info
 pub fn check_message_proof(proof: &MerkleProof, msg: &Message, block_id: &UInt256, tr_id: Option<UInt256>) -> Result<()> {
 
-    let block_virt_root = proof.proof.clone().virtualize(1);
-
-    let block: Block = Block::construct_from(&mut block_virt_root.into())
+    let block: Block = proof.virtualize()
         .map_err(
             |err| BlockError::WrongMerkleProof(
                 format!("Error extracting block from proof: {}", err)
@@ -359,8 +387,7 @@ pub fn check_account_proof(proof: &MerkleProof, acc: &Account) -> Result<BlockSe
         fail!(BlockError::InvalidData("Account can't be none".to_string()))
     }
 
-    let ss_virt_root = proof.proof.clone().virtualize(1);
-    let ss: ShardStateUnsplit = ShardStateUnsplit::construct_from(&mut ss_virt_root.into())?;
+    let ss: ShardStateUnsplit = proof.virtualize()?;
 
     let accounts = ss.read_accounts()
         .map_err(

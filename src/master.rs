@@ -62,6 +62,15 @@ pub struct ShardIdentFull {
     pub prefix: u64, // with terminated bit!
 }
 
+impl ShardIdentFull {
+    pub fn new(workchain_id: i32, prefix: u64) -> ShardIdentFull {
+        ShardIdentFull {
+            workchain_id,
+            prefix,
+        }
+    }
+}
+
 impl Serializable for ShardIdentFull {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.workchain_id.write_to(cell)?;
@@ -114,7 +123,8 @@ impl ShardHashes {
     where F: FnMut(ShardIdent, ShardDescr, Option<ShardDescr>) -> Result<bool> {
         self.iterate_with_keys(|wc_id: i32, InRefValue(shards)| {
             shards.iterate_pairs(|prefix, shard_descr, sibling| {
-                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix.into_cell()?.into())?;
+                let prefix = SliceData::load_builder(prefix)?;
+                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
                 func(shard_ident, shard_descr, sibling)
             })
         })
@@ -506,7 +516,7 @@ impl Deserializable for McBlockExtra {
         self.shards.read_from(cell)?;
         self.fees.read_from(cell)?;
 
-        let cell1 = &mut cell.checked_drain_reference()?.into();
+        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         self.prev_blk_signatures.read_from(cell1)?;
         self.recover_create_msg = ChildCell::construct_maybe_from_reference(cell1)?;
         self.mint_msg = ChildCell::construct_maybe_from_reference(cell1)?;
@@ -1146,7 +1156,7 @@ impl Deserializable for McStateExtra {
         self.shards.read_from(cell)?;
         self.config.read_from(cell)?;
 
-        let cell1 = &mut cell.checked_drain_reference()?.into();
+        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         let mut flags = 0u16;
         flags.read_from(cell1)?; // 16 + 0
         if flags > 3 {
@@ -1425,11 +1435,11 @@ impl Deserializable for ShardDescr {
             self.fees_collected.read_from(slice)?;
             self.funds_created.read_from(slice)?;
         } else if tag == SHARD_IDENT_TAG_A {
-            let mut slice1 = slice.checked_drain_reference()?.into();
+            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
             self.fees_collected.read_from(&mut slice1)?;
             self.funds_created.read_from(&mut slice1)?;
         } else if tag == SHARD_IDENT_TAG_C {
-            let mut slice1 = slice.checked_drain_reference()?.into();
+            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
             self.fees_collected.read_from(&mut slice1)?;
             self.funds_created.read_from(&mut slice1)?;
             self.copyleft_rewards.read_from(&mut slice1)?;

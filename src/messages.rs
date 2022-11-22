@@ -1394,7 +1394,7 @@ impl Message {
 
         let msg_hash = self.hash()?;
         let usage_tree = UsageTree::with_root(block_root.clone());
-        let block: Block = Block::construct_from(&mut usage_tree.root_slice()).unwrap();
+        let block = Block::construct_from_cell(usage_tree.root_cell()).unwrap();
 
         block.read_info()?;
 
@@ -1536,8 +1536,8 @@ impl Deserializable for Message {
             let mut init = StateInit::default();
             if cell.get_next_bit()? { // either of init
                 // read from reference
-                let mut r = cell.checked_drain_reference()?.into();
-                init.read_from(&mut r)?;
+                let r = cell.checked_drain_reference()?;
+                init.read_from_cell(r)?;
                 self.init = Some(init);
                 self.init_to_ref = Some(true);
             } else { // read from current cell
@@ -1558,7 +1558,7 @@ impl Deserializable for Message {
 
         self.body = if cell.get_next_bit()? { // body in reference
             self.body_to_ref = Some(true);
-            Some(cell.checked_drain_reference()?.into())
+            Some(SliceData::load_cell(cell.checked_drain_reference()?)?)
         } else {
             self.body_to_ref = Some(false);
             if cell.is_empty() { // no body
@@ -1877,7 +1877,7 @@ pub fn generate_big_msg() -> Message {
     body.append_reference_cell(body1.into_cell().unwrap());
 
     msg.set_state_init(stinit);
-    msg.set_body(body.into_cell().unwrap().into());
+    msg.set_body(SliceData::load_builder(body).unwrap());
 
     msg
 }
