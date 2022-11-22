@@ -356,6 +356,7 @@ pub enum GlobalCapabilities {
     CapIndexAccounts          = 0x080000,
     #[cfg(feature = "gosh")]
     CapDiff                   = 0x100000,
+    CapsTvmBugfixes2022       = 0x200000, // popsave, exception handler, loops
 }
 
 impl ConfigParams {
