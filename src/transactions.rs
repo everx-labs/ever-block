@@ -20,7 +20,7 @@ use crate::{
     merkle_proof::MerkleProof,
     messages::{generate_big_msg, Message},
     shard::ShardStateUnsplit,
-    types::{AddSub, ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
+    types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
 };
 use std::{fmt, sync::Arc};
@@ -129,7 +129,7 @@ tr_phase_compute_vm$1
     success:Bool
     msg_state_used:Bool
     account_activated:Bool
-    gas_fees:Gram // is it spec's typo? I think should be "Grams"
+    gas_fees:Grams
     _:^[
         gas_used:(VarUInteger 7)
         gas_limit:(VarUInteger 7)
@@ -310,14 +310,6 @@ pub struct TrStoragePhase {
 }
 
 impl TrStoragePhase {
-    pub fn new() -> Self {
-        Self {
-            storage_fees_collected: Grams::default(),
-            storage_fees_due: None,
-            status_change: AccStatusChange::default()
-
-        }
-    }
     pub const fn with_params(collected: Grams, due: Option<Grams>, status: AccStatusChange) -> Self {
         TrStoragePhase {
             storage_fees_collected: collected,
@@ -1405,7 +1397,7 @@ impl Transaction {
 
     /// add fee
     pub fn add_fee_grams(&mut self, fee: &Grams) -> Result<bool> {
-        self.total_fees.grams.add(fee)
+        crate::types::AddSub::add(&mut self.total_fees.grams, fee)
     }
 
     /// set total fees

@@ -151,6 +151,17 @@ validator#53
     public_key:SigPubKey 
     weight:uint64 
 = ValidatorDescr;
+validator#73 
+    public_key:SigPubKey 
+    weight:uint64 
+    adnl_addr:bits256
+= ValidatorDescr;
+validator#93 
+    public_key:SigPubKey 
+    weight:uint64 
+    adnl_addr:bits256
+    mc_seq_no_since:u32
+= ValidatorDescr;
 */
 
 ///
@@ -478,7 +489,7 @@ impl ValidatorSet {
         let is_master = (shard_pfx == SHARD_FULL) && (workchain_id == MASTERCHAIN_ID);
 
         let subset = if is_master {
-            let count = min(self.total.0, self.main.0) as usize;
+            let count = min(self.total.as_usize(), self.main.as_usize());
             if !cc_config.shuffle_mc_validators {
                 self.list[0..count].to_vec()
             } else {
@@ -500,12 +511,12 @@ impl ValidatorSet {
         } else {
             let mut prng = ValidatorSetPRNG::new(shard_pfx, workchain_id, cc_seqno);
             let full_list = if cc_config.isolate_mc_validators {
-                if self.total.0 <= self.main.0 {
+                if self.total <= self.main {
                     fail!("Count of validators is too small to make sharde's subset while `isolate_mc_validators` flag is set")
                 }
-                let list = self.list[self.main.0 as usize..].to_vec();
+                let list = self.list[self.main.as_usize()..].to_vec();
                 Cow::Owned(
-                    Self::new(self.utime_since, self.utime_until, self.main.0 as u16, list)?
+                    Self::new(self.utime_since, self.utime_until, self.main.as_u16(), list)?
                 )
 
             } else {
@@ -625,7 +636,7 @@ impl Deserializable for ValidatorSet {
         self.list.clear();
         let mut total_weight = 0;
         for i in 0..self.total.as_u16() {
-            let mut val = validators.get(&(i as u16))?.ok_or_else(|| 
+            let mut val = validators.get(&i)?.ok_or_else(|| 
                 BlockError::InvalidData(format!("Validator's hash map doesn't \
                     contain validator with index {}", i)))?;
             val.prev_weight_sum = total_weight;
@@ -644,7 +655,7 @@ impl Deserializable for ValidatorSet {
         if self.main > self.total {
             fail!(BlockError::InvalidData("main > total while read ValidatorSet".to_string()))
         }
-        if self.main < Number16(1) {
+        if self.main < Number16::new(1)? {
             fail!(BlockError::InvalidData("main < 1 while read ValidatorSet".to_string()))
         }
         Ok(())

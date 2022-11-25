@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2022 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -170,7 +170,6 @@ pub trait Deserializable: Default {
     }
     fn construct_from_cell(cell: Cell) -> Result<Self> {
         Self::construct_from(&mut SliceData::load_cell(cell)?)
-            .map_err(|err| error!("bad deserialization {}: {:?}", std::any::type_name::<Self>(), err))
     }
     fn construct_from_reference(slice: &mut SliceData) -> Result<Self> {
         Self::construct_from_cell(slice.checked_drain_reference()?)
