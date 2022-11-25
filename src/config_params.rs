@@ -2070,12 +2070,12 @@ impl WorkchainFormat0 {
     ///
     /// Create empty new instance of WorkchainFormat0
     /// 
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            min_addr_len: Number12(64),
-            max_addr_len: Number12(64),
-            addr_len_step: Number12(0),
-            workchain_type_id: Number32(1)
+            min_addr_len: Number12::from(64),
+            max_addr_len: Number12::from(64),
+            addr_len_step: Number12::from(0),
+            workchain_type_id: Number32::from(1)
         }
     }
 
@@ -2088,10 +2088,10 @@ impl WorkchainFormat0 {
            workchain_type_id >= 1 {
                Ok(
                    WorkchainFormat0 {
-                        min_addr_len: Number12(min_addr_len as u32),
-                        max_addr_len: Number12(max_addr_len as u32),
-                        addr_len_step: Number12(addr_len_step as u32),
-                        workchain_type_id: Number32(workchain_type_id as u32), 
+                        min_addr_len: Number12::new(min_addr_len as u32)?,
+                        max_addr_len: Number12::new(max_addr_len as u32)?,
+                        addr_len_step: Number12::new(addr_len_step as u32)?,
+                        workchain_type_id: Number32::new(workchain_type_id as u32)?,
                    }
                )
            }
@@ -2110,7 +2110,7 @@ impl WorkchainFormat0 {
     /// Getter for min_addr_len
     /// 
     pub fn min_addr_len(&self) -> u16 {
-        self.min_addr_len.0 as u16
+        self.min_addr_len.as_u16()
     }
 
     ///
@@ -2118,7 +2118,7 @@ impl WorkchainFormat0 {
     /// 
     pub fn set_min_addr_len(&mut self, min_addr_len: u16) -> Result<()> {
         if (64..=1023).contains(&min_addr_len) {
-            self.min_addr_len.0 = min_addr_len as u32;
+            self.min_addr_len = Number12::new(min_addr_len as u32)?;
             Ok(())
         } else {
             fail!(
@@ -2133,15 +2133,15 @@ impl WorkchainFormat0 {
     /// Getter for min_addr_len
     /// 
     pub fn max_addr_len(&self) -> u16 {
-        self.max_addr_len.0 as u16
+        self.max_addr_len.as_u16()
     }
 
     ///
     /// Setter for max_addr_len
     /// 
     pub fn set_max_addr_len(&mut self, max_addr_len: u16) -> Result<()> {
-        if (64..=1024).contains(&max_addr_len) && self.min_addr_len.0 <= max_addr_len as u32 {
-            self.max_addr_len.0 = max_addr_len as u32;
+        if (64..=1024).contains(&max_addr_len) && self.min_addr_len <= max_addr_len as u32 {
+            self.max_addr_len = Number12::new(max_addr_len as u32)?;
             Ok(())
         } else {
             fail!(
@@ -2157,7 +2157,7 @@ impl WorkchainFormat0 {
     /// Getter for addr_len_step
     /// 
     pub fn addr_len_step(&self) -> u16 {
-        self.addr_len_step.0 as u16
+        self.addr_len_step.as_u16()
     }
 
     ///
@@ -2165,7 +2165,7 @@ impl WorkchainFormat0 {
     /// 
     pub fn set_addr_len_step(&mut self, addr_len_step: u16) -> Result<()> {
         if addr_len_step <= 1024 {
-            self.addr_len_step.0 = addr_len_step as u32;
+            self.addr_len_step = Number12::new(addr_len_step as u32)?;
             Ok(())
         } else {
             fail!(
@@ -2178,7 +2178,7 @@ impl WorkchainFormat0 {
     /// Getter for workchain_type_id
     /// 
     pub fn workchain_type_id(&self) -> u32 {
-        self.workchain_type_id.0
+        self.workchain_type_id.as_u32()
     }
 
     ///
@@ -2186,7 +2186,7 @@ impl WorkchainFormat0 {
     /// 
     pub fn set_workchain_type_id(&mut self, workchain_type_id: u32) -> Result<()> {
         if workchain_type_id >= 1 {
-            self.workchain_type_id.0 = workchain_type_id;
+            self.workchain_type_id = Number32::new(workchain_type_id)?;
             Ok(())
         } else {
             fail!(
@@ -2202,9 +2202,9 @@ impl Deserializable for WorkchainFormat0 {
         let max_addr_len = Number12::construct_from(slice)?;
         let addr_len_step = Number12::construct_from(slice)?;
         let workchain_type_id = Number32::construct_from(slice)?;
-        if min_addr_len.0 >= 64 && min_addr_len.0 <= max_addr_len.0 &&
-           max_addr_len.0 <= 1023 && addr_len_step.0 <= 1023 &&
-           workchain_type_id.0 >= 1 {
+        if min_addr_len >= 64 && min_addr_len <= max_addr_len &&
+           max_addr_len <= 1023 && addr_len_step <= 1023 &&
+           workchain_type_id >= 1 {
                 Ok(Self {
                     min_addr_len,
                     max_addr_len,
@@ -2224,9 +2224,9 @@ impl Deserializable for WorkchainFormat0 {
 
 impl Serializable for WorkchainFormat0 {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        if self.min_addr_len.0 >= 64 && self.min_addr_len.0 <= self.max_addr_len.0 &&
-           self.max_addr_len.0 <= 1023 && self.addr_len_step.0 <= 1023 &&
-           self.workchain_type_id.0 >= 1 {
+        if self.min_addr_len >= 64 && self.min_addr_len <= self.max_addr_len &&
+           self.max_addr_len <= 1023 && self.addr_len_step <= 1023 &&
+           self.workchain_type_id >= 1 {
                 self.min_addr_len.write_to(cell)?;
                 self.max_addr_len.write_to(cell)?;
                 self.addr_len_step.write_to(cell)?;
@@ -2368,19 +2368,19 @@ impl Deserializable for WorkchainDescr {
         self.enabled_since.read_from(cell)?;
         let mut min = Number8::default();
         min.read_from(cell)?;
-        self.actual_min_split = min.0 as u8;
+        self.actual_min_split = min.as_u8();
         let mut min = Number8::default();
         min.read_from(cell)?;
-        self.min_split = min.0 as u8;
+        self.min_split = min.as_u8();
         let mut max = Number8::default();
         max.read_from(cell)?;
-        self.max_split = max.0 as u8;
+        self.max_split = max.as_u8();
         cell.get_next_bit()?; // basic
         self.active = cell.get_next_bit()?;
         self.accept_msgs = cell.get_next_bit()?;
         let mut flags = Number13::default();
         flags.read_from(cell)?;
-        self.flags = flags.0 as u16;
+        self.flags = flags.as_u16();
         self.zerostate_root_hash.read_from(cell)?;
         self.zerostate_file_hash.read_from(cell)?;
         self.version.read_from(cell)?;
@@ -2398,13 +2398,13 @@ impl Serializable for WorkchainDescr {
 
             self.enabled_since.write_to(cell)?;
 
-            let min = Number8(self.actual_min_split as u32);
+            let min = Number8::new(self.actual_min_split as u32)?;
             min.write_to(cell)?;
 
-            let min = Number8(self.min_split as u32);
+            let min = Number8::new(self.min_split as u32)?;
             min.write_to(cell)?;
 
-            let max = Number8(self.max_split as u32);
+            let max = Number8::new(self.max_split as u32)?;
             max.write_to(cell)?;
 
             if let WorkchainFormat::Basic(_) = self.format {
@@ -2425,7 +2425,7 @@ impl Serializable for WorkchainDescr {
                 cell.append_bit_zero()?;
             }
 
-            let flags = Number13(self.flags as u32);
+            let flags = Number13::new(self.flags as u32)?;
             flags.write_to(cell)?;
             self.zerostate_root_hash.write_to(cell)?;
             self.zerostate_file_hash.write_to(cell)?;
@@ -2587,9 +2587,6 @@ pub type ConfigParam11 = ConfigVotingSetup;
 /*
 _ workchains:(HashmapE 32 WorkchainDescr) = ConfigParam 12;
 */
-
-
-
 define_HashmapE!{Workchains, 32, WorkchainDescr}
 
 ///

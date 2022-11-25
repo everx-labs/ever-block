@@ -11,8 +11,6 @@
 * limitations under the License.
 */
 
-use ton_types::types::ExceptionCode;
-
 #[derive(Debug, failure::Fail)]
 pub enum BlockError {
     /// Fatal error.
@@ -45,9 +43,6 @@ pub enum BlockError {
     /// Attempting to read data from pruned branch cell.
     #[fail(display = "Attempting to read {} from pruned branch cell", 0)]
     PrunedCellAccess(String),
-    /// TVM Exception
-    #[fail(display = "VM Exception, code: {}", 0)]
-    TvmException(ExceptionCode),
     /// Wrong hash.
     #[fail(display = "Wrong hash")]
     WrongHash,

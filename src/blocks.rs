@@ -1086,7 +1086,7 @@ impl Serializable for BlockInfo {
 
         // shard:ShardIdent
         self.shard.write_to(cell)?;
-        cell.append_u32(self.gen_utime.0)?
+        cell.append_u32(self.gen_utime.as_u32())?
             .append_u64(self.start_lt)?
             .append_u64(self.end_lt)?
             .append_u32(self.gen_validator_list_hash_short)?
@@ -1211,7 +1211,7 @@ impl Deserializable for BlockInfo {
         self.set_seq_no(seq_no)?;
         let vert_seq_no = cell.get_next_u32()?;
         self.shard.read_from(cell)?;
-        self.gen_utime.0 = cell.get_next_u32()?;
+        self.gen_utime = cell.get_next_u32()?.into();
         self.start_lt = cell.get_next_u64()?;
         self.end_lt = cell.get_next_u64()?;
         self.gen_validator_list_hash_short = cell.get_next_u32()?;
@@ -1413,12 +1413,12 @@ impl Deserializable for TopBlockDescr {
             let mut slice = slice.clone();
             for i in (0..len).rev() {
                 if slice.remaining_references() == 0 {
-                    fail!(BlockError::TvmException(ExceptionCode::CellUnderflow))
+                    fail!(ExceptionCode::CellUnderflow)
                 }
                 self.chain.push(slice.checked_drain_reference()?);
                 if i != 0 {
                     if slice.remaining_references() == 0 {
-                        fail!(BlockError::TvmException(ExceptionCode::CellUnderflow))
+                        fail!(ExceptionCode::CellUnderflow)
                     }
                     slice = SliceData::load_cell(slice.checked_drain_reference()?)?;
                 }

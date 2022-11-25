@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2022 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -551,7 +551,7 @@ impl AccountStuff {
         let cell = self.storage.serialize()?;
         self.storage_stat.used.bits = VarUInteger7::new(cell.tree_bits_count())?;
         self.storage_stat.used.cells = VarUInteger7::new(cell.tree_cell_count())?;
-        self.storage_stat.used.public_cells = 0u32.into();
+        self.storage_stat.used.public_cells = VarUInteger7::default();
         Ok(())
     }
 }
@@ -1355,7 +1355,7 @@ pub fn generate_test_account_by_init_code_hash(init_code_hash: bool) -> Account 
     );
 
     //let st_used = StorageUsed::with_values(1,2,3,4,5);
-    let g = Some(111u32.into());
+    let g = Some(111.into());
     let st_info = StorageInfo::with_values(123456789, g);
     
     let mut stinit = StateInit::default();
@@ -1380,7 +1380,7 @@ pub fn generate_test_account_by_init_code_hash(init_code_hash: bool) -> Account 
     stinit.set_library_code(library.into_cell(), true).unwrap();
 
     let mut balance = CurrencyCollection::default();
-    balance.grams = 100000000000u64.into();
+    balance.grams = 100000000000.into();
     balance.set_other(1, 100).unwrap();
     balance.set_other(2, 200).unwrap();
     balance.set_other(3, 300).unwrap();
