@@ -83,6 +83,8 @@ use ton_types::{
     BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
 };
 
+include!("../common/src/info.rs");
+
 impl<K, V> Serializable for HashMap<K, V>
 where
     K: Clone + Eq + Hash + Default + Deserializable + Serializable,

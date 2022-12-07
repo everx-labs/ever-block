@@ -198,7 +198,7 @@ where
         let left = cursor.checked_drain_reference()?;
         let right = cursor.checked_drain_reference()?;
         iterate_internal_pairs(&mut SliceData::load_cell(left.clone())?, left_key, Some(right.clone()), func, true)? &&
-        iterate_internal_pairs(&mut SliceData::load_cell(right.clone())?, key, Some(left), func, false)?
+        iterate_internal_pairs(&mut SliceData::load_cell(right)?, key, Some(left), func, false)?
     } else {
         let left = X::construct_from(cursor)?;
         match sibling {

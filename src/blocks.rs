@@ -153,16 +153,18 @@ impl FromStr for BlockIdExt {
             .trim()
             .parse()
             .map_err(|e| error!("Can't read seq_no from {}: {}", s, e))?;
-        let root_hash = UInt256::from_str(parts
+        let root_hash = parts
             .next()
             .ok_or_else(|| error!("Can't read root_hash from {}", s))?
             .trim_start_matches(" rh ")
-        ).map_err(|e| error!("Can't read root_hash from {}: {}", s, e))?;
-        let file_hash = UInt256::from_str(parts
+            .parse()
+            .map_err(|e| error!("Can't read root_hash from {}: {}", s, e))?;
+        let file_hash = parts
             .next()
             .ok_or_else(|| error!("Can't read file_hash from {}", s))?
             .trim_start_matches(" fh ")
-        ).map_err(|e| error!("Can't read file_hash from {}: {}", s, e))?;
+            .parse()
+            .map_err(|e| error!("Can't read file_hash from {}: {}", s, e))?;
         Ok(Self::with_params(
             ShardIdent::with_tagged_prefix(workchain_id, shard)?,
             seq_no,

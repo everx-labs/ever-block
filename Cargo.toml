@@ -1,8 +1,8 @@
 [package]
-build = 'build.rs'
+build = 'common/build/build.rs'
 edition = '2021'
 name = 'ton_block'
-version = '1.9.9'
+version = '1.9.10'
 
 [dependencies]
 base64 = '0.13'

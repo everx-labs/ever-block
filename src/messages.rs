@@ -317,7 +317,7 @@ impl FromStr for MsgAddress {
                 )
             )?;
 
-        if workchain_id < 128 && workchain_id >= -128 {
+        if (-128..128).contains(&workchain_id) {
             if address.remaining_bits() != 256 {
                 fail!(
                     BlockError::InvalidArg(
@@ -1513,7 +1513,7 @@ impl Message {
 impl Serializable for Message {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         // first try to serialize as it was
-        if self.body_to_ref != None || self.init_to_ref != None {
+        if self.body_to_ref.is_some() || self.init_to_ref.is_none() {
             let b = builder.clone();
             if self.serialize_with_params(builder, &self.body_to_ref, &self.init_to_ref).is_ok() {
                 return Ok(())
