@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version: 1.9.7
+
+### New
+- Add common as submodule
+
 ## Version: 1.9.0
 
 ### New

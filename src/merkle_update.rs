@@ -290,6 +290,7 @@ impl MerkleUpdate {
     /// Recursive traverse merkle update tree while merkle update applying
     /// `cell` ordinary cell from merkle update's new tree;
     /// `old_cells` cells from old bag of cells;
+    #[allow(clippy::only_used_in_recursion)]
     fn traverse_on_apply(&self,
         update_cell: &Cell,
         old_cells: &HashMap<UInt256, Cell>,

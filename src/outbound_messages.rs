@@ -425,7 +425,7 @@ impl OutMsgQueueInfo {
         }
 
         let proof = MerkleProof::create_with_subtrees(
-            &shard_state_root,
+            shard_state_root,
             |h| usage_tree.contains(h),
             |h| roots.contains(h)
         )?;
@@ -673,7 +673,10 @@ impl OutMsg {
     }
 
     pub fn read_transaction(&self) -> Result<Option<Transaction>> {
-        self.transaction_cell().map(|cell| Transaction::construct_from_cell(cell)).transpose()
+        match self.transaction_cell() {
+            Some(cell) => Ok(Some(Transaction::construct_from_cell(cell)?)),
+            None => Ok(None)
+        }
     }
 
     pub fn read_reimport_message(&self) -> Result<Option<InMsg>> {
