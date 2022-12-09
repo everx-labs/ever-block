@@ -55,7 +55,7 @@ impl Default for MerkleUpdate {
 
 impl Deserializable for MerkleUpdate {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        if CellType::from(cell.get_next_byte()?) != CellType::MerkleUpdate {
+        if CellType::try_from(cell.get_next_byte()?)? != CellType::MerkleUpdate {
             fail!(
                 BlockError::InvalidData("invalid Merkle update root's cell type".to_string())
             )

@@ -48,7 +48,7 @@ impl Default for MerkleProof {
 
 impl Deserializable for MerkleProof {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        if CellType::from(cell.get_next_byte()?) != CellType::MerkleProof {
+        if CellType::try_from(cell.get_next_byte()?)? != CellType::MerkleProof {
             fail!(
                 BlockError::InvalidData("invalid Merkle proof root's cell type".to_string())
             )
