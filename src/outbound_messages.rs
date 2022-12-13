@@ -110,7 +110,7 @@ impl Augmentation<u64> for EnqueuedMsg {
 impl Serializable for EnqueuedMsg {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.enqueued_lt.write_to(cell)?;
-        cell.append_reference_cell(self.out_msg.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
         Ok(())
     }
 }
@@ -855,8 +855,8 @@ impl OutMsgExternal {
 
 impl Serializable for OutMsgExternal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
+        cell.checked_append_reference(self.msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
         Ok(())
     }
 }
@@ -916,9 +916,9 @@ impl OutMsgImmediate {
 
 impl Serializable for OutMsgImmediate {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
-        cell.append_reference_cell(self.reimport.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
+        cell.checked_append_reference(self.reimport.cell())?;
         Ok(())
     }
 }
@@ -969,8 +969,8 @@ impl OutMsgNew {
 
 impl Serializable for OutMsgNew {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
         Ok(())
     }
 }
@@ -1020,8 +1020,8 @@ impl OutMsgTransit {
 
 impl Serializable for OutMsgTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.imported.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.imported.cell())?;
         Ok(())
     }
 }
@@ -1071,8 +1071,8 @@ impl OutMsgDequeueImmediate {
 
 impl Serializable for OutMsgDequeueImmediate {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.reimport.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.reimport.cell())?;
         Ok(())
     }
 }
@@ -1126,7 +1126,7 @@ impl OutMsgDequeue {
 
 impl Serializable for OutMsgDequeue {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
         cell.append_bits(self.import_block_lt as usize, 63)?;
         Ok(())
     }
@@ -1209,8 +1209,8 @@ impl OutMsgTransitRequeued {
 
 impl Serializable for OutMsgTransitRequeued {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.imported.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.imported.cell())?;
         Ok(())
     }
 }

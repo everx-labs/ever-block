@@ -108,8 +108,8 @@ impl Serializable for MerkleUpdate {
         self.new_hash.write_to(cell)?;
         cell.append_u16(self.old_depth)?;
         cell.append_u16(self.new_depth)?;
-        cell.append_reference_cell(self.old.clone());
-        cell.append_reference_cell(self.new.clone());
+        cell.checked_append_reference(self.old.clone())?;
+        cell.checked_append_reference(self.new.clone())?;
         cell.set_level_mask(LevelMask::for_merkle_cell(self.old.level_mask() | self.new.level_mask()));
         Ok(())
     }
@@ -341,7 +341,7 @@ impl MerkleUpdate {
                 _ => fail!("Unknown cell type while applying merkle update!")
             };
             child_mask |= new_child.level_mask();
-            new_cell.append_reference_cell(new_child);
+            new_cell.checked_append_reference(new_child)?;
         }
 
         new_cell.set_level_mask(if update_cell.is_merkle() {
@@ -371,7 +371,7 @@ impl MerkleUpdate {
                     Self::traverse_new_on_create(child, common_pruned)?.into_cell()?
                 };
             level_mask |= update_child.level_mask();
-            new_update_cell.append_reference_cell(update_child);
+            new_update_cell.checked_append_reference(update_child)?;
         }
 
         new_update_cell.set_level_mask(if new_cell.is_merkle() {
@@ -435,7 +435,7 @@ impl MerkleUpdate {
                     Some(child) => child
                 };
                 child_mask |= child.level_mask();
-                old_update_cell.append_reference_cell(child.into_cell()?);
+                old_update_cell.checked_append_reference(child.into_cell()?)?;
             }
             old_update_cell.set_level_mask(if old_cell.is_merkle() {
                 LevelMask::for_merkle_cell(child_mask)

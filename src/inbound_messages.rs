@@ -491,8 +491,8 @@ impl InMsgExternal {
 
 impl Serializable for InMsgExternal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
+        cell.checked_append_reference(self.msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
         Ok(())
     }
 }
@@ -552,10 +552,10 @@ impl InMsgIHR {
 
 impl Serializable for InMsgIHR {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
+        cell.checked_append_reference(self.msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
         self.ihr_fee.write_to(cell)?;
-        cell.append_reference_cell(self.proof_created.clone());
+        cell.checked_append_reference(self.proof_created.clone())?;
         Ok(())
     }
 }
@@ -613,8 +613,8 @@ impl InMsgFinal {
 
 impl Serializable for InMsgFinal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.in_msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
+        cell.checked_append_reference(self.in_msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
         self.fwd_fee.write_to(cell)?;
         Ok(())
     }
@@ -672,8 +672,8 @@ impl InMsgTransit {
 
 impl Serializable for InMsgTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.in_msg.cell());
-        cell.append_reference_cell(self.out_msg.cell());
+        cell.checked_append_reference(self.in_msg.cell())?;
+        cell.checked_append_reference(self.out_msg.cell())?;
         self.transit_fee.write_to(cell)?;
         Ok(())
     }
@@ -731,7 +731,7 @@ impl InMsgDiscardedFinal {
 
 impl Serializable for InMsgDiscardedFinal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.in_msg.cell());
+        cell.checked_append_reference(self.in_msg.cell())?;
         self.transaction_id.write_to(cell)?;
         self.fwd_fee.write_to(cell)?;
         Ok(())
@@ -796,10 +796,10 @@ impl InMsgDiscardedTransit {
 
 impl Serializable for InMsgDiscardedTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.in_msg.cell());
+        cell.checked_append_reference(self.in_msg.cell())?;
         self.transaction_id.write_to(cell)?;
         self.fwd_fee.write_to(cell)?;
-        cell.append_reference_cell(self.proof_delivered.clone());
+        cell.checked_append_reference(self.proof_delivered.clone())?;
         Ok(())
     }
 }

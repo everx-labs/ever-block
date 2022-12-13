@@ -538,8 +538,8 @@ impl Serializable for BlkPrevInfo {
                 prev.write_to(cell)?;
             }
             BlkPrevInfo::Blocks{prev1, prev2} => {
-                cell.append_reference_cell(prev1.cell());
-                cell.append_reference_cell(prev2.cell());
+                cell.checked_append_reference(prev1.cell())?;
+                cell.checked_append_reference(prev2.cell())?;
             },
         }
         Ok(())
@@ -857,15 +857,15 @@ impl Deserializable for BlockExtra {
 impl Serializable for BlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u32(BLOCK_EXTRA_TAG)?;
-        cell.append_reference_cell(self.in_msg_descr.cell());
-        cell.append_reference_cell(self.out_msg_descr.cell());
-        cell.append_reference_cell(self.account_blocks.cell());
+        cell.checked_append_reference(self.in_msg_descr.cell())?;
+        cell.checked_append_reference(self.out_msg_descr.cell())?;
+        cell.checked_append_reference(self.account_blocks.cell())?;
 
         self.rand_seed.write_to(cell)?;
         self.created_by.write_to(cell)?;
         if let Some(custrom) = &self.custom {
             cell.append_bit_one()?;
-            cell.append_reference_cell(custrom.cell());
+            cell.checked_append_reference(custrom.cell())?;
         } else {
             cell.append_bit_zero()?;
         }
@@ -1107,11 +1107,11 @@ impl Serializable for BlockInfo {
         }
 
         if let Some(ref master) = self.master_ref {
-            cell.append_reference_cell(master.cell());
+            cell.checked_append_reference(master.cell())?;
         }
-        cell.append_reference_cell(self.prev_ref.cell());
+        cell.checked_append_reference(self.prev_ref.cell())?;
         if let Some(prev_vert_ref) = self.prev_vert_ref.as_ref() {
-            cell.append_reference_cell(prev_vert_ref.cell());
+            cell.checked_append_reference(prev_vert_ref.cell())?;
         }
 
         Ok(())
@@ -1135,7 +1135,7 @@ impl Serializable for ValueFlow {
         self.to_next_blk.write_to(&mut cell1)?;
         self.imported.write_to(&mut cell1)?;
         self.exported.write_to(&mut cell1)?;
-        cell.append_reference_cell(cell1.into_cell()?);
+        cell.checked_append_reference(cell1.into_cell()?)?;
         self.fees_collected.write_to(cell)?;
 
         let mut cell2 = BuilderData::new();
@@ -1143,7 +1143,7 @@ impl Serializable for ValueFlow {
         self.recovered.write_to(&mut cell2)?;
         self.created.write_to(&mut cell2)?;
         self.minted.write_to(&mut cell2)?;
-        cell.append_reference_cell(cell2.into_cell()?);
+        cell.checked_append_reference(cell2.into_cell()?)?;
 
         if !self.copyleft_rewards.is_empty() {
             self.copyleft_rewards.write_to(cell)?;
@@ -1287,19 +1287,19 @@ impl Serializable for Block {
         };
         builder.append_u32(tag)?;
         builder.append_i32(self.global_id)?;
-        builder.append_reference_cell(self.info.cell()); // info:^BlockInfo
-        builder.append_reference_cell(self.value_flow.cell()); // value_flow:^ValueFlow
+        builder.checked_append_reference(self.info.cell())?; // info:^BlockInfo
+        builder.checked_append_reference(self.value_flow.cell())?; // value_flow:^ValueFlow
         if tag == BLOCK_TAG_1 {
-            builder.append_reference_cell(self.state_update.cell()); // state_update:^(MERKLE_UPDATE ShardState)
+            builder.checked_append_reference(self.state_update.cell())?; // state_update:^(MERKLE_UPDATE ShardState)
         } else {
             let mut builder2 = BuilderData::new();
-            builder2.append_reference_cell(self.state_update.cell());
+            builder2.checked_append_reference(self.state_update.cell())?;
             if let Some(qu) = &self.out_msg_queue_updates {
                 qu.write_to(&mut builder2)?;
             }
             builder.append_reference(builder2);
         }
-        builder.append_reference_cell(self.extra.cell()); // extra:^BlockExtra
+        builder.checked_append_reference(self.extra.cell())?; // extra:^BlockExtra
         Ok(())
     }
 }
@@ -1378,9 +1378,9 @@ impl Serializable for TopBlockDescr {
         let mut prev = BuilderData::new();
         for (i, c) in self.chain.iter().rev().enumerate() {
             let mut builder = BuilderData::new();
-            builder.append_reference_cell(c.clone());
+            builder.checked_append_reference(c.clone())?;
             if i != 0 {
-                builder.append_reference_cell(prev.into_cell()?);
+                builder.checked_append_reference(prev.into_cell()?)?;
             }
             prev = builder;
         }

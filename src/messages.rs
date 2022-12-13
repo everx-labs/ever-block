@@ -1873,8 +1873,8 @@ pub fn generate_big_msg() -> Message {
                  0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,
                  0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0x80]));
 
-    body1.append_reference_cell(body2.into_cell().unwrap());
-    body.append_reference_cell(body1.into_cell().unwrap());
+    body1.checked_append_reference(body2.into_cell().unwrap()).unwrap();
+    body.checked_append_reference(body1.into_cell().unwrap()).unwrap();
 
     msg.set_state_init(stinit);
     msg.set_body(SliceData::load_builder(body).unwrap());

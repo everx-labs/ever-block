@@ -358,6 +358,7 @@ pub enum GlobalCapabilities {
     CapDiff                   = 0x100000,
     CapsTvmBugfixes2022       = 0x200000, // popsave, exception handler, loops
     CapWc2WcQueueUpdates      = 0x400000,
+    CapTvmFixContSerialize    = 0x800000,
 }
 
 impl ConfigParams {
@@ -483,15 +484,8 @@ impl Deserializable for ConfigParams {
 
 impl Serializable for ConfigParams {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        if self.config_params.is_empty() {
-            // Due to ChildCell it is need sometimes to serialize default ConfigParams.
-            // So need to wtite something.
-            cell.append_reference_cell(Cell::default());
-        } else {
-            cell.append_reference_cell(self.config_params.data().unwrap().clone());
-        }
+        cell.checked_append_reference(self.config_params.data().cloned().unwrap_or_default())?;
         self.config_addr.write_to(cell)?;
-        
         Ok(())
     }
 }
@@ -602,46 +596,46 @@ impl ConfigParamEnum {
     /// Save config to cell
     pub fn write_to_cell(&self, cell: &mut BuilderData) -> Result<u32> {
         match self {
-            ConfigParamEnum::ConfigParam0(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(0)},
-            ConfigParamEnum::ConfigParam1(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(1)},
-            ConfigParamEnum::ConfigParam2(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(2)},
-            ConfigParamEnum::ConfigParam3(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(3)},
-            ConfigParamEnum::ConfigParam4(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(4)},
-            ConfigParamEnum::ConfigParam5(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(5)},
-            ConfigParamEnum::ConfigParam6(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(6)},
-            ConfigParamEnum::ConfigParam7(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(7)},
-            ConfigParamEnum::ConfigParam8(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(8)},
-            ConfigParamEnum::ConfigParam9(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(9)},
-            ConfigParamEnum::ConfigParam10(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(10)},
-            ConfigParamEnum::ConfigParam11(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(11)},
-            ConfigParamEnum::ConfigParam12(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(12)},
-            ConfigParamEnum::ConfigParam13(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(13)},
-            ConfigParamEnum::ConfigParam14(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(14)},
-            ConfigParamEnum::ConfigParam15(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(15)},
-            ConfigParamEnum::ConfigParam16(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(16)},
-            ConfigParamEnum::ConfigParam17(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(17)},
-            ConfigParamEnum::ConfigParam18(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(18)},
-            ConfigParamEnum::ConfigParam20(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(20)},
-            ConfigParamEnum::ConfigParam21(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(21)},
-            ConfigParamEnum::ConfigParam22(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(22)},
-            ConfigParamEnum::ConfigParam23(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(23)},
-            ConfigParamEnum::ConfigParam24(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(24)},
-            ConfigParamEnum::ConfigParam25(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(25)},
-            ConfigParamEnum::ConfigParam28(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(28)},
-            ConfigParamEnum::ConfigParam29(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(29)},
-            ConfigParamEnum::ConfigParam30(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(30)},
-            ConfigParamEnum::ConfigParam31(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(31)},
-            ConfigParamEnum::ConfigParam32(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(32)},
-            ConfigParamEnum::ConfigParam33(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(33)},
-            ConfigParamEnum::ConfigParam34(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(34)},
-            ConfigParamEnum::ConfigParam35(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(35)},
-            ConfigParamEnum::ConfigParam36(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(36)},
-            ConfigParamEnum::ConfigParam37(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(37)},
-            ConfigParamEnum::ConfigParam39(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(39)},
-            ConfigParamEnum::ConfigParam40(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(40)},
-            ConfigParamEnum::ConfigParam42(ref c) => { cell.append_reference_cell(c.serialize()?); Ok(42)},
+            ConfigParamEnum::ConfigParam0(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(0)},
+            ConfigParamEnum::ConfigParam1(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(1)},
+            ConfigParamEnum::ConfigParam2(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(2)},
+            ConfigParamEnum::ConfigParam3(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(3)},
+            ConfigParamEnum::ConfigParam4(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(4)},
+            ConfigParamEnum::ConfigParam5(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(5)},
+            ConfigParamEnum::ConfigParam6(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(6)},
+            ConfigParamEnum::ConfigParam7(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(7)},
+            ConfigParamEnum::ConfigParam8(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(8)},
+            ConfigParamEnum::ConfigParam9(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(9)},
+            ConfigParamEnum::ConfigParam10(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(10)},
+            ConfigParamEnum::ConfigParam11(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(11)},
+            ConfigParamEnum::ConfigParam12(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(12)},
+            ConfigParamEnum::ConfigParam13(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(13)},
+            ConfigParamEnum::ConfigParam14(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(14)},
+            ConfigParamEnum::ConfigParam15(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(15)},
+            ConfigParamEnum::ConfigParam16(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(16)},
+            ConfigParamEnum::ConfigParam17(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(17)},
+            ConfigParamEnum::ConfigParam18(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(18)},
+            ConfigParamEnum::ConfigParam20(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(20)},
+            ConfigParamEnum::ConfigParam21(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(21)},
+            ConfigParamEnum::ConfigParam22(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(22)},
+            ConfigParamEnum::ConfigParam23(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(23)},
+            ConfigParamEnum::ConfigParam24(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(24)},
+            ConfigParamEnum::ConfigParam25(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(25)},
+            ConfigParamEnum::ConfigParam28(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(28)},
+            ConfigParamEnum::ConfigParam29(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(29)},
+            ConfigParamEnum::ConfigParam30(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(30)},
+            ConfigParamEnum::ConfigParam31(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(31)},
+            ConfigParamEnum::ConfigParam32(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(32)},
+            ConfigParamEnum::ConfigParam33(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(33)},
+            ConfigParamEnum::ConfigParam34(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(34)},
+            ConfigParamEnum::ConfigParam35(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(35)},
+            ConfigParamEnum::ConfigParam36(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(36)},
+            ConfigParamEnum::ConfigParam37(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(37)},
+            ConfigParamEnum::ConfigParam39(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(39)},
+            ConfigParamEnum::ConfigParam40(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(40)},
+            ConfigParamEnum::ConfigParam42(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(42)},
             ConfigParamEnum::ConfigParamAny(index, slice) => { 
-                cell.append_reference_cell(slice.clone().into_cell()); 
+                cell.checked_append_reference(slice.clone().into_cell())?; 
                 Ok(*index)
             },
         }
@@ -2576,8 +2570,8 @@ impl Deserializable for ConfigVotingSetup {
 impl Serializable for ConfigVotingSetup {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(CONFIG_VOTING_SETUP_TAG)?;
-        cell.append_reference_cell(self.normal_params.cell());
-        cell.append_reference_cell(self.critical_params.cell());
+        cell.checked_append_reference(self.normal_params.cell())?;
+        cell.checked_append_reference(self.critical_params.cell())?;
         Ok(())
     }
 }
@@ -2808,7 +2802,7 @@ impl Serializable for ValidatorSignedTempKey {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(VALIDATOR_SIGNED_TEMP_KEY_TAG)?; // TODO what is tag length in bits???
         self.signature.write_to(cell)?;
-        cell.append_reference_cell(self.key.serialize()?);
+        cell.checked_append_reference(self.key.serialize()?)?;
         Ok(())
     }
 }

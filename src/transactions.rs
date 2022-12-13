@@ -244,7 +244,7 @@ impl Serializable for TrComputePhase {
             v.vm_init_state_hash.write_to(&mut sep_cell)?; // vm_init_state_hash:uint256
             v.vm_final_state_hash.write_to(&mut sep_cell)?; // vm_final_state_hash:uint256
 
-            cell.append_reference_cell(sep_cell.into_cell()?);
+            cell.checked_append_reference(sep_cell.into_cell()?)?;
         }
 
         Ok(())
@@ -717,7 +717,7 @@ impl Serializable for TransactionDescrOrdinary {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference_cell(a.serialize()?);
+            cell.checked_append_reference(a.serialize()?)?;
         }
 
         Ok(())
@@ -796,7 +796,7 @@ impl Serializable for TransactionDescrTickTock {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference_cell(a.serialize()?);
+            cell.checked_append_reference(a.serialize()?)?;
         }
 
         Ok(())
@@ -847,7 +847,7 @@ impl Serializable for TransactionDescrSplitPrepare {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference_cell(a.serialize()?);
+            cell.checked_append_reference(a.serialize()?)?;
         }
 
         Ok(())
@@ -888,7 +888,7 @@ impl Serializable for TransactionDescrSplitInstall {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         cell.append_bit_bool(self.installed)?;
-        cell.append_reference_cell(self.prepare_transaction.serialize()?);
+        cell.checked_append_reference(self.prepare_transaction.serialize()?)?;
         Ok(())
     }
 }
@@ -960,7 +960,7 @@ pub struct TransactionDescrMergeInstall {
 impl Serializable for TransactionDescrMergeInstall {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
-        cell.append_reference_cell(self.prepare_transaction.serialize()?);
+        cell.checked_append_reference(self.prepare_transaction.serialize()?)?;
         self.credit_ph.write_maybe_to(cell)?;
         self.compute_ph.write_to(cell)?;
         cell.append_bit_bool(self.action.is_some())?;
@@ -968,7 +968,7 @@ impl Serializable for TransactionDescrMergeInstall {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference_cell(a.serialize()?);
+            cell.checked_append_reference(a.serialize()?)?;
         }
 
         Ok(())
@@ -1637,17 +1637,17 @@ impl Serializable for Transaction {
         match &self.in_msg {
             Some(in_msg) => {
                 builder1.append_bit_one()?;
-                builder1.append_reference_cell(in_msg.cell());
+                builder1.checked_append_reference(in_msg.cell())?;
             },
             None => {
                 builder1.append_bit_zero()?;
             }
         };
         self.out_msgs.write_to(&mut builder1)?;
-        builder.append_reference_cell(builder1.into_cell()?);
+        builder.checked_append_reference(builder1.into_cell()?)?;
         self.total_fees.write_to(builder)?; // total_fees
-        builder.append_reference_cell(self.state_update.cell()); // ^(HASH_UPDATE Account)
-        builder.append_reference_cell(self.description.cell()); // ^TransactionDescr
+        builder.checked_append_reference(self.state_update.cell())?; // ^(HASH_UPDATE Account)
+        builder.checked_append_reference(self.description.cell())?; // ^TransactionDescr
 
         Ok(())
     }
@@ -1860,7 +1860,7 @@ impl Serializable for AccountBlock {
         cell.append_bits(ACCOUNT_BLOCK_TAG, 4)?;
         self.account_addr.write_to(cell)?;                                  // account_addr: AccountId,
         self.transactions.write_hashmap_root(cell)?;
-        cell.append_reference_cell(self.state_update.cell());      // ^(HASH_UPDATE Account)
+        cell.checked_append_reference(self.state_update.cell())?;      // ^(HASH_UPDATE Account)
         Ok(())
     }
 }

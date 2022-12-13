@@ -1149,10 +1149,10 @@ impl Serializable for ShardStateUnsplit {
         self.gen_time.write_to(builder)?;
         self.gen_lt.write_to(builder)?;
         self.min_ref_mc_seqno.write_to(builder)?;
-        builder.append_reference_cell(self.out_msg_queue_info.cell());
+        builder.checked_append_reference(self.out_msg_queue_info.cell())?;
         builder.append_bit_bool(self.before_split)?;
 
-        builder.append_reference_cell(self.accounts.cell());
+        builder.checked_append_reference(self.accounts.cell())?;
 
         let mut b2 = BuilderData::new();
         self.overload_history.write_to(&mut b2)?;
@@ -1161,11 +1161,11 @@ impl Serializable for ShardStateUnsplit {
         self.total_validator_fees.write_to(&mut b2)?;
         self.libraries.write_to(&mut b2)?;
         self.master_ref.write_maybe_to(&mut b2)?;
-        builder.append_reference_cell(b2.into_cell()?);
+        builder.checked_append_reference(b2.into_cell()?)?;
 
         builder.append_bit_bool(self.custom.is_some())?;
         if let Some(ref custom) = self.custom {
-            builder.append_reference_cell(custom.cell());
+            builder.checked_append_reference(custom.cell())?;
         }
 
         Ok(())

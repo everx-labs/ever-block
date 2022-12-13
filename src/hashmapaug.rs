@@ -226,7 +226,7 @@ macro_rules! define_HashmapAugE {
             fn write_to(&self, cell: &mut BuilderData) -> Result<()>{
                 if let Some(root) = self.data() {
                     cell.append_bit_one()?;
-                    cell.append_reference_cell(root.clone());
+                    cell.checked_append_reference(root.clone())?;
                 } else {
                     cell.append_bit_zero()?;
                 }
@@ -668,11 +668,11 @@ pub trait HashmapAugType<
         // Leaf for fork
         let another_cell = Self::make_cell_with_label_and_builder(key, length, true, &Self::combine(extra, leaf)?)?;
         if !label_bit {
-            builder.append_reference_cell(existing_cell.into_cell()?);
-            builder.append_reference_cell(another_cell.into_cell()?);
+            builder.checked_append_reference(existing_cell.into_cell()?)?;
+            builder.checked_append_reference(another_cell.into_cell()?)?;
         } else {
-            builder.append_reference_cell(another_cell.into_cell()?);
-            builder.append_reference_cell(existing_cell.into_cell()?);
+            builder.checked_append_reference(another_cell.into_cell()?)?;
+            builder.checked_append_reference(existing_cell.into_cell()?)?;
         };
         fork_extra.write_to(&mut builder)?;
         *slice = SliceData::load_builder(builder)?;
