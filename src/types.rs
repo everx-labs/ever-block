@@ -1331,7 +1331,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         match s {
             Some(s) => {
                 cell.append_bit_one()?;
-                cell.append_reference_cell(s.cell());
+                cell.checked_append_reference(s.cell())?;
             }
             None => {
                 cell.append_bit_zero()?;

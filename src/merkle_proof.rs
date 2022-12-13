@@ -80,7 +80,7 @@ impl Serializable for MerkleProof {
         cell.append_u8(u8::from(CellType::MerkleProof))?;
         self.hash.write_to(cell)?;
         cell.append_u16(self.depth)?;
-        cell.append_reference_cell(self.proof.clone());
+        cell.checked_append_reference(self.proof.clone())?;
         cell.set_level_mask(LevelMask::for_merkle_cell(self.proof.level_mask()));
         Ok(())
     }

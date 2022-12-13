@@ -225,7 +225,7 @@ impl Deserializable for Cell {
 
 impl Serializable for Cell {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.clone());
+        cell.checked_append_reference(self.clone())?;
         Ok(())
     }
 }

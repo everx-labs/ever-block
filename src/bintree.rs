@@ -416,12 +416,12 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
             let mut fork_aug = Y::construct_from(slice)?;
             fork_aug.calc(aug)?;
             let mut builder = true.write_to_new_cell()?; // bta_fork
-            builder.append_reference_cell(original.into_cell());
+            builder.checked_append_reference(original.into_cell())?;
 
             let mut cell = false.write_to_new_cell()?; // bta_leaf
             value.write_to(&mut cell)?;
             aug.write_to(&mut cell)?;
-            builder.append_reference_cell(cell.into_cell()?);
+            builder.checked_append_reference(cell.into_cell()?)?;
             fork_aug.write_to(&mut builder)?;
             *slice = SliceData::load_builder(builder)?;
             return Ok(true)

@@ -555,7 +555,7 @@ impl Serializable for McBlockExtra {
             self.copyleft_msgs.write_to(&mut cell1)?;
         }
 
-        cell.append_reference_cell(cell1.into_cell()?);
+        cell.checked_append_reference(cell1.into_cell()?)?;
 
         if let Some(config) = &self.config {
             config.write_to(cell)?;
@@ -1208,7 +1208,7 @@ impl Serializable for McStateExtra {
         if !self.state_copyleft_rewards.is_empty() {
             self.state_copyleft_rewards.write_to(&mut cell1)?;
         }
-        cell.append_reference_cell(cell1.into_cell()?);
+        cell.checked_append_reference(cell1.into_cell()?)?;
         self.global_balance.write_to(cell)?;
         Ok(())
     }
@@ -1498,7 +1498,7 @@ impl Serializable for ShardDescr {
         if !self.copyleft_rewards.is_empty() {
             self.copyleft_rewards.write_to(&mut child)?;
         }
-        cell.append_reference_cell(child.into_cell()?);
+        cell.checked_append_reference(child.into_cell()?)?;
 
         Ok(())
     }
