@@ -1178,7 +1178,7 @@ impl Account {
         let mut builder = BuilderData::from_slice(&data);
         let cell = config.config_params.data()
             .ok_or_else(|| error!("configs musn't be empty"))?;
-        builder.prepend_reference_cell(cell.clone());
+        builder.checked_prepend_reference(cell.clone())?;
         self.set_data(builder.into_cell()?);
         Ok(())
     }

@@ -358,7 +358,6 @@ pub enum GlobalCapabilities {
     CapDiff                   = 0x100000,
     CapsTvmBugfixes2022       = 0x200000, // popsave, exception handler, loops
     CapWc2WcQueueUpdates      = 0x400000,
-    CapTvmFixContSerialize    = 0x800000,
 }
 
 impl ConfigParams {
