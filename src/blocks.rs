@@ -1297,7 +1297,7 @@ impl Serializable for Block {
             if let Some(qu) = &self.out_msg_queue_updates {
                 qu.write_to(&mut builder2)?;
             }
-            builder.append_reference(builder2);
+            builder.checked_append_reference(builder2.into_cell()?)?;
         }
         builder.checked_append_reference(self.extra.cell())?; // extra:^BlockExtra
         Ok(())
