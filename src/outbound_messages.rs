@@ -356,7 +356,7 @@ impl OutMsgQueueInfo {
         let usage_tree = UsageTree::with_root(old_proof.proof.clone());
         let visit_state = |state: &ShardStateUnsplit| -> Result<()> {
             let out_msg_queue_info = state.read_out_msg_queue_info()?;
-            let _queue_for_wc = out_msg_queue_info.out_queue().queue_for_wc(1)?;
+            let _queue_for_wc = out_msg_queue_info.out_queue().queue_for_wc(workchain_id)?;
             let _proc_info = out_msg_queue_info.proc_info().root();
             Ok(())
         };
