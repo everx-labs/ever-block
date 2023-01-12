@@ -22,7 +22,7 @@ use crate::{
     shard::{AccountIdPrefixFull, ShardState},
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
-    Serializable, Deserializable, ShardStateUnsplit, MerkleProof, MerkleUpdate,
+    Serializable, Deserializable, ShardStateUnsplit, MerkleProof, MerkleUpdate, OutQueueUpdate,
 };
 use std::{fmt, collections::HashSet};
 use ton_types::{
@@ -268,6 +268,14 @@ pub struct OutMsgQueueInfo {
     ihr_pending: IhrPendingInfo,
 }
 
+#[derive(Default)]
+struct ProofForWc {
+    proof: MerkleProof,
+    root_hashes: HashSet<UInt256>,
+    sub_queue_root_hash: UInt256,
+    sub_queue_root_hash_2: Option<UInt256>,
+}
+
 impl OutMsgQueueInfo {
     pub fn new() -> Self {
         Self::default()
@@ -331,8 +339,8 @@ impl OutMsgQueueInfo {
         shard_state_root: &Cell,
         workchain_id: i32
     ) -> Result<MerkleProof> {
-        let (proof, _) = Self::prepare_proof_for_wc_internal(shard_state_root, workchain_id)?;
-        Ok(proof)
+        let proof = Self::prepare_proof_for_wc_internal(shard_state_root, workchain_id)?;
+        Ok(proof.proof)
     }
 
     // Prepare update from one proof to another
@@ -341,19 +349,21 @@ impl OutMsgQueueInfo {
         old_shard_state_usage_tree: &UsageTree,
         new_shard_state_root: &Cell,
         workchain_id: i32,
-    ) -> Result<MerkleUpdate> {
-        let (old_proof, subtrees_roots) =
-            Self::prepare_proof_for_wc_internal(old_shard_state_root, workchain_id)?;
+    ) -> Result<OutQueueUpdate> {
 
-        let new_proof = Self::prepare_proof_for_wc(new_shard_state_root, workchain_id)?;
+        let old_proof = Self::prepare_proof_for_wc_internal(
+            old_shard_state_root, workchain_id)?;
+
+        let new_proof = Self::prepare_proof_for_wc_internal(
+            new_shard_state_root, workchain_id)?;
 
         // Prepare visited cells set of the needed part of queue
         let sub_queue_cells_hashes = old_shard_state_usage_tree.build_visited_subtree(
-            &|h| subtrees_roots.contains(h)
+            &|h| old_proof.root_hashes.contains(h)
         )?;
 
         // Usage tree from state's root to subtree's root
-        let usage_tree = UsageTree::with_root(old_proof.proof.clone());
+        let usage_tree = UsageTree::with_root(old_proof.proof.proof.clone());
         let visit_state = |state: &ShardStateUnsplit| -> Result<()> {
             let out_msg_queue_info = state.read_out_msg_queue_info()?;
             let _queue_for_wc = out_msg_queue_info.out_queue().queue_for_wc(workchain_id)?;
@@ -370,10 +380,10 @@ impl OutMsgQueueInfo {
             }
         }
 
-        let old_proof_root = old_proof.serialize()?;
+        let old_proof_root = old_proof.proof.serialize()?;
         let old_proof_hash = old_proof_root.repr_hash();
-        let new_proof_root = new_proof.serialize()?;
-        MerkleUpdate::create_fast(
+        let new_proof_root = new_proof.proof.serialize()?;
+        let update = MerkleUpdate::create_fast(
             &old_proof_root,
             &new_proof_root,
             |h| {
@@ -381,55 +391,74 @@ impl OutMsgQueueInfo {
                 usage_tree.contains(h) ||
                 h == &old_proof_hash
             }
-        )
+        )?;
+        let is_empty = old_proof.sub_queue_root_hash == new_proof.sub_queue_root_hash && 
+            old_proof.sub_queue_root_hash_2.is_none();
+        Ok(OutQueueUpdate {is_empty, update})
     }
 
     pub fn prepare_first_update_for_wc(
         zerostate_root: &Cell,
         new_shard_state_root: &Cell,
         workchain_id: i32,
-    ) -> Result<MerkleUpdate> {
+    ) -> Result<OutQueueUpdate> {
         let new_proof = Self::prepare_proof_for_wc(new_shard_state_root, workchain_id)?;
         let new_proof_root = new_proof.serialize()?;
-        MerkleUpdate::create_fast(zerostate_root, &new_proof_root, |_| false)
+        Ok(OutQueueUpdate {
+            is_empty: false,
+            update: MerkleUpdate::create_fast(zerostate_root, &new_proof_root, |_| false)?
+        })
     }
 
     fn prepare_proof_for_wc_internal(
         shard_state_root: &Cell,
-        workchain_id: i32
-    ) -> Result<(MerkleProof, HashSet<UInt256>)> {
+        workchain_id: i32,
+    ) -> Result<ProofForWc> {
         
         let usage_tree = UsageTree::with_root(shard_state_root.clone());
-        let mut roots = HashSet::new();
+        let mut result = ProofForWc::default();
 
-        let mut visit_state = |state: &ShardStateUnsplit| -> Result<()> {
+        fn visit_state(
+            state: &ShardStateUnsplit,
+            workchain_id: i32,
+        ) -> Result<(UInt256, UInt256)> {
             let queue_info = state.read_out_msg_queue_info()?;
             let sub_queue_root_hash = queue_info.out_queue()
                 .subtree_root_cell(&SliceData::load_builder(workchain_id.write_to_new_cell()?)?)?
                 .map(|c| c.repr_hash()).unwrap_or_default();
-            roots.insert(sub_queue_root_hash);
             let proc_info_root_hash = queue_info.proc_info().root()
                 .map(|c| c.repr_hash()).unwrap_or_default();
-            roots.insert(proc_info_root_hash);
-            Ok(())
-        };
+            Ok((sub_queue_root_hash, proc_info_root_hash))
+        }
 
         match ShardState::construct_from_cell(usage_tree.root_cell())? {
             ShardState::UnsplitState(state) => {
-                visit_state(&state)?;
+                let (sq, pi) = visit_state(&state, workchain_id)?;
+                result.sub_queue_root_hash = sq.clone();
+                result.root_hashes.insert(sq);
+                result.root_hashes.insert(pi);
             }
             ShardState::SplitState(split_state) => {
-                visit_state(&ShardStateUnsplit::construct_from_cell(split_state.left)?)?;
-                visit_state(&ShardStateUnsplit::construct_from_cell(split_state.right)?)?;
+                let left_ss = ShardStateUnsplit::construct_from_cell(split_state.left)?;
+                let (sq, pi) = visit_state(&left_ss, workchain_id)?;
+                result.sub_queue_root_hash = sq.clone();
+                result.root_hashes.insert(sq);
+                result.root_hashes.insert(pi);
+
+                let right_ss = ShardStateUnsplit::construct_from_cell(split_state.right)?;
+                let (sq, pi) = visit_state(&right_ss, workchain_id)?;
+                result.sub_queue_root_hash_2 = Some(sq.clone());
+                result.root_hashes.insert(sq);
+                result.root_hashes.insert(pi);
             }
         }
 
-        let proof = MerkleProof::create_with_subtrees(
+        result.proof = MerkleProof::create_with_subtrees(
             shard_state_root,
             |h| usage_tree.contains(h),
-            |h| roots.contains(h)
+            |h| result.root_hashes.contains(h)
         )?;
-        Ok((proof, roots))
+        Ok(result)
     }
 }
 

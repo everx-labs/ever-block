@@ -55,6 +55,9 @@ impl Default for MerkleUpdate {
 
 impl Deserializable for MerkleUpdate {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        if cell.pos() != 0 {
+            fail!("Merkle update have to fill full cell from its zeroth bit.")
+        }
         if CellType::try_from(cell.get_next_byte()?)? != CellType::MerkleUpdate {
             fail!(
                 BlockError::InvalidData("invalid Merkle update root's cell type".to_string())
@@ -102,6 +105,9 @@ impl Deserializable for MerkleUpdate {
 
 impl Serializable for MerkleUpdate {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        if !cell.is_empty() {
+            fail!("Merkle update have to fill full cell from its zeroth bit.")
+        }
         cell.set_type(CellType::MerkleUpdate);
         cell.append_u8(u8::from(CellType::MerkleUpdate))?;
         self.old_hash.write_to(cell)?;

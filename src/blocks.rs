@@ -546,6 +546,28 @@ impl Serializable for BlkPrevInfo {
     }
 }
 
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct OutQueueUpdate {
+    pub is_empty: bool,
+    pub update: MerkleUpdate
+}
+
+impl Deserializable for OutQueueUpdate {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let is_empty = slice.get_next_bit()?;
+        let update = MerkleUpdate::construct_from_cell(slice.checked_drain_reference()?)?;
+        Ok(OutQueueUpdate {is_empty, update})
+    }
+}
+
+impl Serializable for OutQueueUpdate {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        self.is_empty.write_to(builder)?;
+        builder.checked_append_reference(self.update.serialize()?)?;
+        Ok(())
+    }
+}
+
 pub type BlockId = UInt256;
 
 /*
@@ -568,12 +590,8 @@ block#11ef55bb
     ]
     extra: ^BlockExtra
 = Block;
-
-state_updates#01
-    
-= StateUpdates
 */
-define_HashmapE!{OutQueueUpdates, 32, InRefValue<MerkleUpdate>}
+define_HashmapE!{OutQueueUpdates, 32, OutQueueUpdate}
 
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct Block {
@@ -1325,6 +1343,58 @@ chain_link$_
     root:^Cell
     prev:n?^(ProofChain n)
 = ProofChain (n + 1);
+*/
+pub type ProofChain = Vec<Cell>;
+
+impl Serializable for ProofChain {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        let mut prev = BuilderData::new();
+        for (i, c) in self.iter().rev().enumerate() {
+            let mut builder = BuilderData::new();
+            builder.checked_append_reference(c.clone())?;
+            if i != 0 {
+                builder.checked_append_reference(prev.into_cell()?)?;
+            }
+            prev = builder;
+        }
+        cell.append_bits(self.len(), 8)?;
+        cell.append_builder(&prev)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for ProofChain {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let len = slice.get_next_int(8)?;
+        if !(1..=8).contains(&len) {
+            fail!(
+                BlockError::InvalidData(
+                    "Failed check: `len >= 1 && len <= 8`".to_string()
+                )
+            )
+        }
+        {
+            let mut slice = slice.clone();
+            for i in (0..len).rev() {
+                if slice.remaining_references() == 0 {
+                    fail!(ExceptionCode::CellUnderflow)
+                }
+                self.push(slice.checked_drain_reference()?);
+                if i != 0 {
+                    if slice.remaining_references() == 0 {
+                        fail!(ExceptionCode::CellUnderflow)
+                    }
+                    slice = SliceData::load_cell(slice.checked_drain_reference()?)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+
+
+/*
 top_block_descr#d5
     proof_for:BlockIdExt
     signatures:(Maybe ^BlockSignatures)
@@ -1336,7 +1406,7 @@ top_block_descr#d5
 pub struct TopBlockDescr {
     proof_for: BlockIdExt,
     signatures: Option<InRefValue<BlockSignatures>>,
-    chain: Vec<Cell>,
+    chain: ProofChain,
 }
 
 impl TopBlockDescr {
@@ -1375,17 +1445,7 @@ impl Serializable for TopBlockDescr {
         TOP_BLOCK_DESCR_TAG.write_to(cell)?;
         self.proof_for.write_to(cell)?;
         self.signatures.write_maybe_to(cell)?;
-        let mut prev = BuilderData::new();
-        for (i, c) in self.chain.iter().rev().enumerate() {
-            let mut builder = BuilderData::new();
-            builder.checked_append_reference(c.clone())?;
-            if i != 0 {
-                builder.checked_append_reference(prev.into_cell()?)?;
-            }
-            prev = builder;
-        }
-        cell.append_bits(self.chain.len(), 8)?;
-        cell.append_builder(&prev)?;
+        self.chain.write_to(cell)?;
         Ok(())
     }
 }
@@ -1403,29 +1463,7 @@ impl Deserializable for TopBlockDescr {
         }
         self.proof_for.read_from(slice)?;
         self.signatures = BlockSignatures::read_maybe_from(slice)?;
-        let len = slice.get_next_int(8)?;
-        if !(1..=8).contains(&len) {
-            fail!(
-                BlockError::InvalidData(
-                    "Failed check: `len >= 1 && len <= 8`".to_string()
-                )
-            )
-        }
-        {
-            let mut slice = slice.clone();
-            for i in (0..len).rev() {
-                if slice.remaining_references() == 0 {
-                    fail!(ExceptionCode::CellUnderflow)
-                }
-                self.chain.push(slice.checked_drain_reference()?);
-                if i != 0 {
-                    if slice.remaining_references() == 0 {
-                        fail!(ExceptionCode::CellUnderflow)
-                    }
-                    slice = SliceData::load_cell(slice.checked_drain_reference()?)?;
-                }
-            }
-        }
+        self.chain.read_from(slice)?;
         Ok(())
     }
 }
