@@ -357,7 +357,7 @@ pub enum GlobalCapabilities {
     #[cfg(feature = "gosh")]
     CapDiff                   = 0x100000,
     CapsTvmBugfixes2022       = 0x200000, // popsave, exception handler, loops
-    CapWc2WcQueueUpdates      = 0x400000,
+    CapWorkchains             = 0x400000,
     CapStcontNewFormat        = 0x800000,  // support old format continuation serialization
     CapFastStorageStatBugfix  = 0x1000000, // calc cell datasize using fast storage stat
 }

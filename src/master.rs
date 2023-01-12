@@ -13,7 +13,7 @@
 
 use crate::{
     bintree::{BinTree, BinTreeType},
-    blocks::{Block, BlockIdExt, ExtBlkRef},
+    blocks::{Block, BlockIdExt, ExtBlkRef, ProofChain},
     config_params::ConfigParams,
     define_HashmapAugE, define_HashmapE,
     error::BlockError,
@@ -350,10 +350,21 @@ impl McShardRecord {
                     fees_collected: value_flow.fees_collected,
                     funds_created: value_flow.created,
                     copyleft_rewards: value_flow.copyleft_rewards,
+                    proof_chain: None,
                 },
                 block_id,
             }
         )
+    }
+
+    pub fn from_block_and_proof_chain(
+        block: &Block,
+        block_id: BlockIdExt,
+        proof_chain: ProofChain
+    ) -> Result<Self> {
+        let mut record = Self::from_block(block, block_id)?;
+        record.descr.proof_chain = Some(proof_chain);
+        Ok(record)
     }
 
     pub fn shard(&self) -> &ShardIdent { self.block_id.shard() }
@@ -1326,6 +1337,7 @@ pub struct ShardDescr {
     pub fees_collected: CurrencyCollection,
     pub funds_created: CurrencyCollection,
     pub copyleft_rewards: CopyleftRewards,
+    pub proof_chain: Option<ProofChain>, // Some when CapWc2WcQueueUpdates is set
 }
 
 impl ShardDescr {
@@ -1354,6 +1366,7 @@ impl ShardDescr {
             fees_collected: CurrencyCollection::default(),
             funds_created: CurrencyCollection::default(),
             copyleft_rewards: CopyleftRewards::default(),
+            proof_chain: None,
         }
     }
     pub fn fsm_equal(&self, other: &Self) -> bool {
@@ -1394,12 +1407,14 @@ impl ShardDescr {
 const SHARD_IDENT_TAG_A: u8 = 0xa; // 4 bit
 const SHARD_IDENT_TAG_B: u8 = 0xb; // 4 bit
 const SHARD_IDENT_TAG_C: u8 = 0xc; // 4 bit
+const SHARD_IDENT_TAG_D: u8 = 0xd; // 4 bit // with all previous and proof chain
 const SHARD_IDENT_TAG_LEN: usize = 4;
 
 impl Deserializable for ShardDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(SHARD_IDENT_TAG_LEN)? as u8;
-        if tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B && tag != SHARD_IDENT_TAG_C {
+        if tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B && tag != SHARD_IDENT_TAG_C &&
+           tag != SHARD_IDENT_TAG_D {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
@@ -1443,6 +1458,15 @@ impl Deserializable for ShardDescr {
             self.fees_collected.read_from(&mut slice1)?;
             self.funds_created.read_from(&mut slice1)?;
             self.copyleft_rewards.read_from(&mut slice1)?;
+        } else if tag == SHARD_IDENT_TAG_D {
+            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
+            self.fees_collected.read_from(&mut slice1)?;
+            self.funds_created.read_from(&mut slice1)?;
+            if slice1.get_next_bit()? {
+                self.copyleft_rewards.read_from(&mut slice1)?;
+            }
+            let proof_chain = ProofChain::construct_from(&mut slice1)?;
+            self.proof_chain = Some(proof_chain);
         }
         Ok(())
     }
@@ -1450,10 +1474,12 @@ impl Deserializable for ShardDescr {
 
 impl Serializable for ShardDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        let tag = if self.copyleft_rewards.is_empty() {
-            SHARD_IDENT_TAG_A
-        } else {
+        let tag = if self.proof_chain.is_some() {
+            SHARD_IDENT_TAG_D
+        } else if !self.copyleft_rewards.is_empty() {
             SHARD_IDENT_TAG_C
+        } else {
+            SHARD_IDENT_TAG_A
         };
         cell.append_bits(tag as usize, SHARD_IDENT_TAG_LEN)?;
 
@@ -1495,8 +1521,18 @@ impl Serializable for ShardDescr {
         let mut child = BuilderData::new();
         self.fees_collected.write_to(&mut child)?;
         self.funds_created.write_to(&mut child)?;
-        if !self.copyleft_rewards.is_empty() {
-            self.copyleft_rewards.write_to(&mut child)?;
+        if let Some(proof_chain) = self.proof_chain.as_ref() {
+            if !self.copyleft_rewards.is_empty() {
+                child.append_bit_one()?;
+                self.copyleft_rewards.write_to(&mut child)?;
+            } else {
+                child.append_bit_zero()?;
+            }
+            proof_chain.write_to(&mut child)?;
+        } else {
+            if !self.copyleft_rewards.is_empty() {
+                self.copyleft_rewards.write_to(&mut child)?;
+            }
         }
         cell.checked_append_reference(child.into_cell()?)?;
 

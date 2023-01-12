@@ -48,6 +48,9 @@ impl Default for MerkleProof {
 
 impl Deserializable for MerkleProof {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        if cell.pos() != 0 {
+            fail!("Merkle proof have to fill full cell from its zeroth bit.")
+        }
         if CellType::try_from(cell.get_next_byte()?)? != CellType::MerkleProof {
             fail!(
                 BlockError::InvalidData("invalid Merkle proof root's cell type".to_string())
@@ -76,6 +79,9 @@ impl Deserializable for MerkleProof {
 
 impl Serializable for MerkleProof {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        if !cell.is_empty() {
+            fail!("Merkle proof have to fill full cell from its zeroth bit.")
+        }
         cell.set_type(CellType::MerkleProof);
         cell.append_u8(u8::from(CellType::MerkleProof))?;
         self.hash.write_to(cell)?;
