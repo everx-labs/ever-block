@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2023 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -360,6 +360,7 @@ pub enum GlobalCapabilities {
     CapWorkchains             = 0x400000,
     CapStcontNewFormat        = 0x800000,  // support old format continuation serialization
     CapFastStorageStatBugfix  = 0x1000000, // calc cell datasize using fast storage stat
+    CapResolveMerkleCell      = 0x2000000,
 }
 
 impl ConfigParams {
@@ -2086,7 +2087,7 @@ impl WorkchainFormat0 {
                         min_addr_len: Number12::new(min_addr_len as u32)?,
                         max_addr_len: Number12::new(max_addr_len as u32)?,
                         addr_len_step: Number12::new(addr_len_step as u32)?,
-                        workchain_type_id: Number32::new(workchain_type_id as u32)?,
+                        workchain_type_id: Number32::new(workchain_type_id)?,
                    }
                )
            }
