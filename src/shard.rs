@@ -1104,7 +1104,7 @@ impl Deserializable for ShardStateUnsplit {
         if tag != SHARD_STATE_UNSPLIT_PFX {
             fail!(
                 BlockError::InvalidConstructorTag {
-                    t: tag as u32,
+                    t: tag,
                     s: "ShardStateUnsplit".to_string()
                 }
             )

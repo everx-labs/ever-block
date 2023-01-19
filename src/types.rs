@@ -694,7 +694,7 @@ impl From<u16> for Number16 {
 
 impl From<u32> for Number32 {
     fn from(value: u32) -> Self {
-        Self(value as u32)
+        Self(value)
     }
 }
 
@@ -1300,13 +1300,6 @@ pub struct ChildCell<T: Default + Serializable + Deserializable> {
 }
 
 impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
-    pub fn default() -> Self {
-        Self {
-            cell: None,
-            phantom: PhantomData
-        }
-    }
-
     pub fn with_cell(cell: Cell) -> Self {
         Self {
             cell: Some(cell),
