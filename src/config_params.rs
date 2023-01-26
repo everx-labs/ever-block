@@ -335,32 +335,34 @@ impl ConfigParams {
 #[repr(u64)]
 pub enum GlobalCapabilities {
     CapNone                   = 0,
-    CapIhrEnabled             = 0x000001,
-    CapCreateStatsEnabled     = 0x000002,
-    CapBounceMsgBody          = 0x000004,
-    CapReportVersion          = 0x000008,
-    CapSplitMergeTransactions = 0x000010,
-    CapShortDequeue           = 0x000020,
-    CapMbppEnabled            = 0x000040,
-    CapFastStorageStat        = 0x000080,
-    CapInitCodeHash           = 0x000100,
-    CapOffHypercube           = 0x000200,
-    CapMycode                 = 0x000400,
-    CapSetLibCode             = 0x000800,
-    CapFixTupleIndexBug       = 0x001000,
-    CapRemp                   = 0x002000,
-    CapDelections             = 0x004000,
-    CapFullBodyInBounced      = 0x010000,
-    CapStorageFeeToTvm        = 0x020000,
-    CapCopyleft               = 0x040000,
-    CapIndexAccounts          = 0x080000,
+    CapIhrEnabled             = 0x0000001,
+    CapCreateStatsEnabled     = 0x0000002,
+    CapBounceMsgBody          = 0x0000004,
+    CapReportVersion          = 0x0000008,
+    CapSplitMergeTransactions = 0x0000010,
+    CapShortDequeue           = 0x0000020,
+    CapMbppEnabled            = 0x0000040,
+    CapFastStorageStat        = 0x0000080,
+    CapInitCodeHash           = 0x0000100,
+    CapOffHypercube           = 0x0000200,
+    CapMycode                 = 0x0000400,
+    CapSetLibCode             = 0x0000800,
+    CapFixTupleIndexBug       = 0x0001000,
+    CapRemp                   = 0x0002000,
+    CapDelections             = 0x0004000,
+    CapFullBodyInBounced      = 0x0010000,
+    CapStorageFeeToTvm        = 0x0020000,
+    CapCopyleft               = 0x0040000,
+    CapIndexAccounts          = 0x0080000,
     #[cfg(feature = "gosh")]
-    CapDiff                   = 0x100000,
-    CapsTvmBugfixes2022       = 0x200000, // popsave, exception handler, loops
-    CapWorkchains             = 0x400000,
-    CapStcontNewFormat        = 0x800000,  // support old format continuation serialization
+    CapDiff                   = 0x0100000,
+    CapsTvmBugfixes2022       = 0x0200000, // popsave, exception handler, loops
+    CapWorkchains             = 0x0400000,
+    CapStcontNewFormat        = 0x0800000,  // support old format continuation serialization
     CapFastStorageStatBugfix  = 0x1000000, // calc cell datasize using fast storage stat
     CapResolveMerkleCell      = 0x2000000,
+    #[cfg(feature = "signature_with_id")]
+    CapSignatureWithId        = 0x4000000, // use some predefined id during signature check
 }
 
 impl ConfigParams {
