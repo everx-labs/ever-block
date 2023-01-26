@@ -361,6 +361,7 @@ pub enum GlobalCapabilities {
     CapStcontNewFormat        = 0x800000,  // support old format continuation serialization
     CapFastStorageStatBugfix  = 0x1000000, // calc cell datasize using fast storage stat
     CapResolveMerkleCell      = 0x2000000,
+    CapSignatureWithId        = 0x4000000, // use some id during signature check
 }
 
 impl ConfigParams {
