@@ -19,17 +19,17 @@ use crate::{
     inbound_messages::InMsg,
     messages::{CommonMsgInfo, Message},
     miscellaneous::{IhrPendingInfo, ProcessedInfo},
-    shard::AccountIdPrefixFull,
+    shard::{AccountIdPrefixFull, ShardState},
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
-    Serializable, Deserializable,
+    Serializable, Deserializable, ShardStateUnsplit, MerkleProof, MerkleUpdate, OutQueueUpdate,
 };
-use std::fmt;
+use std::{fmt, collections::HashSet};
 use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, SliceData, IBitstring,
-    HashmapType, HashmapSubtree, hm_label,
+    HashmapType, HashmapSubtree, hm_label, UsageTree,
 };
 
 #[cfg(test)]
@@ -113,7 +113,7 @@ impl Augmentation<u64> for EnqueuedMsg {
 impl Serializable for EnqueuedMsg {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.enqueued_lt.write_to(cell)?;
-        cell.append_reference_cell(self.out_msg.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
         Ok(())
     }
 }
@@ -184,6 +184,20 @@ impl OutMsgQueue {
         let key = OutMsgQueueKey::with_workchain_id_and_prefix(workchain_id, prefix, hash);
         let enq = EnqueuedMsg::with_param(msg_lt, env)?;
         self.set(&key, &enq, &msg_lt)
+    }
+
+    pub fn queue_for_wc(&self, workchain_id: i32) -> Result<OutMsgQueue> {
+        let cell = workchain_id.serialize()?;
+        let mut subtree = self.clone();
+        subtree.into_subtree_without_prefix(&SliceData::load_cell(cell)?, &mut 0)?;
+        Ok(subtree)
+    }
+
+    pub fn queue_for_wc_with_prefix(&self, workchain_id: i32) -> Result<OutMsgQueue> {
+        let cell = workchain_id.serialize()?;
+        let mut subtree = self.clone();
+        subtree.subtree_with_prefix(&SliceData::load_cell(cell)?, &mut 0)?;
+        Ok(subtree)
     }
 }
 
@@ -257,6 +271,14 @@ pub struct OutMsgQueueInfo {
     ihr_pending: IhrPendingInfo,
 }
 
+#[derive(Default)]
+struct ProofForWc {
+    proof: MerkleProof,
+    root_hashes: HashSet<UInt256>,
+    sub_queue_root_hash: UInt256,
+    sub_queue_root_hash_2: Option<UInt256>,
+}
+
 impl OutMsgQueueInfo {
     pub fn new() -> Self {
         Self::default()
@@ -291,6 +313,10 @@ impl OutMsgQueueInfo {
         &self.proc_info
     }
 
+    pub fn proc_info_mut(&mut self) -> &mut ProcessedInfo {
+        &mut self.proc_info
+    }
+
     pub fn set_proc_info(&mut self, proc_info: ProcessedInfo) {
         self.proc_info = proc_info;
     }
@@ -306,6 +332,135 @@ impl OutMsgQueueInfo {
         }
         result |= self.proc_info.combine_with(&other.proc_info)?;
         result |= self.ihr_pending.combine_with(&other.ihr_pending)?;
+        Ok(result)
+    }
+
+    // Create proofs in state for
+    // - part of out queue related with given WC
+    // - proceseed info
+    pub fn prepare_proof_for_wc(
+        shard_state_root: &Cell,
+        workchain_id: i32
+    ) -> Result<MerkleProof> {
+        let proof = Self::prepare_proof_for_wc_internal(shard_state_root, workchain_id)?;
+        Ok(proof.proof)
+    }
+
+    // Prepare update from one proof to another
+    pub fn prepare_update_for_wc(
+        old_shard_state_root: &Cell,
+        old_shard_state_usage_tree: &UsageTree,
+        new_shard_state_root: &Cell,
+        workchain_id: i32,
+    ) -> Result<OutQueueUpdate> {
+
+        let old_proof = Self::prepare_proof_for_wc_internal(
+            old_shard_state_root, workchain_id)?;
+
+        let new_proof = Self::prepare_proof_for_wc_internal(
+            new_shard_state_root, workchain_id)?;
+
+        // Prepare visited cells set of the needed part of queue
+        let sub_queue_cells_hashes = old_shard_state_usage_tree.build_visited_subtree(
+            &|h| old_proof.root_hashes.contains(h)
+        )?;
+
+        // Usage tree from state's root to subtree's root
+        let usage_tree = UsageTree::with_root(old_proof.proof.proof.clone());
+        let visit_state = |state: &ShardStateUnsplit| -> Result<()> {
+            let out_msg_queue_info = state.read_out_msg_queue_info()?;
+            let _queue_for_wc = out_msg_queue_info.out_queue().queue_for_wc(workchain_id)?;
+            let _proc_info = out_msg_queue_info.proc_info().root();
+            Ok(())
+        };
+        match ShardState::construct_from_cell(usage_tree.root_cell())? {
+            ShardState::UnsplitState(state) => {
+                visit_state(&state)?;
+            }
+            ShardState::SplitState(split_state) => {
+                visit_state(&ShardStateUnsplit::construct_from_cell(split_state.left)?)?;
+                visit_state(&ShardStateUnsplit::construct_from_cell(split_state.right)?)?;
+            }
+        }
+
+        let old_proof_root = old_proof.proof.serialize()?;
+        let old_proof_hash = old_proof_root.repr_hash();
+        let new_proof_root = new_proof.proof.serialize()?;
+        let update = MerkleUpdate::create_fast(
+            &old_proof_root,
+            &new_proof_root,
+            |h| {
+                sub_queue_cells_hashes.contains(h) ||
+                usage_tree.contains(h) ||
+                h == &old_proof_hash
+            }
+        )?;
+        let is_empty = old_proof.sub_queue_root_hash == new_proof.sub_queue_root_hash && 
+            old_proof.sub_queue_root_hash_2.is_none();
+        Ok(OutQueueUpdate {is_empty, update})
+    }
+
+    pub fn prepare_first_update_for_wc(
+        zerostate_root: &Cell,
+        new_shard_state_root: &Cell,
+        workchain_id: i32,
+    ) -> Result<OutQueueUpdate> {
+        let new_proof = Self::prepare_proof_for_wc(new_shard_state_root, workchain_id)?;
+        let new_proof_root = new_proof.serialize()?;
+        Ok(OutQueueUpdate {
+            is_empty: false,
+            update: MerkleUpdate::create_fast(zerostate_root, &new_proof_root, |_| false)?
+        })
+    }
+
+    fn prepare_proof_for_wc_internal(
+        shard_state_root: &Cell,
+        workchain_id: i32,
+    ) -> Result<ProofForWc> {
+        
+        let usage_tree = UsageTree::with_root(shard_state_root.clone());
+        let mut result = ProofForWc::default();
+
+        fn visit_state(
+            state: &ShardStateUnsplit,
+            workchain_id: i32,
+        ) -> Result<(UInt256, UInt256)> {
+            let queue_info = state.read_out_msg_queue_info()?;
+            let sub_queue_root_hash = queue_info.out_queue()
+                .subtree_root_cell(&SliceData::load_builder(workchain_id.write_to_new_cell()?)?)?
+                .map(|c| c.repr_hash()).unwrap_or_default();
+            let proc_info_root_hash = queue_info.proc_info().root()
+                .map(|c| c.repr_hash()).unwrap_or_default();
+            Ok((sub_queue_root_hash, proc_info_root_hash))
+        }
+
+        match ShardState::construct_from_cell(usage_tree.root_cell())? {
+            ShardState::UnsplitState(state) => {
+                let (sq, pi) = visit_state(&state, workchain_id)?;
+                result.sub_queue_root_hash = sq.clone();
+                result.root_hashes.insert(sq);
+                result.root_hashes.insert(pi);
+            }
+            ShardState::SplitState(split_state) => {
+                let left_ss = ShardStateUnsplit::construct_from_cell(split_state.left)?;
+                let (sq, pi) = visit_state(&left_ss, workchain_id)?;
+                result.sub_queue_root_hash = sq.clone();
+                result.root_hashes.insert(sq);
+                result.root_hashes.insert(pi);
+
+                let right_ss = ShardStateUnsplit::construct_from_cell(split_state.right)?;
+                let (sq, pi) = visit_state(&right_ss, workchain_id)?;
+                result.sub_queue_root_hash_2 = Some(sq.clone());
+                result.root_hashes.insert(sq);
+                result.root_hashes.insert(pi);
+            }
+        }
+
+        result.proof = MerkleProof::create_with_subtrees(
+            shard_state_root,
+            |h| usage_tree.contains(h),
+            |h| result.root_hashes.contains(h)
+        )?;
         Ok(result)
     }
 }
@@ -550,7 +705,10 @@ impl OutMsg {
     }
 
     pub fn read_transaction(&self) -> Result<Option<Transaction>> {
-        self.transaction_cell().map(|cell| Transaction::construct_from(&mut cell.into())).transpose()
+        match self.transaction_cell() {
+            Some(cell) => Ok(Some(Transaction::construct_from_cell(cell)?)),
+            None => Ok(None)
+        }
     }
 
     pub fn read_reimport_message(&self) -> Result<Option<InMsg>> {
@@ -729,8 +887,8 @@ impl OutMsgExternal {
 
 impl Serializable for OutMsgExternal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
+        cell.checked_append_reference(self.msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
         Ok(())
     }
 }
@@ -790,9 +948,9 @@ impl OutMsgImmediate {
 
 impl Serializable for OutMsgImmediate {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
-        cell.append_reference_cell(self.reimport.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
+        cell.checked_append_reference(self.reimport.cell())?;
         Ok(())
     }
 }
@@ -843,8 +1001,8 @@ impl OutMsgNew {
 
 impl Serializable for OutMsgNew {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.transaction.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.transaction.cell())?;
         Ok(())
     }
 }
@@ -894,8 +1052,8 @@ impl OutMsgTransit {
 
 impl Serializable for OutMsgTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.imported.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.imported.cell())?;
         Ok(())
     }
 }
@@ -945,8 +1103,8 @@ impl OutMsgDequeueImmediate {
 
 impl Serializable for OutMsgDequeueImmediate {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.reimport.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.reimport.cell())?;
         Ok(())
     }
 }
@@ -1000,7 +1158,7 @@ impl OutMsgDequeue {
 
 impl Serializable for OutMsgDequeue {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
         cell.append_bits(self.import_block_lt as usize, 63)?;
         Ok(())
     }
@@ -1083,8 +1241,8 @@ impl OutMsgTransitRequeued {
 
 impl Serializable for OutMsgTransitRequeued {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.out_msg.cell());
-        cell.append_reference_cell(self.imported.cell());
+        cell.checked_append_reference(self.out_msg.cell())?;
+        cell.checked_append_reference(self.imported.cell())?;
         Ok(())
     }
 }

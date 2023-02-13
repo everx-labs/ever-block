@@ -237,7 +237,7 @@ impl PartialEq<UInt256> for SigPubKey {
 impl FromStr for SigPubKey {
     type Err = failure::Error;
     fn from_str(s: &str) -> Result<Self> {
-        let pub_key = UInt256::from_str(s)?;
+        let pub_key = s.parse()?;
         Ok(Self(pub_key))
     }
 }

@@ -13,7 +13,7 @@
 
 use crate::{
     bintree::{BinTree, BinTreeType},
-    blocks::{Block, BlockIdExt, ExtBlkRef},
+    blocks::{Block, BlockIdExt, ExtBlkRef, ProofChain},
     config_params::ConfigParams,
     define_HashmapAugE, define_HashmapE,
     error::BlockError,
@@ -63,6 +63,15 @@ impl Augmentation<ShardFeeCreated> for ShardFeeCreated {
 pub struct ShardIdentFull {
     pub workchain_id: i32,
     pub prefix: u64, // with terminated bit!
+}
+
+impl ShardIdentFull {
+    pub fn new(workchain_id: i32, prefix: u64) -> ShardIdentFull {
+        ShardIdentFull {
+            workchain_id,
+            prefix,
+        }
+    }
 }
 
 impl Serializable for ShardIdentFull {
@@ -117,7 +126,8 @@ impl ShardHashes {
     where F: FnMut(ShardIdent, ShardDescr, Option<ShardDescr>) -> Result<bool> {
         self.iterate_with_keys(|wc_id: i32, InRefValue(shards)| {
             shards.iterate_pairs(|prefix, shard_descr, sibling| {
-                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix.into_cell()?.into())?;
+                let prefix = SliceData::load_builder(prefix)?;
+                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
                 func(shard_ident, shard_descr, sibling)
             })
         })
@@ -343,10 +353,21 @@ impl McShardRecord {
                     fees_collected: value_flow.fees_collected,
                     funds_created: value_flow.created,
                     copyleft_rewards: value_flow.copyleft_rewards,
+                    proof_chain: None,
                 },
                 block_id,
             }
         )
+    }
+
+    pub fn from_block_and_proof_chain(
+        block: &Block,
+        block_id: BlockIdExt,
+        proof_chain: ProofChain
+    ) -> Result<Self> {
+        let mut record = Self::from_block(block, block_id)?;
+        record.descr.proof_chain = Some(proof_chain);
+        Ok(record)
     }
 
     pub fn shard(&self) -> &ShardIdent { self.block_id.shard() }
@@ -509,7 +530,7 @@ impl Deserializable for McBlockExtra {
         self.shards.read_from(cell)?;
         self.fees.read_from(cell)?;
 
-        let cell1 = &mut cell.checked_drain_reference()?.into();
+        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         self.prev_blk_signatures.read_from(cell1)?;
         self.recover_create_msg = ChildCell::construct_maybe_from_reference(cell1)?;
         self.mint_msg = ChildCell::construct_maybe_from_reference(cell1)?;
@@ -548,7 +569,7 @@ impl Serializable for McBlockExtra {
             self.copyleft_msgs.write_to(&mut cell1)?;
         }
 
-        cell.append_reference_cell(cell1.into_cell()?);
+        cell.checked_append_reference(cell1.into_cell()?)?;
 
         if let Some(config) = &self.config {
             config.write_to(cell)?;
@@ -1149,7 +1170,7 @@ impl Deserializable for McStateExtra {
         self.shards.read_from(cell)?;
         self.config.read_from(cell)?;
 
-        let cell1 = &mut cell.checked_drain_reference()?.into();
+        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         let mut flags = 0u16;
         flags.read_from(cell1)?; // 16 + 0
         if flags > 3 {
@@ -1201,7 +1222,7 @@ impl Serializable for McStateExtra {
         if !self.state_copyleft_rewards.is_empty() {
             self.state_copyleft_rewards.write_to(&mut cell1)?;
         }
-        cell.append_reference_cell(cell1.into_cell()?);
+        cell.checked_append_reference(cell1.into_cell()?)?;
         self.global_balance.write_to(cell)?;
         Ok(())
     }
@@ -1319,6 +1340,7 @@ pub struct ShardDescr {
     pub fees_collected: CurrencyCollection,
     pub funds_created: CurrencyCollection,
     pub copyleft_rewards: CopyleftRewards,
+    pub proof_chain: Option<ProofChain>, // Some when CapWc2WcQueueUpdates is set
 }
 
 impl ShardDescr {
@@ -1347,6 +1369,7 @@ impl ShardDescr {
             fees_collected: CurrencyCollection::default(),
             funds_created: CurrencyCollection::default(),
             copyleft_rewards: CopyleftRewards::default(),
+            proof_chain: None,
         }
     }
     pub fn fsm_equal(&self, other: &Self) -> bool {
@@ -1387,12 +1410,14 @@ impl ShardDescr {
 const SHARD_IDENT_TAG_A: u8 = 0xa; // 4 bit
 const SHARD_IDENT_TAG_B: u8 = 0xb; // 4 bit
 const SHARD_IDENT_TAG_C: u8 = 0xc; // 4 bit
+const SHARD_IDENT_TAG_D: u8 = 0xd; // 4 bit // with all previous and proof chain
 const SHARD_IDENT_TAG_LEN: usize = 4;
 
 impl Deserializable for ShardDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(SHARD_IDENT_TAG_LEN)? as u8;
-        if tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B && tag != SHARD_IDENT_TAG_C {
+        if tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B && tag != SHARD_IDENT_TAG_C &&
+           tag != SHARD_IDENT_TAG_D {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
@@ -1428,14 +1453,23 @@ impl Deserializable for ShardDescr {
             self.fees_collected.read_from(slice)?;
             self.funds_created.read_from(slice)?;
         } else if tag == SHARD_IDENT_TAG_A {
-            let mut slice1 = slice.checked_drain_reference()?.into();
+            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
             self.fees_collected.read_from(&mut slice1)?;
             self.funds_created.read_from(&mut slice1)?;
         } else if tag == SHARD_IDENT_TAG_C {
-            let mut slice1 = slice.checked_drain_reference()?.into();
+            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
             self.fees_collected.read_from(&mut slice1)?;
             self.funds_created.read_from(&mut slice1)?;
             self.copyleft_rewards.read_from(&mut slice1)?;
+        } else if tag == SHARD_IDENT_TAG_D {
+            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
+            self.fees_collected.read_from(&mut slice1)?;
+            self.funds_created.read_from(&mut slice1)?;
+            if slice1.get_next_bit()? {
+                self.copyleft_rewards.read_from(&mut slice1)?;
+            }
+            let proof_chain = ProofChain::construct_from(&mut slice1)?;
+            self.proof_chain = Some(proof_chain);
         }
         Ok(())
     }
@@ -1443,10 +1477,12 @@ impl Deserializable for ShardDescr {
 
 impl Serializable for ShardDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        let tag = if self.copyleft_rewards.is_empty() {
-            SHARD_IDENT_TAG_A
-        } else {
+        let tag = if self.proof_chain.is_some() {
+            SHARD_IDENT_TAG_D
+        } else if !self.copyleft_rewards.is_empty() {
             SHARD_IDENT_TAG_C
+        } else {
+            SHARD_IDENT_TAG_A
         };
         cell.append_bits(tag as usize, SHARD_IDENT_TAG_LEN)?;
 
@@ -1488,10 +1524,20 @@ impl Serializable for ShardDescr {
         let mut child = BuilderData::new();
         self.fees_collected.write_to(&mut child)?;
         self.funds_created.write_to(&mut child)?;
-        if !self.copyleft_rewards.is_empty() {
-            self.copyleft_rewards.write_to(&mut child)?;
+        if let Some(proof_chain) = self.proof_chain.as_ref() {
+            if !self.copyleft_rewards.is_empty() {
+                child.append_bit_one()?;
+                self.copyleft_rewards.write_to(&mut child)?;
+            } else {
+                child.append_bit_zero()?;
+            }
+            proof_chain.write_to(&mut child)?;
+        } else {
+            if !self.copyleft_rewards.is_empty() {
+                self.copyleft_rewards.write_to(&mut child)?;
+            }
         }
-        cell.append_reference_cell(child.into_cell()?);
+        cell.checked_append_reference(child.into_cell()?)?;
 
         Ok(())
     }

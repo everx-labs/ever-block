@@ -20,7 +20,7 @@ use crate::{
     merkle_proof::MerkleProof,
     messages::{generate_big_msg, Message},
     shard::ShardStateUnsplit,
-    types::{AddSub, ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
+    types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
 };
 use std::{fmt, sync::Arc};
@@ -132,7 +132,7 @@ tr_phase_compute_vm$1
     success:Bool
     msg_state_used:Bool
     account_activated:Bool
-    gas_fees:Gram // is it spec's typo? I think should be "Grams"
+    gas_fees:Grams
     _:^[
         gas_used:(VarUInteger 7)
         gas_limit:(VarUInteger 7)
@@ -247,7 +247,7 @@ impl Serializable for TrComputePhase {
             v.vm_init_state_hash.write_to(&mut sep_cell)?; // vm_init_state_hash:uint256
             v.vm_final_state_hash.write_to(&mut sep_cell)?; // vm_final_state_hash:uint256
 
-            cell.append_reference_cell(sep_cell.into_cell()?);
+            cell.checked_append_reference(sep_cell.into_cell()?)?;
         }
 
         Ok(())
@@ -267,7 +267,7 @@ impl Deserializable for TrComputePhase {
             let gas_fees = Deserializable::construct_from(cell)?; // gas_fees:Gram
 
             // fields below are serialized into separate cell
-            let sep_cell = &mut cell.checked_drain_reference()?.into();
+            let sep_cell = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
 
             let gas_used = Deserializable::construct_from(sep_cell)?; // gas_used:(VarUInteger 7)
             let gas_limit = Deserializable::construct_from(sep_cell)?; // gas_limit:(VarUInteger 7)
@@ -313,14 +313,6 @@ pub struct TrStoragePhase {
 }
 
 impl TrStoragePhase {
-    pub fn new() -> Self {
-        Self {
-            storage_fees_collected: Grams::default(),
-            storage_fees_due: None,
-            status_change: AccStatusChange::default()
-
-        }
-    }
     pub const fn with_params(collected: Grams, due: Option<Grams>, status: AccStatusChange) -> Self {
         TrStoragePhase {
             storage_fees_collected: collected,
@@ -728,7 +720,7 @@ impl Serializable for TransactionDescrOrdinary {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference_cell(a.serialize()?);
+            cell.checked_append_reference(a.serialize()?)?;
         }
 
         Ok(())
@@ -807,7 +799,7 @@ impl Serializable for TransactionDescrTickTock {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference_cell(a.serialize()?);
+            cell.checked_append_reference(a.serialize()?)?;
         }
 
         Ok(())
@@ -858,7 +850,7 @@ impl Serializable for TransactionDescrSplitPrepare {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference_cell(a.serialize()?);
+            cell.checked_append_reference(a.serialize()?)?;
         }
 
         Ok(())
@@ -899,7 +891,7 @@ impl Serializable for TransactionDescrSplitInstall {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         cell.append_bit_bool(self.installed)?;
-        cell.append_reference_cell(self.prepare_transaction.serialize()?);
+        cell.checked_append_reference(self.prepare_transaction.serialize()?)?;
         Ok(())
     }
 }
@@ -971,7 +963,7 @@ pub struct TransactionDescrMergeInstall {
 impl Serializable for TransactionDescrMergeInstall {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
-        cell.append_reference_cell(self.prepare_transaction.serialize()?);
+        cell.checked_append_reference(self.prepare_transaction.serialize()?)?;
         self.credit_ph.write_maybe_to(cell)?;
         self.compute_ph.write_to(cell)?;
         cell.append_bit_bool(self.action.is_some())?;
@@ -979,7 +971,7 @@ impl Serializable for TransactionDescrMergeInstall {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.append_reference_cell(a.serialize()?);
+            cell.checked_append_reference(a.serialize()?)?;
         }
 
         Ok(())
@@ -1408,7 +1400,7 @@ impl Transaction {
 
     /// add fee
     pub fn add_fee_grams(&mut self, fee: &Grams) -> Result<bool> {
-        self.total_fees.grams.add(fee)
+        crate::types::AddSub::add(&mut self.total_fees.grams, fee)
     }
 
     /// set total fees
@@ -1540,7 +1532,7 @@ impl Transaction {
         // proof for transaction and block info in block
 
         let usage_tree = UsageTree::with_root(block_root.clone());
-        let block: Block = Block::construct_from(&mut usage_tree.root_slice())?;
+        let block = Block::construct_from_cell(usage_tree.root_cell())?;
 
         block.read_info()?;
 
@@ -1648,17 +1640,17 @@ impl Serializable for Transaction {
         match &self.in_msg {
             Some(in_msg) => {
                 builder1.append_bit_one()?;
-                builder1.append_reference_cell(in_msg.cell());
+                builder1.checked_append_reference(in_msg.cell())?;
             },
             None => {
                 builder1.append_bit_zero()?;
             }
         };
         self.out_msgs.write_to(&mut builder1)?;
-        builder.append_reference_cell(builder1.into_cell()?);
+        builder.checked_append_reference(builder1.into_cell()?)?;
         self.total_fees.write_to(builder)?; // total_fees
-        builder.append_reference_cell(self.state_update.cell()); // ^(HASH_UPDATE Account)
-        builder.append_reference_cell(self.description.cell()); // ^TransactionDescr
+        builder.checked_append_reference(self.state_update.cell())?; // ^(HASH_UPDATE Account)
+        builder.checked_append_reference(self.description.cell())?; // ^TransactionDescr
 
         Ok(())
     }
@@ -1683,7 +1675,7 @@ impl Deserializable for Transaction {
         self.outmsg_cnt = cell.get_next_int(15)? as i16; // outmsg_cnt
         self.orig_status.read_from(cell)?; // orig_status
         self.end_status.read_from(cell)?; // end_status
-        let cell1 = &mut SliceData::from(cell.checked_drain_reference()?);
+        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         if cell1.get_next_bit()? {
             let mut msg = ChildCell::default();
             msg.read_from_reference(cell1)?;
@@ -1871,7 +1863,7 @@ impl Serializable for AccountBlock {
         cell.append_bits(ACCOUNT_BLOCK_TAG, 4)?;
         self.account_addr.write_to(cell)?;                                  // account_addr: AccountId,
         self.transactions.write_hashmap_root(cell)?;
-        cell.append_reference_cell(self.state_update.cell());      // ^(HASH_UPDATE Account)
+        cell.checked_append_reference(self.state_update.cell())?;      // ^(HASH_UPDATE Account)
         Ok(())
     }
 }

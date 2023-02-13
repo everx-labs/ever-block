@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2022 TON Labs. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -83,6 +83,8 @@ use ton_types::{
     BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
 };
 
+include!("../common/src/info.rs");
+
 impl<K, V> Serializable for HashMap<K, V>
 where
     K: Clone + Eq + Hash + Default + Deserializable + Serializable,
@@ -92,8 +94,8 @@ where
         let bit_len = K::default().write_to_new_cell()?.length_in_bits();
         let mut dictionary = HashmapE::with_bit_len(bit_len);
         for (key, value) in self.iter() {
-            let key = key.serialize()?;
-            dictionary.set_builder(key.into(), &value.write_to_new_cell()?)?;
+            let key = SliceData::load_builder(key.write_to_new_cell()?)?;
+            dictionary.set_builder(key, &value.write_to_new_cell()?)?;
         }
         dictionary.write_to(cell)
     }
@@ -169,8 +171,7 @@ pub trait Deserializable: Default {
         }
     }
     fn construct_from_cell(cell: Cell) -> Result<Self> {
-        Self::construct_from(&mut cell.into())
-            .map_err(|err| error!("bad deserialization {}: {:?}", std::any::type_name::<Self>(), err))
+        Self::construct_from(&mut SliceData::load_cell(cell)?)
     }
     fn construct_from_reference(slice: &mut SliceData) -> Result<Self> {
         Self::construct_from_cell(slice.checked_drain_reference()?)
@@ -200,7 +201,7 @@ pub trait Deserializable: Default {
         Ok(())
     }
     fn read_from_cell(&mut self, cell: Cell) -> Result<()> {
-        self.read_from(&mut cell.into())
+        self.read_from(&mut SliceData::load_cell(cell)?)
     }
     fn read_from_reference(&mut self, slice: &mut SliceData) -> Result<()> {
         self.read_from_cell(slice.checked_drain_reference()?)
@@ -224,7 +225,7 @@ impl Deserializable for Cell {
 
 impl Serializable for Cell {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_reference_cell(self.clone());
+        cell.checked_append_reference(self.clone())?;
         Ok(())
     }
 }
@@ -336,10 +337,11 @@ pub fn id_from_key(key: &ed25519_dalek::PublicKey) -> u64 {
 #[cfg(test)]
 pub fn write_read_and_assert<T>(s: T) -> T
 where T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq {
-    let cell = s.serialize().unwrap();
-    let mut slice = SliceData::from(cell);
+    let cell = s.write_to_new_cell().unwrap();
+    let mut slice = SliceData::load_builder(cell).unwrap();
     println!("slice: {}", slice);
     let s2 = T::construct_from(&mut slice).unwrap();
-    assert_eq!(s, s2);
+    s2.serialize().unwrap();
+    pretty_assertions::assert_eq!(s, s2);
     s2
 }

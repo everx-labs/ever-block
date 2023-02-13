@@ -19,8 +19,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use num::{BigInt, BigUint, bigint::Sign, One, Zero};
-use num_traits::cast::ToPrimitive;
+use num::{BigInt, bigint::Sign, One, Zero};
 use ton_types::{
     error, fail,
     Result, BuilderData, Cell, CellType, IBitstring, HashmapE, HashmapType, SliceData, UInt256
@@ -52,7 +51,7 @@ mod tests;
 macro_rules! define_VarIntegerN {
     ( $varname:ident, $N:expr, BigInt ) => {
         #[derive( Eq, Clone, Debug)]
-        pub struct $varname(pub BigInt);
+        pub struct $varname(BigInt);
 
         #[allow(dead_code)]
         impl $varname {
@@ -227,7 +226,7 @@ macro_rules! define_VarIntegerN {
     };
     ( $varname:ident, $N:expr, $tt:ty ) => {
         #[derive( Eq, Copy, Clone, Debug, Default, Ord, PartialEq, PartialOrd)]
-        pub struct $varname(pub $tt);
+        pub struct $varname($tt);
 
         impl $varname {
             pub const fn default() -> Self { $varname(0) }
@@ -273,9 +272,6 @@ macro_rules! define_VarIntegerN {
                 bits as usize + bytes * 8
             }
             pub const fn inner(&self) -> $tt { self.0 }
-            pub const fn as_u32(&self) -> u32 { self.0 as u32 }
-            pub const fn as_u64(&self) -> u64 { self.0 as u64 }
-            pub const fn as_u128(&self) -> u128 { self.0 as u128 }
         }
 
         impl Serializable for $varname {
@@ -313,39 +309,13 @@ macro_rules! define_VarIntegerN {
                 Ok(self.sub_checked(other.0))
             }
         }
-        impl From<u64> for $varname {
-            fn from(value: u64) -> Self {
-                Self(value as $tt)
-            }
-        }
-        impl From<i64> for $varname {
-            fn from(value: i64) -> Self {
-                Self(value as $tt)
-            }
-        }
-        impl From<u16> for $varname {
-            fn from(value: u16) -> Self {
-                Self(value as $tt)
-            }
-        }
-        impl From<u32> for $varname {
-            fn from(value: u32) -> Self {
-                Self(value as $tt)
-            }
-        }
-        impl From<i32> for $varname {
-            fn from(value: i32) -> Self {
-                Self(value as $tt)
-            }
-        }
-        impl From<u128> for $varname {
-            fn from(value: u128) -> Self {
-                Self(value as $tt)
-            }
-        }
-        impl From<usize> for $varname {
-            fn from(value: usize) -> Self {
-                Self(value as $tt)
+
+        #[cfg(not(test))]
+        impl std::convert::TryFrom<$tt> for $varname {
+            type Error = failure::Error;
+            fn try_from(value: $tt) -> Result<Self> {
+                Self::check_overflow(&value)?;
+                Ok(Self(value))
             }
         }
 
@@ -513,6 +483,18 @@ macro_rules! define_VarIntegerN {
                 self.0 -= rhs.0;
             }
         }
+
+        impl PartialEq<$tt> for $varname {
+            fn eq(&self, other: &$tt) -> bool {
+                self.0.cmp(other) == std::cmp::Ordering::Equal
+            }
+        }
+
+        impl PartialOrd<$tt> for $varname {
+            fn partial_cmp(&self, other: &$tt) -> Option<std::cmp::Ordering> {
+                Some(self.0.cmp(other))
+            }
+        }
     }
 }
 define_VarIntegerN!(Grams, 15, u128);
@@ -526,35 +508,42 @@ impl Augmentable for Grams {
     }
 }
 
-impl From<BigInt> for Grams {
-    fn from(value: BigInt) -> Self {
-        Self::from(&value)
+// it cannot produce problem
+impl From<u64> for Grams {
+    fn from(value: u64) -> Self {
+        Self(value as u128)
     }
 }
-impl From<&BigInt> for Grams {
-    fn from(value: &BigInt) -> Self {
-        match value.to_u128() {
-            Some(value) => Self(value),
-            None => {
-                log::error!("Cannot convert BigInt {} to u128", value);
-                Self(0)
-            }
-        }
+
+// it cannot produce problem
+impl From<u16> for VarUInteger3 {
+    fn from(value: u16) -> Self {
+        Self(value as u32)
     }
 }
-impl From<BigUint> for Grams {
-    fn from(value: BigUint) -> Self {
-        Self::from(&value)
+
+// it cannot produce problem
+impl From<u32> for VarUInteger7 {
+    fn from(value: u32) -> Self {
+        Self(value as u64)
     }
 }
-impl From<&BigUint> for Grams {
-    fn from(value: &BigUint) -> Self {
-        match value.to_u128() {
-            Some(value) => Self(value),
-            None => {
-                log::error!("Cannot convert BigUint {} to u128", value);
-                Self(0)
-            }
+
+impl VarUInteger7 {
+    pub const fn as_u64(&self) -> u64 { self.0 }
+}
+
+impl VarUInteger3 {
+    pub const fn as_u32(&self) -> u32 { self.0 }
+}
+
+impl Grams {
+    pub const fn as_u128(&self) -> u128 { self.0 }
+    pub const fn as_u64(&self) -> Option<u64> {
+        if self.0 <= u64::MAX as u128 {
+            Some(self.0 as u64)
+        } else {
+            None
         }
     }
 }
@@ -579,7 +568,7 @@ impl FromStr for Grams {
 macro_rules! define_NumberN_up32bit {
     ( $varname:ident, $N:expr ) => {
         #[derive(PartialEq, Eq, Hash, Clone, Debug, Default, PartialOrd, Ord)]
-        pub struct $varname(pub u32);
+        pub struct $varname(u32);
 
         #[allow(dead_code)]
         impl $varname {
@@ -648,9 +637,15 @@ macro_rules! define_NumberN_up32bit {
             }
         }
 
-        impl From<i64> for $varname {
-            fn from(value: i64) -> Self {
-                Self(value as u32)
+        impl PartialEq<u32> for $varname {
+            fn eq(&self, other: &u32) -> bool {
+                &self.0 == other
+            }
+        }
+
+        impl PartialOrd<u32> for $varname {
+            fn partial_cmp(&self, other: &u32) -> Option<std::cmp::Ordering> {
+                Some(self.0.cmp(other))
             }
         }
     };
@@ -703,7 +698,7 @@ impl From<u16> for Number16 {
 
 impl From<u32> for Number32 {
     fn from(value: u32) -> Self {
-        Self(value as u32)
+        Self(value)
     }
 }
 
@@ -1138,18 +1133,18 @@ macro_rules! define_HashmapE {
                 self.0.iterate_slices(|key, slice| p(key, slice))
             }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
-                let key = key.serialize()?.into();
+                let key = SliceData::load_builder(key.write_to_new_cell()?)?;
                 let value = value.write_to_new_cell()?;
                 self.0.set_builder(key, &value)?;
                 Ok(())
             }
             pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell) -> Result<()> {
-                let key = key.serialize()?.into();
+                let key = SliceData::load_builder(key.write_to_new_cell()?)?;
                 self.0.setref(key, value)?;
                 Ok(())
             }
             pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
-                let key = key.serialize()?.into();
+                let key = SliceData::load_builder(key.write_to_new_cell()?)?;
                 let value = BuilderData::default();
                 self.0.set_builder(key, &value)?;
                 Ok(())
@@ -1159,19 +1154,19 @@ macro_rules! define_HashmapE {
                     .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             }
             pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
-                let key = key.serialize()?.into();
+                let key = SliceData::load_builder(key.write_to_new_cell()?)?;
                 self.get_raw(key)
             }
             pub fn get_raw(&self, key: SliceData) -> Result<Option<SliceData>> {
                 self.0.get(key)
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {
-                let key = key.serialize()?.into();
+                let key = SliceData::load_builder(key.write_to_new_cell()?)?;
                 let leaf = self.0.remove(key)?;
                 Ok(leaf.is_some())
             }
             pub fn check_key<K: Serializable>(&self, key: &K) -> Result<bool> {
-                let key = key.serialize()?.into();
+                let key = SliceData::load_builder(key.write_to_new_cell()?)?;
                 self.0.get(key).map(|value| value.is_some())
             }
             pub fn export_vector(&self) -> Result<Vec<$x_type>> {
@@ -1230,7 +1225,7 @@ macro_rules! define_HashmapE {
                 eq: bool,
                 signed_int: bool,
             ) -> Result<Option<(K, $x_type)>> {
-                let key = key.serialize()?.into();
+                let key = SliceData::load_builder(key.write_to_new_cell()?)?;
                 if let Some((k, mut v)) = self.0.find_leaf(key, next, eq, signed_int, &mut 0)? {
                     // BuilderData, SliceData
                     let key = K::construct_from_cell(k.into_cell()?)?;
@@ -1263,11 +1258,13 @@ macro_rules! define_HashmapE {
 }
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq, Default, Hash)]
-pub struct UnixTime32(pub u32);
+pub struct UnixTime32(u32);
 
 impl UnixTime32 {
     pub const fn default() -> Self { Self(0) }
-    pub const fn new(value: u32) -> Self { UnixTime32(value) }
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
     pub const fn as_u32(&self) -> u32 {
         self.0
     }
@@ -1307,13 +1304,6 @@ pub struct ChildCell<T: Default + Serializable + Deserializable> {
 }
 
 impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
-    pub fn default() -> Self {
-        Self {
-            cell: None,
-            phantom: PhantomData
-        }
-    }
-
     pub fn with_cell(cell: Cell) -> Self {
         Self {
             cell: Some(cell),
@@ -1338,7 +1328,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         match s {
             Some(s) => {
                 cell.append_bit_one()?;
-                cell.append_reference_cell(s.cell());
+                cell.checked_append_reference(s.cell())?;
             }
             None => {
                 cell.append_bit_zero()?;
