@@ -535,7 +535,7 @@ impl ValidatorSet {
             let mut prng = ValidatorSetPRNG::new(shard_pfx, workchain_id, cc_seqno);
             let full_list = if cc_config.isolate_mc_validators {
                 if self.total <= self.main {
-                    fail!("Count of validators is too small to make sharde's subset while `isolate_mc_validators` flag is set")
+                    fail!(failure::format_err!("Count of validators is too small to make sharde's subset while `isolate_mc_validators` flag is set (total={}, main={})", self.total, self.main))
                 }
                 let list = self.list[self.main.as_usize()..].to_vec();
                 Cow::Owned(
