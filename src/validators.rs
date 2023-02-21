@@ -301,12 +301,17 @@ impl Deserializable for ValidatorDescr {
                 bls_public_key = None;
             }
             VALIDATOR_DESC_BLS_KEY_TAG => {
+                log::error!("{}) rembits={}", line!(), slice.remaining_bits());
                 public_key = Deserializable::construct_from(slice)?;
+                log::error!("{}) rembits={}", line!(), slice.remaining_bits());
                 weight = Deserializable::construct_from(slice)?;
+                log::error!("{}) rembits={}", line!(), slice.remaining_bits());
                 let addr : UInt256 = Deserializable::construct_from(slice)?;
                 adnl_addr = if addr.is_zero() { None } else { Some(addr) };
+                log::error!("{}) rembits={}", line!(), slice.remaining_bits());
                 mc_seq_no_since = 0;
                 bls_public_key = Some(slice.get_next_bits(BLS_PUBLIC_KEY_LEN * 8)?.as_slice().try_into()?);
+                log::error!("{}) rembits={}", line!(), slice.remaining_bits());
             }
             tag => fail!(Self::invalid_tag(tag as u32))
         }
