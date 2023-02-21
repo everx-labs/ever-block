@@ -259,17 +259,21 @@ impl Serializable for ValidatorDescr {
         cell.append_u8(tag)?;
         self.public_key.write_to(cell)?;
         self.weight.write_to(cell)?;
+                log::error!("{})) lenbits={}", line!(), cell.length_in_bits());
         if let Some(adnl_addr) = self.adnl_addr.as_ref() {
             adnl_addr.write_to(cell)?;
         } else if self.bls_public_key.is_some() {
             UInt256::default().write_to(cell)?;
         }
+                log::error!("{})) lenbits={}", line!(), cell.length_in_bits());
         if self.mc_seq_no_since != 0 {
             self.mc_seq_no_since.write_to(cell)?;
         }
+                log::error!("{})) lenbits={}", line!(), cell.length_in_bits());
         if let Some(bls_key) = self.bls_public_key.as_ref() {
             cell.append_raw(bls_key, BLS_PUBLIC_KEY_LEN * 8)?;
         }
+                log::error!("{})) lenbits={}", line!(), cell.length_in_bits());
         Ok(())
     }
 }
