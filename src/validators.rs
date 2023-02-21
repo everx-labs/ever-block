@@ -261,6 +261,8 @@ impl Serializable for ValidatorDescr {
         self.weight.write_to(cell)?;
         if let Some(adnl_addr) = self.adnl_addr.as_ref() {
             adnl_addr.write_to(cell)?;
+        } else if self.bls_public_key.is_some() {
+            UInt256::default().write_to(cell)?;
         }
         if self.mc_seq_no_since != 0 {
             self.mc_seq_no_since.write_to(cell)?;
@@ -301,7 +303,8 @@ impl Deserializable for ValidatorDescr {
             VALIDATOR_DESC_BLS_KEY_TAG => {
                 public_key = Deserializable::construct_from(slice)?;
                 weight = Deserializable::construct_from(slice)?;
-                adnl_addr = None;
+                let addr : UInt256 = Deserializable::construct_from(slice)?;
+                adnl_addr = if addr.is_zero() { None } else { Some(addr) };
                 mc_seq_no_since = 0;
                 bls_public_key = Some(slice.get_next_bits(BLS_PUBLIC_KEY_LEN * 8)?.as_slice().try_into()?);
             }
