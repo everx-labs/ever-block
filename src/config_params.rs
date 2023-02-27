@@ -363,6 +363,7 @@ pub enum GlobalCapabilities {
     CapResolveMerkleCell      = 0x2000000,
     #[cfg(feature = "signature_with_id")]
     CapSignatureWithId        = 0x4000000, // use some predefined id during signature check
+    CapBounceAfterFailedAction= 0x8000000,
 }
 
 impl ConfigParams {
