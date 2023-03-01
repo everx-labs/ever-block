@@ -364,6 +364,8 @@ pub enum GlobalCapabilities {
     #[cfg(feature = "signature_with_id")]
     CapSignatureWithId        = 0x4000000, // use some predefined id during signature check
     CapBounceAfterFailedAction= 0x8000000,
+    #[cfg(feature = "groth")]
+    CapVerGroth16             = 0x1000_0000,
 }
 
 impl ConfigParams {

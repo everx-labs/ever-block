@@ -1529,10 +1529,8 @@ impl Serializable for ShardDescr {
                 child.append_bit_zero()?;
             }
             proof_chain.write_to(&mut child)?;
-        } else {
-            if !self.copyleft_rewards.is_empty() {
-                self.copyleft_rewards.write_to(&mut child)?;
-            }
+        } else if !self.copyleft_rewards.is_empty() {
+            self.copyleft_rewards.write_to(&mut child)?;
         }
         cell.checked_append_reference(child.into_cell()?)?;
 
