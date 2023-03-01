@@ -8,6 +8,12 @@ All notable changes to this project will be documented in this file.
 
 - Fixed appending references to cells
 
+## Version: 1.9.30
+
+### New
+
+- Add capability and feature for groth
+
 ## Version: 1.9.7
 
 ### New
