@@ -269,11 +269,11 @@ pub struct OutMsgQueueInfo {
 }
 
 #[derive(Default)]
-struct ProofForWc {
-    proof: MerkleProof,
-    root_hashes: HashSet<UInt256>,
-    sub_queue_root_hash: UInt256,
-    sub_queue_root_hash_2: Option<UInt256>,
+pub struct ProofForWc {
+    pub proof: MerkleProof,
+    pub root_hashes: HashSet<UInt256>,
+    pub sub_queue_root_hash: UInt256,
+    pub sub_queue_root_hash_2: Option<UInt256>,
 }
 
 impl OutMsgQueueInfo {
@@ -339,7 +339,7 @@ impl OutMsgQueueInfo {
         shard_state_root: &Cell,
         workchain_id: i32
     ) -> Result<MerkleProof> {
-        let proof = Self::prepare_proof_for_wc_internal(shard_state_root, workchain_id)?;
+        let proof = Self::prepare_proof_for_wc_ex(shard_state_root, workchain_id)?;
         Ok(proof.proof)
     }
 
@@ -351,10 +351,10 @@ impl OutMsgQueueInfo {
         workchain_id: i32,
     ) -> Result<OutQueueUpdate> {
 
-        let old_proof = Self::prepare_proof_for_wc_internal(
+        let old_proof = Self::prepare_proof_for_wc_ex(
             old_shard_state_root, workchain_id)?;
 
-        let new_proof = Self::prepare_proof_for_wc_internal(
+        let new_proof = Self::prepare_proof_for_wc_ex(
             new_shard_state_root, workchain_id)?;
 
         // Prepare visited cells set of the needed part of queue
@@ -410,7 +410,7 @@ impl OutMsgQueueInfo {
         })
     }
 
-    fn prepare_proof_for_wc_internal(
+    pub fn prepare_proof_for_wc_ex(
         shard_state_root: &Cell,
         workchain_id: i32,
     ) -> Result<ProofForWc> {
