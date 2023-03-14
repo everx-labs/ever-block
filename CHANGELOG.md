@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version: 1.9.38
+
+### New
+
+- Add capability for fees in Gas units
+
 ## Version: 1.9.12
 
 ### New

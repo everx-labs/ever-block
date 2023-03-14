@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2023 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2023 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -52,6 +52,13 @@ impl ConfigParams {
         Self {
             config_addr: UInt256::default(),
             config_params: HashmapE::with_bit_len(32)
+        }
+    }
+
+    pub const fn with_root(data: Cell) -> Self {
+        Self {
+            config_addr: UInt256::ZERO,
+            config_params: HashmapE::with_hashmap(32, Some(data))
         }
     }
 
@@ -335,37 +342,38 @@ impl ConfigParams {
 #[repr(u64)]
 pub enum GlobalCapabilities {
     CapNone                   = 0,
-    CapIhrEnabled             = 0x0000001,
-    CapCreateStatsEnabled     = 0x0000002,
-    CapBounceMsgBody          = 0x0000004,
-    CapReportVersion          = 0x0000008,
-    CapSplitMergeTransactions = 0x0000010,
-    CapShortDequeue           = 0x0000020,
-    CapMbppEnabled            = 0x0000040,
-    CapFastStorageStat        = 0x0000080,
-    CapInitCodeHash           = 0x0000100,
-    CapOffHypercube           = 0x0000200,
-    CapMycode                 = 0x0000400,
-    CapSetLibCode             = 0x0000800,
-    CapFixTupleIndexBug       = 0x0001000,
-    CapRemp                   = 0x0002000,
-    CapDelections             = 0x0004000,
-    CapFullBodyInBounced      = 0x0010000,
-    CapStorageFeeToTvm        = 0x0020000,
-    CapCopyleft               = 0x0040000,
-    CapIndexAccounts          = 0x0080000,
+    CapIhrEnabled             = 0x0000_0001,
+    CapCreateStatsEnabled     = 0x0000_0002,
+    CapBounceMsgBody          = 0x0000_0004,
+    CapReportVersion          = 0x0000_0008,
+    CapSplitMergeTransactions = 0x0000_0010,
+    CapShortDequeue           = 0x0000_0020,
+    CapMbppEnabled            = 0x0000_0040,
+    CapFastStorageStat        = 0x0000_0080,
+    CapInitCodeHash           = 0x0000_0100,
+    CapOffHypercube           = 0x0000_0200,
+    CapMycode                 = 0x0000_0400,
+    CapSetLibCode             = 0x0000_0800,
+    CapFixTupleIndexBug       = 0x0000_1000,
+    CapRemp                   = 0x0000_2000,
+    CapDelections             = 0x0000_4000,
+    CapFullBodyInBounced      = 0x0001_0000,
+    CapStorageFeeToTvm        = 0x0002_0000,
+    CapCopyleft               = 0x0004_0000,
+    CapIndexAccounts          = 0x0008_0000,
     #[cfg(feature = "gosh")]
-    CapDiff                   = 0x0100000,
-    CapsTvmBugfixes2022       = 0x0200000, // popsave, exception handler, loops
-    CapWorkchains             = 0x0400000,
-    CapStcontNewFormat        = 0x0800000,  // support old format continuation serialization
-    CapFastStorageStatBugfix  = 0x1000000, // calc cell datasize using fast storage stat
-    CapResolveMerkleCell      = 0x2000000,
+    CapDiff                   = 0x0010_0000,
+    CapsTvmBugfixes2022       = 0x0020_0000, // popsave, exception handler, loops
+    CapWorkchains             = 0x0040_0000,
+    CapStcontNewFormat        = 0x0080_0000, // support old format continuation serialization
+    CapFastStorageStatBugfix  = 0x0100_0000, // calc cell datasize using fast storage stat
+    CapResolveMerkleCell      = 0x0200_0000,
     #[cfg(feature = "signature_with_id")]
-    CapSignatureWithId        = 0x4000000, // use some predefined id during signature check
-    CapBounceAfterFailedAction= 0x8000000,
+    CapSignatureWithId        = 0x0400_0000, // use some predefined id during signature check
+    CapBounceAfterFailedAction= 0x0800_0000,
     #[cfg(feature = "groth")]
-    CapVerGroth16             = 0x1000_0000,
+    CapGroth16                = 0x1000_0000,
+    CapFeeInGasUnits          = 0x2000_0000, // all fees in config are in gas units
 }
 
 impl ConfigParams {
@@ -397,10 +405,7 @@ impl ConfigParams {
         }
     }
     pub fn global_version(&self) -> u32 {
-        match self.get_global_version() {
-            Ok(gb) => gb.version,
-            Err(_) => 0
-        }
+        self.get_global_version().map_or(0, |gb| gb.version)
     }
 }
 
