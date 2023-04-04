@@ -17,10 +17,7 @@ use crate::{
 };
 use std::collections::{HashMap, HashSet};
 use ton_types::{
-    error, fail, Result,
-    BagOfCells,
-    UInt256,
-    BuilderData, Cell, CellType, IBitstring, LevelMask, SliceData,
+    error, fail, Result, UInt256, BuilderData, Cell, CellType, IBitstring, LevelMask, SliceData,
 };
 
 
@@ -140,11 +137,10 @@ impl MerkleUpdate {
             })
         } else {
             // trees traversal and update creating;
-            let new_bag = BagOfCells::with_root(new);
-            let new_cells = new_bag.cells();
+            let new_cells = Self::collect_cells(new);
             let mut pruned_branches = HashMap::new();
 
-            let old_update_cell = match Self::traverse_old_on_create(old, new_cells, &mut pruned_branches, 0)? {
+            let old_update_cell = match Self::traverse_old_on_create(old, &new_cells, &mut pruned_branches, 0)? {
                 Some(old_update_cell) => old_update_cell,
                 // Nothing from old tree were pruned, lets prune all tree!
                 None => Self::make_pruned_branch_cell(old, 0)?
@@ -202,6 +198,22 @@ impl MerkleUpdate {
                 new: new_update_cell,
             })
         }
+    }
+
+    fn collect_cells(cell: &Cell) -> HashMap<UInt256, Cell> {
+        fn walker(cell: &Cell, hash: UInt256, cells: &mut HashMap<UInt256, Cell>) {
+            cells.insert(hash, cell.clone());
+            for i in 0..cell.references_count() {
+                let child_hash = cell.reference(i).unwrap().repr_hash();
+                if !cells.contains_key(&child_hash) {
+                    let child = cell.reference(i).unwrap();
+                    walker(&child, child_hash, cells);
+                }
+            }
+        }
+        let mut cells = HashMap::new();
+        walker(cell, cell.repr_hash(), &mut cells);
+        cells
     }
 
     fn collect_used_paths_cells(
@@ -398,7 +410,7 @@ impl MerkleUpdate {
     //   else - skip this cell (return None)
     fn traverse_old_on_create(
         old_cell: &Cell,
-        new_cells: &HashMap<UInt256, (Cell, u32)>,
+        new_cells: &HashMap<UInt256, Cell>,
         pruned_branches: &mut HashMap<UInt256, Cell>,
         mut merkle_depth: u8,
     ) -> Result<Option<BuilderData>> {
@@ -412,7 +424,7 @@ impl MerkleUpdate {
 
         for (i, child) in old_cell.clone_references().iter().enumerate() {
             let child_hash = child.repr_hash();
-            if let Some((common_cell, _)) = new_cells.get(&child_hash) {
+            if let Some(common_cell) = new_cells.get(&child_hash) {
 
                 let pruned_branch_cell = Self::make_pruned_branch_cell(common_cell, merkle_depth)?;
                 pruned_branches.insert(child_hash, pruned_branch_cell.clone().into_cell()?);

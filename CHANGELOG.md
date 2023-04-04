@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.40
+
+- Supported ever-types version 2.0
+
 ## Version: 1.9.38
 
 ### New

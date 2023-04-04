@@ -158,7 +158,7 @@ impl MerkleProof {
             merkle_depth 
         };
 
-        let mut proof_cell = BuilderData::from(cell);
+        let mut proof_cell = BuilderData::from_cell(cell)?;
         let mut child_mask = cell.level_mask();
         let n = cell.references_count();
         for i in 0..n {
