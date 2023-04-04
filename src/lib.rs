@@ -78,9 +78,8 @@ pub use self::config_params::*;
 
 use std::{collections::HashMap, hash::Hash};
 use ton_types::{
-    error, fail, Result,
-    AccountId, UInt256,
-    BuilderData, Cell, IBitstring, SliceData, HashmapE, HashmapType,
+    error, fail, Result, AccountId, UInt256, BuilderData, Cell, IBitstring, SliceData, HashmapE, 
+    HashmapType, read_single_root_boc, write_boc,
 };
 
 include!("../common/src/info.rs");
@@ -144,7 +143,7 @@ pub trait Serializable {
 
     fn write_to_bytes(&self) -> Result<Vec<u8>> {
         let cell = self.serialize()?;
-        ton_types::serialize_toc(&cell)
+        write_boc(&cell)
     }
 
     fn write_to_file(&self, file_name: impl AsRef<std::path::Path>) -> Result<()> {
@@ -178,8 +177,7 @@ pub trait Deserializable: Default {
     }
     /// adapter for tests
     fn construct_from_bytes(bytes: &[u8]) -> Result<Self> {
-        let cell = ton_types::deserialize_tree_of_cells(&mut std::io::Cursor::new(bytes))?;
-        Self::construct_from_cell(cell)
+        Self::construct_from_cell(read_single_root_boc(bytes)?)
     }
     /// adapter for tests
     fn construct_from_file(file_name: impl AsRef<std::path::Path>) -> Result<Self> {
