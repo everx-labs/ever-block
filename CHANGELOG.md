@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.45
+
+- Added capability flag for big cells `GlobalCapabilities::CapBigCells = 0x4000_0000`
+
 ## Version 1.9.40
 
 - Supported ever-types version 2.0
