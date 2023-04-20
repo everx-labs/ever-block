@@ -374,6 +374,7 @@ pub enum GlobalCapabilities {
     #[cfg(feature = "groth")]
     CapGroth16                = 0x1000_0000,
     CapFeeInGasUnits          = 0x2000_0000, // all fees in config are in gas units
+    CapBigCells               = 0x4000_0000,
 }
 
 impl ConfigParams {
