@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.47
+
+- Added config param 44 `SuspendedAddresses` and `ComputeSkipReason::Suspended`
+
 ## Version 1.9.45
 
 - Added capability flag for big cells `GlobalCapabilities::CapBigCells = 0x4000_0000`

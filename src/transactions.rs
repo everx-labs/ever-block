@@ -77,12 +77,14 @@ impl Deserializable for AccStatusChange {
 cskip_no_state$00 = ComputeSkipReason;
 cskip_bad_state$01 = ComputeSkipReason;
 cskip_no_gas$10 = ComputeSkipReason;
+cskip_suspended$110 = ComputeSkipReason;
 */
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ComputeSkipReason {
     NoState,
     BadState,
     NoGas,
+    Suspended,
 }
 
 impl Default for ComputeSkipReason {
@@ -93,12 +95,13 @@ impl Default for ComputeSkipReason {
 
 impl Serializable for ComputeSkipReason {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        let tag = match self {
-            ComputeSkipReason::NoState  => 0b00,
-            ComputeSkipReason::BadState => 0b01,
-            ComputeSkipReason::NoGas    => 0b10,
+        let (tag, bits) = match self {
+            ComputeSkipReason::NoState => (0b00, 2),
+            ComputeSkipReason::BadState => (0b01, 2),
+            ComputeSkipReason::NoGas => (0b10, 2),
+            ComputeSkipReason::Suspended => (0b110, 3),
         };
-        cell.append_bits(tag, 2)?;
+        cell.append_bits(tag, bits)?;
         Ok(())
     }
 }
@@ -109,12 +112,17 @@ impl Deserializable for ComputeSkipReason {
             0b00000000 => ComputeSkipReason::NoState,
             0b01000000 => ComputeSkipReason::BadState,
             0b10000000 => ComputeSkipReason::NoGas,
-            tag => fail!(
-                BlockError::InvalidConstructorTag {
-                    t: tag as u32,
-                    s: "ComputeSkipReason".to_string()
+            tag => { // 0b11000000
+                match cell.get_next_bit()? {
+                    false => ComputeSkipReason::Suspended,
+                    true => fail!(
+                        BlockError::InvalidConstructorTag {
+                            t: tag as u32,
+                            s: "ComputeSkipReason".to_string()
+                        }
+                    ),
                 }
-            )
+            }
         };
         Ok(())
     }
