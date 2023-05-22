@@ -1417,7 +1417,6 @@ impl Deserializable for ProofChain {
 }
 
 
-
 /*
 top_block_descr#d5
     proof_for:BlockIdExt
@@ -1425,21 +1424,12 @@ top_block_descr#d5
     len:(## 8) { len >= 1 } { len <= 8 }
     chain:(ProofChain len)
 = TopBlockDescr;
-top_block_descr#d6
-    proof_for:BlockIdExt
-    signatures:(Maybe ^BlockSignatures)
-    len:(## 8) { len >= 1 } { len <= 8 }
-    chain:^(ProofChain len),
-    ref_shard_blocks: RefShardBlocks,
-= TopBlockDescr;
 */
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct TopBlockDescr {
     proof_for: BlockIdExt,
     signatures: Option<InRefValue<BlockSignatures>>,
     chain: ProofChain,
-    #[cfg(feature = "venom")]
-    ref_shard_blocks: RefShardBlocks,
 }
 
 impl TopBlockDescr {
@@ -1451,22 +1441,6 @@ impl TopBlockDescr {
             proof_for,
             signatures: Some(InRefValue(signatures)),
             chain: vec![],
-            #[cfg(feature = "venom")]
-            ref_shard_blocks: RefShardBlocks::default(),
-        }
-    }
-
-    #[cfg(feature = "venom")]
-    pub fn with_params(
-        proof_for: BlockIdExt,
-        signatures: BlockSignatures,
-        ref_shard_blocks: RefShardBlocks,
-    ) -> Self {
-        Self {
-            proof_for,
-            signatures: Some(InRefValue(signatures)),
-            chain: vec![],
-            ref_shard_blocks,
         }
     }
 
@@ -1488,23 +1462,13 @@ impl TopBlockDescr {
 }
 
 const TOP_BLOCK_DESCR_TAG: u8 = 0xD5;
-#[cfg(feature = "venom")]
-const TOP_BLOCK_DESCR_TAG_2: u8 = 0xD6;
 
 impl Serializable for TopBlockDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        #[cfg(feature = "venom")]
-        TOP_BLOCK_DESCR_TAG_2.write_to(cell)?;
-        #[cfg(not(feature = "venom"))]
         TOP_BLOCK_DESCR_TAG.write_to(cell)?;
         self.proof_for.write_to(cell)?;
         self.signatures.write_maybe_to(cell)?;
-        #[cfg(not(feature = "venom"))]
         self.chain.write_to(cell)?;
-        #[cfg(feature = "venom")] {
-            cell.checked_append_reference(self.chain.write_to_new_cell()?.into_cell()?)?;
-            self.ref_shard_blocks.write_to(cell)?;
-        }
         Ok(())
     }
 }
@@ -1512,11 +1476,7 @@ impl Serializable for TopBlockDescr {
 impl Deserializable for TopBlockDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_byte()?;
-        #[cfg(not(feature = "venom"))]
-        let wrong_tag = tag != TOP_BLOCK_DESCR_TAG;
-        #[cfg(feature = "venom")]
-        let wrong_tag = tag != TOP_BLOCK_DESCR_TAG && tag != TOP_BLOCK_DESCR_TAG_2;
-        if wrong_tag {
+        if tag != TOP_BLOCK_DESCR_TAG {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag.into(),
@@ -1526,14 +1486,7 @@ impl Deserializable for TopBlockDescr {
         }
         self.proof_for.read_from(slice)?;
         self.signatures = BlockSignatures::read_maybe_from(slice)?;
-        if tag == TOP_BLOCK_DESCR_TAG {
-            self.chain.read_from(slice)?;
-        }
-        #[cfg(feature = "venom")]
-        if tag == TOP_BLOCK_DESCR_TAG_2 {
-            self.chain.read_from_reference(slice)?;
-            self.ref_shard_blocks.read_from(slice)?;
-        }
+        self.chain.read_from(slice)?;
         Ok(())
     }
 }
