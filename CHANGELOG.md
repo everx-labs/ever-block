@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.63
+
+- Added "collator" and "ref shard blocks" fields for Venom
+
+
 ## Version 1.9.47
 
 - Added config param 44 `SuspendedAddresses` and `ComputeSkipReason::Suspended`
