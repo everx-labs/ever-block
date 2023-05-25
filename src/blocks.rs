@@ -1390,6 +1390,7 @@ impl Serializable for ProofChain {
 impl Deserializable for ProofChain {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let len = slice.get_next_int(8)?;
+        #[cfg(not(feature = "venom"))]
         if !(1..=8).contains(&len) {
             fail!(
                 BlockError::InvalidData(
@@ -1397,19 +1398,18 @@ impl Deserializable for ProofChain {
                 )
             )
         }
-        {
-            let mut slice = Cow::Borrowed(slice);
-            for i in (0..len).rev() {
+
+        let mut slice = Cow::Borrowed(slice);
+        for i in (0..len).rev() {
+            if slice.remaining_references() == 0 {
+                fail!(ExceptionCode::CellUnderflow)
+            }
+            self.push(slice.to_mut().checked_drain_reference()?);
+            if i != 0 {
                 if slice.remaining_references() == 0 {
                     fail!(ExceptionCode::CellUnderflow)
                 }
-                self.push(slice.to_mut().checked_drain_reference()?);
-                if i != 0 {
-                    if slice.remaining_references() == 0 {
-                        fail!(ExceptionCode::CellUnderflow)
-                    }
-                    slice = Cow::Owned(SliceData::load_cell(slice.to_mut().checked_drain_reference()?)?);
-                }
+                slice = Cow::Owned(SliceData::load_cell(slice.to_mut().checked_drain_reference()?)?);
             }
         }
         Ok(())

@@ -1313,6 +1313,19 @@ pub struct CollatorRange {
 }
 
 #[cfg(feature = "venom")]
+impl fmt::Display for CollatorRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({}..{}", self.collator, self.start, self.finish)?;
+        if let Some(unexpected_finish) = self.unexpected_finish {
+            write!(f, ", unexpected {})", unexpected_finish)?;
+        } else {
+            write!(f, ")")?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "venom")]
 impl Serializable for CollatorRange {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.collator.write_to(cell)?;
@@ -1343,6 +1356,26 @@ pub struct ShardCollators {
     pub current: CollatorRange,
     pub next: CollatorRange,
     pub next2: Option<CollatorRange>,
+}
+
+#[cfg(feature = "venom")]
+impl fmt::Display for ShardCollators {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "prev: {}", self.prev)?;
+        if let Some(prev2) = &self.prev2 {
+            writeln!(f, "prev2: {}", prev2)?;
+        } else {
+            writeln!(f, "prev2: none")?;
+        }
+        writeln!(f, "current: {}", self.current)?;
+        writeln!(f, "next: {}", self.next)?;
+        if let Some(next2) = &self.next2 {
+            write!(f, "next2: {}", next2)?;
+        } else {
+            write!(f, "next2: none")?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(feature = "venom")]

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+
+## Version 1.9.67
+
+- Minor fixes for venom consensus
+
 ## Version 1.9.63
 
 - Added "collator" and "ref shard blocks" fields for Venom
