@@ -1513,7 +1513,7 @@ impl Message {
 impl Serializable for Message {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         // first try to serialize as it was
-        if self.body_to_ref.is_some() || self.init_to_ref.is_none() {
+        if self.body_to_ref.is_some() || self.init_to_ref.is_some() {
             let b = builder.clone();
             if self.serialize_with_params(builder, &self.body_to_ref, &self.init_to_ref).is_ok() {
                 return Ok(())
