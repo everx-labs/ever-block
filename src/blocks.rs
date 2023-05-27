@@ -239,6 +239,9 @@ pub struct BlockInfo {
 
     shard: ShardIdent,
     gen_utime: UnixTime32,
+    #[cfg(feature = "venom")]
+    gen_utime_ms: u16,
+
     start_lt: u64,
     end_lt: u64,
     gen_validator_list_hash_short: u32,
@@ -268,6 +271,8 @@ impl Default for BlockInfo {
             vert_seq_no: 0,
             shard: ShardIdent::default(),
             gen_utime: UnixTime32::default(),
+            #[cfg(feature = "venom")]
+            gen_utime_ms: 0,
             start_lt: 0,
             end_lt: 0,
             gen_validator_list_hash_short: 0,
@@ -326,6 +331,18 @@ impl BlockInfo {
 
     pub fn gen_utime(&self) -> UnixTime32 { self.gen_utime }
     pub fn set_gen_utime(&mut self, gen_utime: UnixTime32) { self.gen_utime = gen_utime }
+
+    #[cfg(feature = "venom")]
+    pub fn set_gen_utime_ms(&mut self, gen_utime_millis: u64) {
+        let gen_utime = (gen_utime_millis / 1000) as u32;
+        let gen_utime_ms = (gen_utime_millis % 1000) as u16;
+
+        self.gen_utime = UnixTime32::new(gen_utime);
+        self.gen_utime_ms = gen_utime_ms;
+    }
+
+    #[cfg(feature = "venom")]
+    pub fn gen_utime_ms(&self) -> u64 { self.gen_utime_ms as u64 + self.gen_utime().as_u32() as u64 * 1000 }
 
     pub fn start_lt(&self) -> u64 { self.start_lt }
     pub fn set_start_lt(&mut self, start_lt: u64) { self.start_lt = start_lt }
@@ -414,7 +431,7 @@ impl BlockInfo {
         vert_seqno_incr: u32,
         vert_seq_no: u32,
         prev_vert_ref: Option<BlkPrevInfo>)
-    -> Result<()> {
+        -> Result<()> {
         if vert_seq_no < vert_seqno_incr {
             fail!(BlockError::InvalidArg(
                 "`vert_seq_no` can't be less then `vert_seqno_incr`".to_string()))
@@ -1090,7 +1107,9 @@ impl Serializable for ExtBlkRef {
 const BLOCK_TAG_1: u32 = 0x11ef55aa;
 const BLOCK_TAG_2: u32 = 0x11ef55bb;
 
-const BLOCK_INFO_TAG: u32 = 0x9bc7a987;
+const BLOCK_INFO_TAG_1: u32 = 0x9bc7a987;
+#[cfg(feature = "venom")]
+const BLOCK_INFO_TAG_2: u32 = 0x9bc7a988;
 
 impl Serializable for BlockInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -1121,7 +1140,12 @@ impl Serializable for BlockInfo {
             byte |= 1;
         }
 
-        cell.append_u32(BLOCK_INFO_TAG)?
+        #[cfg(feature = "venom")]
+        let tag = BLOCK_INFO_TAG_2;
+        #[cfg(not(feature = "venom"))]
+        let tag = BLOCK_INFO_TAG_1;
+
+        cell.append_u32(tag)?
             .append_u32(self.version)?
             .append_u8(byte)?
             .append_u8(self.flags)?
@@ -1130,13 +1154,20 @@ impl Serializable for BlockInfo {
 
         // shard:ShardIdent
         self.shard.write_to(cell)?;
-        cell.append_u32(self.gen_utime.as_u32())?
+
+        let builder = cell.append_u32(self.gen_utime.as_u32())?;
+
+        #[cfg(feature = "venom")]
+        builder.append_u16(self.gen_utime_ms)?;
+
+        builder
             .append_u64(self.start_lt)?
             .append_u64(self.end_lt)?
             .append_u32(self.gen_validator_list_hash_short)?
             .append_u32(self.gen_catchain_seqno)?
             .append_u32(self.min_ref_mc_seqno)?
             .append_u32(self.prev_key_block_seqno)?;
+
 
         if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
             if let Some(gen_software) = self.gen_software.as_ref() {
@@ -1230,7 +1261,11 @@ impl Deserializable for ValueFlow {
 impl Deserializable for BlockInfo {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        if tag != BLOCK_INFO_TAG {
+        #[cfg(feature = "venom")]
+        let wrong_tag = tag != BLOCK_INFO_TAG_1 && tag != BLOCK_INFO_TAG_2;
+        #[cfg(not(feature = "venom"))]
+        let wrong_tag = tag != BLOCK_INFO_TAG_1;
+        if wrong_tag {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
@@ -1256,6 +1291,10 @@ impl Deserializable for BlockInfo {
         let vert_seq_no = cell.get_next_u32()?;
         self.shard.read_from(cell)?;
         self.gen_utime = cell.get_next_u32()?.into();
+        #[cfg(feature = "venom")]
+        if tag == BLOCK_INFO_TAG_2{
+            self.gen_utime_ms = cell.get_next_u16()?;
+        }
         self.start_lt = cell.get_next_u64()?;
         self.end_lt = cell.get_next_u64()?;
         self.gen_validator_list_hash_short = cell.get_next_u32()?;
@@ -1346,18 +1385,13 @@ impl Serializable for Block {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Default, Eq, PartialEq, Clone, Copy)]
 pub enum BlockProcessingStatus {
+    #[default]
     Unknown = 0,
     Proposed,
     Finalized,
     Refused,
-}
-
-impl Default for BlockProcessingStatus {
-    fn default() -> Self {
-        BlockProcessingStatus::Unknown
-    }
 }
 
 /*
@@ -1549,3 +1583,4 @@ impl Deserializable for TopBlockDescrSet {
         Ok(Self { collection })
     }
 }
+

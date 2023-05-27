@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 
+## Version 1.9.68
+
+- Added BlockInfo::gen_utime_ms (#1)
+- Prepare to open tests
+- Open library tests
+- Fix compiler warnings
+- Increase package version
+
 ## Version 1.9.67
 
 - Minor fixes for venom consensus

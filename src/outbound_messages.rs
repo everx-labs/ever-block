@@ -142,8 +142,13 @@ impl OutMsgDescr {
 
     /// insert or replace existion record
     /// use to improve speed
-    pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, exported: &CurrencyCollection ) -> Result<()> {
-        if self.set_builder_serialized(key.clone(), &BuilderData::from_slice(msg_slice), exported).is_ok() {
+    pub fn insert_serialized(
+        &mut self, 
+        key: &SliceData, 
+        msg_slice: &SliceData, 
+        exported: &CurrencyCollection
+    ) -> Result<()> {
+        if self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), exported).is_ok() {
             Ok(())
         } else {
             fail!(BlockError::Other("Error insert serialized message".to_string()))
@@ -487,8 +492,9 @@ impl Deserializable for OutMsgQueueInfo {
 /// OutMsg structure
 /// blockchain spec 3.3.3. Descriptor of an outbound message
 /// 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum OutMsg {
+    #[default]
     None,
     /// External outbound messages, or “messages to nowhere”
     /// msg_export_ext$000 msg:^(Message Any) transaction:^Transaction = OutMsg;
@@ -510,12 +516,6 @@ pub enum OutMsg {
     DequeueShort(OutMsgDequeueShort),
     /// msg_export_tr_req$111 out_msg:^MsgEnvelope imported:^InMsg = OutMsg;
     TransitRequeued(OutMsgTransitRequeued),
-}
-
-impl Default for OutMsg {
-    fn default() -> Self {
-        OutMsg::None
-    }
 }
 
 impl OutMsg {

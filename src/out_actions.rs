@@ -88,7 +88,7 @@ impl Deserializable for OutActions {
 ///
 /// Enum OutAction
 ///
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum OutAction {
 
@@ -136,13 +136,8 @@ pub enum OutAction {
         address: AccountId,
     },
 
+    #[default]
     None
-}
-
-impl Default for OutAction {
-    fn default() -> Self {
-        OutAction::None
-    }
 }
 
 /// Flags of SendMsg action

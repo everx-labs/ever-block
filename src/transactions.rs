@@ -35,17 +35,12 @@ acst_unchanged$0 = AccStatusChange;  // x -> x
 acst_frozen$10 = AccStatusChange;    // init -> frozen
 acst_deleted$11 = AccStatusChange;   // frozen -> deleted
 */
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum AccStatusChange {
+    #[default]
     Unchanged,
     Frozen,
     Deleted,
-}
-
-impl Default for AccStatusChange {
-    fn default() -> Self {
-        AccStatusChange::Unchanged
-    }
 }
 
 impl Serializable for AccStatusChange {
@@ -79,18 +74,13 @@ cskip_bad_state$01 = ComputeSkipReason;
 cskip_no_gas$10 = ComputeSkipReason;
 cskip_suspended$110 = ComputeSkipReason;
 */
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum ComputeSkipReason {
+    #[default]
     NoState,
     BadState,
     NoGas,
     Suspended,
-}
-
-impl Default for ComputeSkipReason {
-    fn default() -> Self {
-        ComputeSkipReason::NoState
-    }
 }
 
 impl Serializable for ComputeSkipReason {
@@ -374,17 +364,12 @@ pub struct TrBouncePhaseOk {
     pub fwd_fees: Grams,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum TrBouncePhase {
+    #[default]
     Negfunds,
     Nofunds(TrBouncePhaseNofunds),
     Ok(TrBouncePhaseOk),
-}
-
-impl Default for TrBouncePhase {
-    fn default() -> Self {
-        TrBouncePhase::Negfunds
-    }
 }
 
 impl TrBouncePhase {
@@ -520,8 +505,9 @@ tick$0 = TickTock;
 tock$1 = TickTock;
 There are two kinds of TickTock: in transaction and in messages.
 */
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum TransactionTickTock {
+    #[default]
     Tick,
     Tock
 }
@@ -532,12 +518,6 @@ impl TransactionTickTock {
     }
     pub fn is_tock(&self) -> bool {
         self == &TransactionTickTock::Tock
-    }
-}
-
-impl Default for TransactionTickTock {
-    fn default() -> Self {
-        TransactionTickTock::Tick
     }
 }
 
@@ -1962,19 +1942,14 @@ impl ShardAccountBlocks {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum TransactionProcessingStatus {
+    #[default]
     Unknown = 0,
     Preliminary,
     Proposed,
     Finalized,
     Refused,
-}
-
-impl Default for TransactionProcessingStatus {
-    fn default() -> Self {
-        TransactionProcessingStatus::Unknown
-    }
 }
 
 #[allow(dead_code)]
