@@ -109,8 +109,9 @@ const MSG_DISCARD_TR: u8 = 0b00000111;
 /// Inbound message
 /// blockchain spec 3.2.2. Descriptor of an inbound message.
 ///
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum InMsg {
+    #[default]
     None,
     /// Inbound external messages
     /// msg_import_ext$000 msg:^(Message Any) transaction:^Transaction = InMsg;
@@ -158,13 +159,6 @@ impl fmt::Display for InMsg {
         }
     }
 }
-
-impl Default for InMsg {
-    fn default() -> Self {
-        InMsg::None
-    }
-}
-
 
 impl InMsg {
     /// Create external
@@ -832,8 +826,13 @@ impl InMsgDescr {
 
     /// insert or replace existion record
     /// use to improve speed
-    pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, fees: &ImportFees ) -> Result<()> {
-        if self.set_builder_serialized(key.clone(), &BuilderData::from_slice(msg_slice), fees).is_ok() {
+    pub fn insert_serialized(
+        &mut self, 
+        key: &SliceData, 
+        msg_slice: &SliceData, 
+        fees: &ImportFees
+    ) -> Result<()> {
+        if self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), fees).is_ok() {
             Ok(())
         } else {
             fail!(BlockError::Other("Error insert serialized message".to_string()))

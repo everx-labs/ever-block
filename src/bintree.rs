@@ -73,14 +73,19 @@ pub trait BinTreeType<X: Default + Serializable + Deserializable> {
 
 //////////////////////////////////
 // helper functions
-fn internal_merge<X, F>(data: &SliceData, mut key: SliceData, merger: F) -> Result<Option<BuilderData>>
-where F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable
+fn internal_merge<X, F>(
+    data: &SliceData, 
+    mut key: SliceData, 
+    merger: F
+) -> Result<Option<BuilderData>>
+where 
+    F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable 
 {
     if data.remaining_bits() != 1 && data.remaining_references() < 2 {
         return Ok(None)
     } else if let Some(x) = key.get_next_bit_opt() {
         if let Some(reference) = internal_merge(&SliceData::load_cell(data.reference(x)?)?, key, merger)? {
-            let mut cell = BuilderData::from_slice(data);
+            let mut cell = data.as_builder();
             cell.replace_reference_cell(x, reference.into_cell()?);
             return Ok(Some(cell))
         }
@@ -100,8 +105,13 @@ where F: FnOnce(X, X) -> Result<X>, X: Default + Serializable + Deserializable
     Ok(None)
 }
 
-fn internal_split<X, F>(data: &SliceData, mut key: SliceData, splitter: F) -> Result<Option<BuilderData>>
-where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
+fn internal_split<X, F>(
+    data: &SliceData, 
+    mut key: SliceData, 
+    splitter: F
+) -> Result<Option<BuilderData>>
+where 
+    F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
 {
     if data.remaining_bits() == 1 && data.get_bit(0)? { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
         if data.remaining_references() < 2 {
@@ -109,7 +119,7 @@ where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
         }
         if let Some(x) = key.get_next_bit_opt() {
             if let Some(reference) = internal_split(&SliceData::load_cell(data.reference(x)?)?, key, splitter)? {
-                let mut cell = BuilderData::from_slice(data);
+                let mut cell = data.as_builder();
                 cell.replace_reference_cell(x, reference.into_cell()?);
                 return Ok(Some(cell))
             }
@@ -136,8 +146,13 @@ where F: FnOnce(X) -> Result<(X, X)>, X: Default + Serializable + Deserializable
     Ok(None)
 }
 
-fn internal_update<X, F>(data: &SliceData, mut key: SliceData, mutator: F) -> Result<Option<BuilderData>>
-where F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
+fn internal_update<X, F>(
+    data: &SliceData, 
+    mut key: SliceData, 
+    mutator: F
+) -> Result<Option<BuilderData>>
+where 
+    F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
 {
     if data.remaining_bits() == 1 && data.get_bit(0)? { // bt_fork$1 {X:Type} left:^(BinTree X) right:^(BinTree X)
         if data.remaining_references() < 2 {
@@ -145,7 +160,7 @@ where F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
         }
         if let Some(x) = key.get_next_bit_opt() {
             if let Some(reference) = internal_update(&SliceData::load_cell(data.reference(x)?)?, key, mutator)? {
-                let mut cell = BuilderData::from_slice(data);
+                let mut cell = data.as_builder();
                 cell.replace_reference_cell(x, reference.into_cell()?);
                 return Ok(Some(cell))
             }
@@ -163,11 +178,15 @@ where F: FnOnce(X) -> Result<X>, X: Default + Serializable + Deserializable
     Ok(None)
 }
 
-fn iterate_internal<X, F>(cursor: &mut SliceData, mut key: BuilderData, p: &mut F) -> Result<bool>
+fn iterate_internal<X, F>(
+    cursor: &mut SliceData, 
+    mut key: BuilderData, 
+    p: &mut F
+) -> Result<bool>
 where 
     X: Default + Serializable + Deserializable, 
-    F: FnMut(SliceData, X) -> Result<bool> {
-    
+    F: FnMut(SliceData, X) -> Result<bool> 
+{    
     let result = if cursor.get_next_bit()? {
         let mut left_key = key.clone();
         left_key.append_bit_zero()?;
@@ -189,8 +208,8 @@ fn iterate_internal_pairs<X, F>(
 ) -> Result<bool>
 where 
     X: Default + Serializable + Deserializable, 
-    F: FnMut(BuilderData, X, Option<X>) -> Result<bool> {
-    
+    F: FnMut(BuilderData, X, Option<X>) -> Result<bool> 
+{    
     let result = if cursor.get_next_bit()? {
         let mut left_key = key.clone();
         left_key.append_bit_zero()?;
@@ -402,7 +421,7 @@ impl<X: Default + Serializable + Deserializable, Y: Augmentable> BinTreeAug<X, Y
             if let Some(x) = key.get_next_bit_opt() {
                 let mut cursor = SliceData::load_cell(slice.reference(x)?)?;
                 if Self::internal_split(&mut cursor, key, value, aug)? {
-                    let mut cell = BuilderData::from_slice(&original);
+                    let mut cell = original.into_builder();
                     cell.replace_reference_cell(x, cursor.into_cell());
                     let mut fork_aug = Y::construct_from(slice)?;
                     fork_aug.calc(aug)?;

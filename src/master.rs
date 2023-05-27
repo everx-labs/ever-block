@@ -1242,8 +1242,9 @@ fsm_merge$11
     interval: uint32
 = FutureSplitMerge;
 */
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum FutureSplitMerge {
+    #[default]
     None,
     Split {
         split_utime: u32,
@@ -1252,12 +1253,6 @@ pub enum FutureSplitMerge {
     Merge {
         merge_utime: u32,
         interval: u32,
-    }
-}
-
-impl Default for FutureSplitMerge {
-    fn default() -> Self {
-        FutureSplitMerge::None
     }
 }
 

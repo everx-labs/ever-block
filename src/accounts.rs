@@ -313,18 +313,13 @@ impl fmt::Display for StorageInfo {
 /// acc_state_nonexist$11 = AccountStatus;
 ///
 
-#[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AccountStatus {
+    #[default]
     AccStateUninit,
     AccStateFrozen,
     AccStateActive,
     AccStateNonexist,
-}
-
-impl Default for AccountStatus {
-    fn default() -> Self {
-        AccountStatus::AccStateUninit
-    }
 }
 
 /// serialize AccountStatus
@@ -467,20 +462,15 @@ impl fmt::Display for AccountStorage {
 ///
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 enum AccountState {
+    #[default]
     AccountUninit,
     AccountActive {
         state_init: StateInit
     },
     AccountFrozen {
         state_init_hash: UInt256
-    }
-}
-
-impl Default for AccountState {
-    fn default() -> Self {
-        AccountState::AccountUninit
     }
 }
 
@@ -1175,7 +1165,7 @@ impl Account {
         let mut data = SliceData::load_cell(data)?;
         data.checked_drain_reference()
             .map_err(|_| error!("config SMC data doesn't contain reference with old config"))?;
-        let mut builder = BuilderData::from_slice(&data);
+        let mut builder = data.into_builder();
         let cell = config.config_params.data()
             .ok_or_else(|| error!("configs musn't be empty"))?;
         builder.checked_prepend_reference(cell.clone())?;
