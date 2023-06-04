@@ -33,7 +33,6 @@ use ton_types::{
     SliceData, UInt256,
 };
 
-
 pub const MAX_SPLIT_DEPTH: u8 = 60;
 pub const MASTERCHAIN_ID: i32 = -1;
 pub const BASE_WORKCHAIN_ID: i32 = 0;

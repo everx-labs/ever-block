@@ -27,7 +27,6 @@ use ton_types::{
     UInt256, AccountId, BuilderData, Cell, IBitstring, SliceData, UsageTree, HashmapType,
 };
 
-
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// 4.1.5. Storage profile of an account.

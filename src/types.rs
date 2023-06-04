@@ -32,7 +32,6 @@ use crate::{
     Serializable, Deserializable,
 };
 
-
 ///
 /// var_uint$_ {n:#} len:(#< n) value:(uint (len * 8)) = VarUInteger n;
 /// 
@@ -192,7 +191,6 @@ macro_rules! define_VarIntegerN {
                 self.cmp(other) == std::cmp::Ordering::Equal
             }
         }
-
 
         impl Default for $varname {
             fn default() -> Self {

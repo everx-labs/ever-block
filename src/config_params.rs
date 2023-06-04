@@ -507,7 +507,6 @@ impl Deserializable for ConfigParams {
     }
 }
 
-
 impl Serializable for ConfigParams {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.checked_append_reference(self.config_params.data().cloned().unwrap_or_default())?;
@@ -1334,7 +1333,6 @@ impl ConfigParam18 {
     }
 }
 
-
 impl Deserializable for ConfigParam18 {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.map.read_hashmap_root(slice)?;
@@ -1516,7 +1514,6 @@ config_mc_gas_prices#_ GasLimitsPrices = ConfigParam 20;
 config_gas_prices#_ GasLimitsPrices = ConfigParam 21;
 */
 
-
 /*
 
 // msg_fwd_fees = (lump_price + ceil((bit_price * msg.bits + cell_price * msg.cells)/2^16)) nanograms
@@ -1595,7 +1592,6 @@ config_mc_fwd_prices#_ MsgForwardPrices = ConfigParam 24;
 config_fwd_prices#_ MsgForwardPrices = ConfigParam 25;
 
 */
-
 
 /*
 catchain_config#c1 
@@ -1682,7 +1678,6 @@ impl Serializable for CatchainConfig {
 /*
  _ CatchainConfig = ConfigParam 28;
  */
-
 
 /*
 _ fundamental_smc_addr:(HashmapE 256 True) = ConfigParam 31;
@@ -2046,7 +2041,6 @@ impl WorkchainFormat1 {
     }
 }
 
-
 impl Deserializable for WorkchainFormat1 {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         let vm_version = Deserializable::construct_from(slice)?;
@@ -2062,7 +2056,6 @@ impl Serializable for WorkchainFormat1 {
         Ok(())
     }
 }
-
 
 /*
 wfmt_ext#0 
@@ -2265,8 +2258,6 @@ impl Serializable for WorkchainFormat0 {
         }
     }
 }
-
-
 
 /*
 workchain#a5 
@@ -2647,7 +2638,6 @@ impl ConfigParam12 {
     }
 }
 
-
 impl Deserializable for ConfigParam12 {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.workchains.read_from(slice)?;
@@ -2779,7 +2769,6 @@ impl Serializable for ValidatorTempKey {
         Ok(())
     }
 }
-
 
 // signed_temp_key#4
 //     key:^ValidatorTempKey

@@ -25,7 +25,6 @@ pub const ACTION_RESERVE:    u32 = 0x36e6b809;
 pub const ACTION_CHANGE_LIB: u32 = 0x26fa1dd4;
 pub const ACTION_COPYLEFT:   u32 = 0x24486f7a;
 
-
 /*
 out_list_empty$_ = OutList 0;
 out_list$_ {n:#} prev:^(OutList n) action:OutAction = OutList (n+1);
@@ -34,12 +33,10 @@ action_send_msg#0ec3c86d out_msg:^Message = OutAction;
 action_set_code#ad4de08e new_code:^Cell = OutAction;
 */
 
-
 ///
 /// List of output actions
 ///
 pub type OutActions = LinkedList<OutAction>;
-
 
 ///
 /// Implementation of Serializable for OutActions
@@ -63,7 +60,6 @@ impl Serializable for OutActions {
     }
 }
 
-
 ///
 /// Implementation of Deserializable for OutActions
 ///
@@ -82,8 +78,6 @@ impl Deserializable for OutActions {
         Ok(())
     }
 }
-
-
 
 ///
 /// Enum OutAction

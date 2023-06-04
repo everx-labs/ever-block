@@ -40,7 +40,6 @@ use ton_types::{
     Result, SliceData, UInt256,
 };
 
-
 /*
 block_id_ext$_
     shard_id:ShardIdent
@@ -311,7 +310,6 @@ impl BlockInfo {
     pub fn key_block(&self) -> bool { self.key_block }
     pub fn set_key_block(&mut self, key_block: bool) { self.key_block = key_block }
 
-
     pub fn flags(&self) -> u8 { self.flags }
     // For now flags is related only on gen_software, so it is set automatically if need
     //pub fn set_flags(&mut self, flags) { self.flags = flags }
@@ -324,7 +322,6 @@ impl BlockInfo {
         self.seq_no = seq_no;
         Ok(())
     }
-
 
     pub fn shard(&self) -> &ShardIdent { &self.shard }
     pub fn set_shard(&mut self, shard: ShardIdent) { self.shard = shard }
@@ -1168,7 +1165,6 @@ impl Serializable for BlockInfo {
             .append_u32(self.min_ref_mc_seqno)?
             .append_u32(self.prev_key_block_seqno)?;
 
-
         if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
             if let Some(gen_software) = self.gen_software.as_ref() {
                 gen_software.write_to(cell)?;
@@ -1449,7 +1445,6 @@ impl Deserializable for ProofChain {
         Ok(())
     }
 }
-
 
 /*
 top_block_descr#d5
