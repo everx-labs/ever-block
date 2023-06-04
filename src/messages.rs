@@ -29,7 +29,6 @@ use ton_types::{
     SliceData, UInt256, UsageTree, MAX_DATA_BITS, MAX_REFERENCES_COUNT,
 };
 
-
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// MessageAddress
@@ -258,7 +257,6 @@ impl MsgAddress {
         }
     }
 }
-
 
 impl FromStr for MsgAddress {
     type Err = failure::Error;
@@ -1289,7 +1287,6 @@ impl Message {
     /// Get value transmitted by the message
     ///
     pub fn get_value_mut(&mut self) -> Option<&mut CurrencyCollection> { self.value_mut() }
-
 
     ///
     /// Get value transmitted by the message

@@ -20,7 +20,6 @@ use ton_types::{
     error, fail, Result, UInt256, BuilderData, Cell, CellType, IBitstring, LevelMask, SliceData,
 };
 
-
 /*
 !merkle_update {X:Type} old_hash:uint256 new_hash:uint256
 old:^X new:^X = MERKLE_UPDATE X;

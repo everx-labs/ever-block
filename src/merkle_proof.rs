@@ -28,7 +28,6 @@ use ton_types::{
     UsageTree, types::UInt256
 };
 
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MerkleProof {
     pub hash: UInt256,

@@ -32,7 +32,6 @@ use ton_types::{
     HashmapType, HashmapSubtree, hm_label, UsageTree,
 };
 
-
 /*
         3.3 Outbound message queue and descriptors
  This section discusses OutMsgDescr, the structure representing all outbound
@@ -487,7 +486,6 @@ impl Deserializable for OutMsgQueueInfo {
     }
 }
 
-
 ///
 /// OutMsg structure
 /// blockchain spec 3.3.3. Descriptor of an outbound message
@@ -798,7 +796,6 @@ macro_rules! write_out_ctor_tag {
     }}
 }
 
-
 impl Serializable for OutMsg {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         match self {
@@ -846,7 +843,6 @@ impl Deserializable for OutMsg {
         Ok(())
     }
 }
-
 
 ///
 /// msg_export_ext$000 msg:^Message transaction:^Transaction = OutMsg;

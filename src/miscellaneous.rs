@@ -20,8 +20,6 @@ use ton_types::{
     HashmapE, HashmapType, HashmapSubtree,
 };
 
-
-
 /*
 // key is [ shard:uint64 mc_seqno:uint32 ]  
 _ (HashmapE 96 ProcessedUpto) = ProcessedInfo;
@@ -63,7 +61,6 @@ impl Deserializable for ProcessedInfoKey {
         Ok(())
     }
 }
-
 
 ///
 /// Struct ProcessedUpto

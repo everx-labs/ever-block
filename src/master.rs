@@ -33,7 +33,6 @@ use ton_types::{
     SliceData, UInt256,
 };
 
-
 /*
 _ (HashmapE 32 ^(BinTree ShardDescr)) = ShardHashes;
 _ (HashmapAugE 96 ShardFeeCreated ShardFeeCreated) = ShardFees;
@@ -446,7 +445,6 @@ impl McBlockExtra {
     pub fn total_fee(&self) -> &CurrencyCollection {
         &self.fees.root_extra().fees
     }
-
 
     ///
     /// Get total fees for shard
@@ -1833,7 +1831,6 @@ impl Serializable for BlkMasterInfo {
         self.master.write_to(cell)
     }
 }
-
 
 define_HashmapE!(Publishers, 256, ());
 /*
