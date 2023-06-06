@@ -26,8 +26,6 @@ use crate::{
     validators::ValidatorSet,
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
 };
-#[cfg(feature = "venom")]
-use crate::RefShardBlocks;
 use std::borrow::Cow;
 use std::{
     cmp::Ordering,
@@ -238,8 +236,6 @@ pub struct BlockInfo {
 
     shard: ShardIdent,
     gen_utime: UnixTime32,
-    #[cfg(feature = "venom")]
-    gen_utime_ms: u16,
 
     start_lt: u64,
     end_lt: u64,
@@ -269,9 +265,7 @@ impl Default for BlockInfo {
             seq_no: 1,
             vert_seq_no: 0,
             shard: ShardIdent::default(),
-            gen_utime: UnixTime32::default(),
-            #[cfg(feature = "venom")]
-            gen_utime_ms: 0,
+            gen_utime: Default::default(),
             start_lt: 0,
             end_lt: 0,
             gen_validator_list_hash_short: 0,
@@ -329,17 +323,11 @@ impl BlockInfo {
     pub fn gen_utime(&self) -> UnixTime32 { self.gen_utime }
     pub fn set_gen_utime(&mut self, gen_utime: UnixTime32) { self.gen_utime = gen_utime }
 
-    #[cfg(feature = "venom")]
     pub fn set_gen_utime_ms(&mut self, gen_utime_millis: u64) {
-        let gen_utime = (gen_utime_millis / 1000) as u32;
-        let gen_utime_ms = (gen_utime_millis % 1000) as u16;
-
-        self.gen_utime = UnixTime32::new(gen_utime);
-        self.gen_utime_ms = gen_utime_ms;
+        self.gen_utime = ((gen_utime_millis / 1000) as u32).into();
     }
 
-    #[cfg(feature = "venom")]
-    pub fn gen_utime_ms(&self) -> u64 { self.gen_utime_ms as u64 + self.gen_utime().as_u32() as u64 * 1000 }
+    pub fn gen_utime_ms(&self) -> u64 { self.gen_utime().as_u32() as u64 * 1000 }
 
     pub fn start_lt(&self) -> u64 { self.start_lt }
     pub fn set_start_lt(&mut self, start_lt: u64) { self.start_lt = start_lt }
@@ -427,8 +415,8 @@ impl BlockInfo {
         &mut self,
         vert_seqno_incr: u32,
         vert_seq_no: u32,
-        prev_vert_ref: Option<BlkPrevInfo>)
-        -> Result<()> {
+        prev_vert_ref: Option<BlkPrevInfo>
+    ) -> Result<()> {
         if vert_seq_no < vert_seqno_incr {
             fail!(BlockError::InvalidArg(
                 "`vert_seq_no` can't be less then `vert_seqno_incr`".to_string()))
@@ -454,6 +442,7 @@ prev_blks_info$_
     prev1:^ExtBlkRef
     prev2:^ExtBlkRef
     = BlkPrevInfo 1;
+
 */
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BlkPrevInfo {
@@ -769,8 +758,6 @@ pub struct BlockExtra {
     pub rand_seed: UInt256,
     pub created_by: UInt256,
     custom: Option<ChildCell<McBlockExtra>>,
-    #[cfg(feature = "venom")]
-    ref_shard_blocks: RefShardBlocks,
 }
 
 impl BlockExtra {
@@ -782,8 +769,6 @@ impl BlockExtra {
             rand_seed: UInt256::rand(),
             created_by: UInt256::default(), // TODO: Need to fill?
             custom: None,
-            #[cfg(feature = "venom")]
-            ref_shard_blocks: RefShardBlocks::default(),
         }
     }
 
@@ -852,32 +837,17 @@ impl BlockExtra {
         self.custom.as_ref().map(|c| c.cell())
     }
 
-    #[cfg(feature = "venom")]
-    pub fn ref_shard_blocks(&self) -> &RefShardBlocks {
-        &self.ref_shard_blocks
-    }
-
-    #[cfg(feature = "venom")]
-    pub fn set_ref_shard_blocks(&mut self, value: RefShardBlocks) {
-        self.ref_shard_blocks = value;
-    }
-
     pub fn is_key_block(&self) -> bool {
         self.custom.is_some()
     }
 }
 
 const BLOCK_EXTRA_TAG: u32 = 0x4a33f6fd;
-#[cfg(feature = "venom")]
-const BLOCK_EXTRA_TAG_2: u32 = 0x4a33f6fc;
 
 impl Deserializable for BlockExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        #[cfg(not(feature = "venom"))]
         let wrong_tag = tag != BLOCK_EXTRA_TAG;
-        #[cfg(feature = "venom")]
-        let wrong_tag = tag != BLOCK_EXTRA_TAG && tag != BLOCK_EXTRA_TAG_2;
         if wrong_tag {
             fail!(BlockError::InvalidConstructorTag {
                     t: tag,
@@ -893,12 +863,6 @@ impl Deserializable for BlockExtra {
         if tag == BLOCK_EXTRA_TAG {
             self.custom = ChildCell::construct_maybe_from_reference(cell)?;
         }
-        #[cfg(feature = "venom")]
-        if tag == BLOCK_EXTRA_TAG_2 {
-            let mut child = SliceData::load_cell(cell.checked_drain_reference()?)?;
-            self.custom = ChildCell::construct_maybe_from_reference(&mut child)?;
-            self.ref_shard_blocks.read_from(&mut child)?;
-        }
 
         Ok(())
     }
@@ -906,9 +870,6 @@ impl Deserializable for BlockExtra {
 
 impl Serializable for BlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        #[cfg(feature = "venom")]
-        cell.append_u32(BLOCK_EXTRA_TAG_2)?;
-        #[cfg(not(feature = "venom"))]
         cell.append_u32(BLOCK_EXTRA_TAG)?;
         cell.checked_append_reference(self.in_msg_descr.cell())?;
         cell.checked_append_reference(self.out_msg_descr.cell())?;
@@ -916,15 +877,8 @@ impl Serializable for BlockExtra {
         self.rand_seed.write_to(cell)?;
         self.created_by.write_to(cell)?;
 
-        #[cfg(not(feature = "venom"))]
         ChildCell::write_maybe_to(cell, self.custom.as_ref())?;
         
-        #[cfg(feature = "venom")] {
-            let mut child = BuilderData::new();
-            ChildCell::write_maybe_to(&mut child, self.custom.as_ref())?;
-            self.ref_shard_blocks.write_to(&mut child)?;
-            cell.checked_append_reference(child.into_cell()?)?;
-        }
         Ok(())
     }
 }
@@ -1105,8 +1059,6 @@ const BLOCK_TAG_1: u32 = 0x11ef55aa;
 const BLOCK_TAG_2: u32 = 0x11ef55bb;
 
 const BLOCK_INFO_TAG_1: u32 = 0x9bc7a987;
-#[cfg(feature = "venom")]
-const BLOCK_INFO_TAG_2: u32 = 0x9bc7a988;
 
 impl Serializable for BlockInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -1137,9 +1089,6 @@ impl Serializable for BlockInfo {
             byte |= 1;
         }
 
-        #[cfg(feature = "venom")]
-        let tag = BLOCK_INFO_TAG_2;
-        #[cfg(not(feature = "venom"))]
         let tag = BLOCK_INFO_TAG_1;
 
         cell.append_u32(tag)?
@@ -1152,10 +1101,7 @@ impl Serializable for BlockInfo {
         // shard:ShardIdent
         self.shard.write_to(cell)?;
 
-        let builder = cell.append_u32(self.gen_utime.as_u32())?;
-
-        #[cfg(feature = "venom")]
-        builder.append_u16(self.gen_utime_ms)?;
+        let builder = cell.append_u32(self.gen_utime.into())?;
 
         builder
             .append_u64(self.start_lt)?
@@ -1257,9 +1203,6 @@ impl Deserializable for ValueFlow {
 impl Deserializable for BlockInfo {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        #[cfg(feature = "venom")]
-        let wrong_tag = tag != BLOCK_INFO_TAG_1 && tag != BLOCK_INFO_TAG_2;
-        #[cfg(not(feature = "venom"))]
         let wrong_tag = tag != BLOCK_INFO_TAG_1;
         if wrong_tag {
             fail!(
@@ -1287,10 +1230,6 @@ impl Deserializable for BlockInfo {
         let vert_seq_no = cell.get_next_u32()?;
         self.shard.read_from(cell)?;
         self.gen_utime = cell.get_next_u32()?.into();
-        #[cfg(feature = "venom")]
-        if tag == BLOCK_INFO_TAG_2{
-            self.gen_utime_ms = cell.get_next_u16()?;
-        }
         self.start_lt = cell.get_next_u64()?;
         self.end_lt = cell.get_next_u64()?;
         self.gen_validator_list_hash_short = cell.get_next_u32()?;
@@ -1420,7 +1359,6 @@ impl Serializable for ProofChain {
 impl Deserializable for ProofChain {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let len = slice.get_next_int(8)?;
-        #[cfg(not(feature = "venom"))]
         if !(1..=8).contains(&len) {
             fail!(
                 BlockError::InvalidData(
@@ -1578,4 +1516,3 @@ impl Deserializable for TopBlockDescrSet {
         Ok(Self { collection })
     }
 }
-

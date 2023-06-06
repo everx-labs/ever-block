@@ -805,8 +805,6 @@ impl Account {
         }
     }
 
-    /// getting statistic using storage for calculate storage/transfer fee
-
     /// Getting account ID
     pub fn get_id(&self) -> Option<AccountId> {
         Some(self.get_addr()?.address())

@@ -2,7 +2,7 @@
 build = 'common/build/build.rs'
 edition = '2021'
 name = 'ton_block'
-version = '1.9.72'
+version = '1.9.73'
 
 [dependencies]
 base64 = '0.13'
@@ -22,5 +22,4 @@ default = [  ]
 gosh = [  ]
 groth = [  ]
 signature_with_id = [  ]
-venom = [  ]
 

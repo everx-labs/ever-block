@@ -27,8 +27,6 @@ use crate::{
     CopyleftRewards, Deserializable, IntermediateAddress, MaybeDeserialize, MaybeSerialize,
     Serializable, Account,
 };
-#[cfg(feature = "venom")]
-use crate::RefShardBlocks;
 use std::fmt::{self, Display, Formatter};
 use ton_types::{
     error, fail, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
@@ -704,12 +702,6 @@ impl Deserializable for ShardState {
                 ss.read_from(cell)?;
                 ShardState::UnsplitState(ss)
             }
-            #[cfg(feature = "venom")]
-            SHARD_STATE_UNSPLIT_PFX_2 => {
-                let mut ss = ShardStateUnsplit::default();
-                ss.read_from(cell)?;
-                ShardState::UnsplitState(ss)
-            }
             SHARD_STATE_SPLIT_PFX => {
                 let mut ss = ShardStateSplit::default();
                 ss.read_from(cell)?;
@@ -731,8 +723,6 @@ impl Deserializable for ShardState {
 
 const SHARD_STATE_SPLIT_PFX: u32 = 0x5f327da5;
 const SHARD_STATE_UNSPLIT_PFX: u32 = 0x9023afe2;
-#[cfg(feature = "venom")]
-const SHARD_STATE_UNSPLIT_PFX_2: u32 = 0x9023aeee;
 
 impl Serializable for ShardState {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -842,10 +832,6 @@ pub struct ShardStateUnsplit {
     // This field is present only in the masterchain and contains all the masterchain-specific data.
     custom: Option<ChildCell<McStateExtra>>, 
 
-    #[cfg(feature = "venom")]
-    // This field is present only in shardchain blocks (in case of venom consensus)
-    // and contains shard blocks this shardchain block refers to.
-    ref_shard_blocks: Option<RefShardBlocks>,
 }
 
 impl ShardStateUnsplit {
@@ -901,8 +887,18 @@ impl ShardStateUnsplit {
         self.gen_time
     }
 
+    pub fn gen_time_ms(&self) -> u64 {
+         {
+            self.gen_time as u64 * 1000
+        }
+    }
+
     pub fn set_gen_time(&mut self, value: u32) {
-        self.gen_time = value
+        self.gen_time = value;
+    }
+
+    pub fn set_gen_time_ms(&mut self, value: u64) {
+        self.gen_time = (value / 1000) as u32;
     }
 
     pub fn gen_lt(&self) -> u64 {
@@ -1006,16 +1002,6 @@ impl ShardStateUnsplit {
 
     pub fn libraries_mut(&mut self) -> &mut Libraries {
         &mut self.libraries
-    }
-
-    #[cfg(feature = "venom")]
-    pub fn ref_shard_blocks(&self) -> Option<&RefShardBlocks> {
-        self.ref_shard_blocks.as_ref()
-    }
-
-    #[cfg(feature = "venom")]
-    pub fn set_ref_shard_blocks(&mut self, rsb: Option<RefShardBlocks>) {
-        self.ref_shard_blocks = rsb;
     }
 
     pub fn master_ref(&self) -> Option<&BlkMasterInfo> {
@@ -1151,9 +1137,6 @@ impl Deserializable for ShardStateUnsplit {
 
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        #[cfg(feature = "venom")]
-        let wrong_tag = tag != SHARD_STATE_UNSPLIT_PFX && tag != SHARD_STATE_UNSPLIT_PFX_2;
-        #[cfg(not(feature = "venom"))]
         let wrong_tag = tag != SHARD_STATE_UNSPLIT_PFX;
         if wrong_tag {
             fail!(
@@ -1184,20 +1167,6 @@ impl Deserializable for ShardStateUnsplit {
 
         if tag == SHARD_STATE_UNSPLIT_PFX {
             self.custom = ChildCell::construct_maybe_from_reference(cell)?;
-            #[cfg(feature = "venom")] {
-                self.ref_shard_blocks = None;
-            }
-        }
-
-        #[cfg(feature = "venom")]
-        if tag == SHARD_STATE_UNSPLIT_PFX_2 {
-            if self.shard_id.is_masterchain() {
-                self.custom = ChildCell::construct_maybe_from_reference(cell)?;
-                self.ref_shard_blocks = None;
-            } else {
-                self.custom = None;
-                self.ref_shard_blocks = Some(RefShardBlocks::construct_from(cell)?);
-            }
         }
 
         Ok(())
@@ -1206,13 +1175,6 @@ impl Deserializable for ShardStateUnsplit {
 
 impl Serializable for ShardStateUnsplit {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-        #[cfg(feature = "venom")]
-        let tag = if self.ref_shard_blocks.is_some() {
-            SHARD_STATE_UNSPLIT_PFX_2 
-        } else {
-            SHARD_STATE_UNSPLIT_PFX
-        };
-        #[cfg(not(feature = "venom"))]
         let tag = SHARD_STATE_UNSPLIT_PFX;
         builder.append_u32(tag)?;
         self.global_id.write_to(builder)?;
@@ -1236,19 +1198,8 @@ impl Serializable for ShardStateUnsplit {
         self.master_ref.write_maybe_to(&mut b2)?;
         builder.checked_append_reference(b2.into_cell()?)?;
 
-        #[cfg(not(feature = "venom"))] {
+         {
             ChildCell::write_maybe_to(builder, self.custom.as_ref())?;
-        }
-
-        #[cfg(feature = "venom")] {
-            if self.custom.is_some() && self.ref_shard_blocks.is_some() {
-                fail!("'custom' and 'ref_shard_blocks' fields must not be present simultaneously");
-            }
-            if let Some(rsb) = &self.ref_shard_blocks {
-                rsb.write_to(builder)?;
-            } else {
-                ChildCell::write_maybe_to(builder, self.custom.as_ref())?;
-            }
         }
 
         Ok(())
