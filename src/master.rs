@@ -26,8 +26,6 @@ use crate::{
     CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15, Augmentation,
 };
 use std::{collections::HashMap, fmt};
-#[cfg(feature = "venom")]
-use std::collections::HashSet;
 use ton_types::{
     error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
     SliceData, UInt256,
@@ -271,7 +269,7 @@ impl ShardHashes {
         workchain_id: i32,
         reg_mc_seqno: u32,
         zerostate_root_hash: UInt256,
-        zerostate_file_hash: UInt256
+        zerostate_file_hash: UInt256,
     ) -> Result<()> {
 
         if self.has_workchain(workchain_id)? {
@@ -346,14 +344,12 @@ impl McShardRecord {
                     next_catchain_seqno: info.gen_catchain_seqno(),
                     next_validator_shard: info.shard().shard_prefix_with_tag(),
                     min_ref_mc_seqno: info.min_ref_mc_seqno(),
-                    gen_utime: info.gen_utime().as_u32(),
+                    gen_utime: info.gen_utime().into(),
                     split_merge_at: FutureSplitMerge::None, // is not used in McShardRecord
                     fees_collected: value_flow.fees_collected,
                     funds_created: value_flow.created,
                     copyleft_rewards: value_flow.copyleft_rewards,
                     proof_chain: None,
-                    #[cfg(feature = "venom")]
-                    collators: None,
                 },
                 block_id,
             }
@@ -1296,124 +1292,12 @@ impl Serializable for FutureSplitMerge {
     }
 }
 
-#[cfg(feature = "venom")]
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct CollatorRange {
-    pub collator: u16,
-    pub start: u32,
-    pub finish: u32,
-    pub unexpected_finish: Option<u32>,
-}
-
-#[cfg(feature = "venom")]
-impl fmt::Display for CollatorRange {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({}..{}", self.collator, self.start, self.finish)?;
-        if let Some(unexpected_finish) = self.unexpected_finish {
-            write!(f, ", unexpected {})", unexpected_finish)?;
-        } else {
-            write!(f, ")")?;
-        }
-        Ok(())
-    }
-}
-
-#[cfg(feature = "venom")]
-impl Serializable for CollatorRange {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.collator.write_to(cell)?;
-        self.start.write_to(cell)?;
-        self.finish.write_to(cell)?;
-        self.unexpected_finish.write_maybe_to(cell)?;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "venom")]
-impl Deserializable for CollatorRange {
-    fn construct_from(slice: &mut SliceData) -> Result<Self> {
-        Ok(Self {
-            collator: u16::construct_from(slice)?,
-            start: slice.get_next_u32()?,
-            finish: slice.get_next_u32()?,
-            unexpected_finish: Deserializable::construct_maybe_from(slice)?,
-        })
-    }
-}
-
-#[cfg(feature = "venom")]
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct ShardCollators {
-    pub prev: CollatorRange,
-    pub prev2: Option<CollatorRange>,
-    pub current: CollatorRange,
-    pub next: CollatorRange,
-    pub next2: Option<CollatorRange>,
-}
-
-#[cfg(feature = "venom")]
-impl fmt::Display for ShardCollators {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "prev: {}", self.prev)?;
-        if let Some(prev2) = &self.prev2 {
-            writeln!(f, "prev2: {}", prev2)?;
-        } else {
-            writeln!(f, "prev2: none")?;
-        }
-        writeln!(f, "current: {}", self.current)?;
-        writeln!(f, "next: {}", self.next)?;
-        if let Some(next2) = &self.next2 {
-            write!(f, "next2: {}", next2)?;
-        } else {
-            write!(f, "next2: none")?;
-        }
-        Ok(())
-    }
-}
-
-#[cfg(feature = "venom")]
-const SHARD_COLLATORS_TAG: u8 = 0x1; // 4 bits
-
-#[cfg(feature = "venom")]
-impl Serializable for ShardCollators {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_bits(SHARD_COLLATORS_TAG as usize, 4)?;
-        self.prev.write_to(cell)?;
-        self.prev2.write_maybe_to(cell)?;
-        self.current.write_to(cell)?;
-        self.next.write_to(cell)?;
-        self.next2.write_maybe_to(cell)?;
-        Ok(())
-    }
-}
-
-#[cfg(feature = "venom")]
-impl Deserializable for ShardCollators {
-    fn construct_from(slice: &mut SliceData) -> Result<Self> {
-        let tag = slice.get_next_int(4)? as u8;
-        if tag != SHARD_COLLATORS_TAG {
-            fail!(
-                BlockError::InvalidConstructorTag {
-                    t: tag as u32,
-                    s: std::any::type_name::<Self>().to_string()
-                }
-            )
-        }
-        Ok(Self {
-            prev: Deserializable::construct_from(slice)?,
-            prev2: Deserializable::construct_maybe_from(slice)?,
-            current: Deserializable::construct_from(slice)?,
-            next: Deserializable::construct_from(slice)?,
-            next2: Deserializable::construct_maybe_from(slice)?,
-        })
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ShardBlockRef {
     pub seq_no: u32,
     pub root_hash: UInt256,
     pub file_hash: UInt256,
+    pub end_lt: u64,
 }
 
 impl Deserializable for ShardBlockRef {
@@ -1422,6 +1306,7 @@ impl Deserializable for ShardBlockRef {
             seq_no: slice.get_next_u32()?,
             root_hash: UInt256::construct_from(slice)?,
             file_hash: UInt256::construct_from(slice)?,
+            end_lt: slice.get_next_u64()?,
         })
     }
 }
@@ -1431,31 +1316,21 @@ impl Serializable for ShardBlockRef {
         self.seq_no.write_to(cell)?;
         self.root_hash.write_to(cell)?;
         self.file_hash.write_to(cell)?;
+        self.end_lt.write_to(cell)?;
         Ok(())
     }
 }
 
-impl From<&BlockIdExt> for ShardBlockRef {
-    fn from(block_id: &BlockIdExt) -> Self {
+impl ShardBlockRef {
+    pub fn with_params(block_id: &BlockIdExt, end_lt: u64) -> Self {
         Self {
             seq_no: block_id.seq_no,
             root_hash: block_id.root_hash.clone(),
             file_hash: block_id.file_hash.clone(),
+            end_lt,
         }
     }
-}
 
-impl From<BlockIdExt> for ShardBlockRef {
-    fn from(block_id: BlockIdExt) -> Self {
-        Self {
-            seq_no: block_id.seq_no,
-            root_hash: block_id.root_hash,
-            file_hash: block_id.file_hash,
-        }
-    }
-}
-
-impl ShardBlockRef {
     pub fn into_block_id(self, shard_id: ShardIdent) -> Result<BlockIdExt> {
         Ok(BlockIdExt {
             shard_id,
@@ -1467,94 +1342,8 @@ impl ShardBlockRef {
 }
 
 // workchain_id -> bintree_of_shards -> (seq_no, root_hash, file_hash)
-#[cfg(feature = "venom")]
-define_HashmapE!{RefShardBlocks, 32, BinTree<ShardBlockRef>}
 
-#[cfg(feature = "venom")]
-impl RefShardBlocks {
-    pub fn with_ids<'a>(ids: impl IntoIterator<Item = &'a BlockIdExt>) -> Result<Self> {
-        // Naive implementation. 
-        //TODO optimise me!
-
-        let mut ref_shard_blocks = HashMap::new(); // wc -> shard -> id
-        for id in ids {
-            let shards = loop {
-                if let Some(wc) = ref_shard_blocks.get_mut(&id.shard().workchain_id()) {
-                    break wc
-                }
-                ref_shard_blocks.insert(id.shard().workchain_id(), HashMap::new());
-            };
-            shards.insert(id.shard(), ShardBlockRef::from(id));
-        }
-
-        let mut result = Self::default();
-        for (wc, mut shards) in ref_shard_blocks {
-            let key = ShardIdent::full(wc);
-            let mut bintree;
-            if let Some(val) = shards.get(&key) {
-                bintree = BinTree::with_item(val)?;
-            } else {
-                bintree = BinTree::with_item(&ShardBlockRef::default())?;
-                let mut unfinished_keys = vec!(key);
-                while let Some(key) = unfinished_keys.pop() {
-                    bintree.split(key.shard_key(false), |_| {
-                        let (left, right) = key.split()?;
-                        let left_val = if let Some(val) = shards.remove(&left) {
-                            val
-                        } else {
-                            unfinished_keys.push(left);
-                            ShardBlockRef::default()
-                        };
-                        let right_val = if let Some(val) = shards.remove(&right) {
-                            val
-                        } else {
-                            unfinished_keys.push(right);
-                            ShardBlockRef::default()
-                        };
-                        Ok((left_val, right_val))
-                    })?;
-                }
-                if !shards.is_empty() {
-                    fail!("wrong ids (shards is not empty after bintree filling)")
-                }
-            }
-            result.set(&wc, &bintree)?;
-        }
-
-        Ok(result)
-    }
-
-    pub fn iterate_shard_block_refs<F>(&self, mut func: F) -> Result<bool>
-        where F: FnMut(BlockIdExt) -> Result<bool> 
-    {
-        self.iterate_with_keys(|wc_id: i32, shards| {
-            shards.iterate(|prefix, block_id| {
-                let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
-                let block_id_full = block_id.into_block_id(shard_ident)?;
-                func(block_id_full)
-            })
-        })
-    }
-
-    pub fn ref_shard_block(&self, shard_ident: &ShardIdent) -> Result<Option<BlockIdExt>> {
-        if let Some(shards) = self.get(&shard_ident.workchain_id())? {
-            if let Some(block_id) = shards.get(shard_ident.shard_key(false))? {
-                return Ok(Some(block_id.into_block_id(shard_ident.clone())?))
-            }
-        }
-        Ok(None)
-    }
-
-    pub fn collect_ref_shard_blocks(&self) -> Result<HashSet<BlockIdExt>> {
-        let mut res = HashSet::new();
-        self.iterate_shard_block_refs(|block_id| {
-            res.insert(block_id);
-            Ok(true)
-        })?;
-        Ok(res)
-    }
-}
-
+// Shard description (header)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ShardDescr {
     pub seq_no: u32,
@@ -1578,8 +1367,6 @@ pub struct ShardDescr {
     pub funds_created: CurrencyCollection,
     pub copyleft_rewards: CopyleftRewards,
     pub proof_chain: Option<ProofChain>, // Some when CapWc2WcQueueUpdates is set
-    #[cfg(feature = "venom")]
-    pub collators: Option<ShardCollators>,
 }
 
 impl ShardDescr {
@@ -1609,8 +1396,6 @@ impl ShardDescr {
             funds_created: CurrencyCollection::default(),
             copyleft_rewards: CopyleftRewards::default(),
             proof_chain: None,
-            #[cfg(feature = "venom")]
-            collators: None,
         }
     }
     pub fn fsm_equal(&self, other: &Self) -> bool {
@@ -1652,17 +1437,11 @@ const SHARD_IDENT_TAG_A: u8 = 0xa; // 4 bit
 const SHARD_IDENT_TAG_B: u8 = 0xb; // 4 bit
 const SHARD_IDENT_TAG_C: u8 = 0xc; // 4 bit
 const SHARD_IDENT_TAG_D: u8 = 0xd; // 4 bit // with all previous and proof chain
-#[cfg(feature = "venom")]
-const SHARD_IDENT_TAG_E: u8 = 0xe; // 4 bit // with proof chain & collators & base shard blocks, without copyleft
 const SHARD_IDENT_TAG_LEN: usize = 4;
 
 impl Deserializable for ShardDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(SHARD_IDENT_TAG_LEN)? as u8;
-        #[cfg(feature = "venom")]
-        let wrong_tag = tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B 
-            && tag != SHARD_IDENT_TAG_C && tag != SHARD_IDENT_TAG_D && tag != SHARD_IDENT_TAG_E;
-        #[cfg(not(feature = "venom"))]
         let wrong_tag = tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B 
             && tag != SHARD_IDENT_TAG_C && tag != SHARD_IDENT_TAG_D;
         if wrong_tag {
@@ -1719,14 +1498,6 @@ impl Deserializable for ShardDescr {
             let proof_chain = ProofChain::construct_from(&mut slice1)?;
             self.proof_chain = Some(proof_chain);
         }
-        #[cfg(feature = "venom")]
-        if tag == SHARD_IDENT_TAG_E {
-            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
-            self.fees_collected.read_from(&mut slice1)?;
-            self.funds_created.read_from(&mut slice1)?;
-            self.proof_chain = Vec::<Cell>::read_maybe_from(&mut slice1)?;
-            self.collators = ShardCollators::read_maybe_from(&mut slice1)?;
-        }
 
         Ok(())
     }
@@ -1740,13 +1511,6 @@ impl Serializable for ShardDescr {
         } else if !self.copyleft_rewards.is_empty() {
             tag = SHARD_IDENT_TAG_C
         };
-        #[cfg(feature = "venom")]
-        if self.collators.is_some() {
-            if !self.copyleft_rewards.is_empty() {
-                fail!("copyleft_rewards is not supported in venom mode");
-            }
-            tag = SHARD_IDENT_TAG_E;
-        }
 
         cell.append_bits(tag as usize, SHARD_IDENT_TAG_LEN)?;
 
@@ -1788,11 +1552,6 @@ impl Serializable for ShardDescr {
         let mut child = BuilderData::new();
         self.fees_collected.write_to(&mut child)?;
         self.funds_created.write_to(&mut child)?;
-        #[cfg(feature = "venom")]
-        if tag == SHARD_IDENT_TAG_E {
-            self.proof_chain.write_maybe_to(&mut child)?;
-            self.collators.write_maybe_to(&mut child)?;
-        }
         if tag == SHARD_IDENT_TAG_D {
             let proof_chain = self.proof_chain.as_ref()
                 .ok_or_else(|| error!("INTARNAL ERROR: proof_chain is None"))?;

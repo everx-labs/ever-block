@@ -528,7 +528,6 @@ pub trait HashmapAugType<
         })
     }
     /// Puts element to the tree
-    /// Puts element to the tree
     fn set_builder_serialized(
         &mut self, 
         key: SliceData, 

@@ -199,7 +199,6 @@ impl FromStr for MsgAddressExt {
 }
 
 impl Serializable for MsgAddressExt {
-
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
 
         match self {

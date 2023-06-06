@@ -34,7 +34,6 @@ use ton_types::{
 /*
 ed25519_signature#5 R:bits256 s:bits256 = CryptoSignature; 
 */
-
 ///
 /// CryptoSignature
 /// 

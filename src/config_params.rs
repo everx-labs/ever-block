@@ -389,11 +389,6 @@ impl ConfigParams {
     pub fn get_lt_align(&self) -> u64 {
         1_000_000
     }
-    #[cfg(feature = "venom")]
-    pub fn get_max_lt_growth(&self) -> u64 {
-        100 * self.get_lt_align() - 1
-    }
-    #[cfg(not(feature = "venom"))]
     pub fn get_max_lt_growth(&self) -> u64 {
         10 * self.get_lt_align() - 1
     }
