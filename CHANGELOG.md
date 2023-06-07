@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.74
+
+- Added CollatorRange:: updated_at
 
 ## Version 1.9.73
 
