@@ -75,7 +75,7 @@ impl ProcessedUpto {
     // New instance ProcessedUpto structure
     pub fn with_params(
         last_msg_lt: u64,
-        last_msg_hash: UInt256
+        last_msg_hash: UInt256,
     ) -> Self {
         Self {
             last_msg_lt,
