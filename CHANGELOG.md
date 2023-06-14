@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.77
+
+- Added GlobalCapabilities::CapOptimisticConsensus
+
 ## Version 1.9.76
 
 -  Deleted unused field CollatorRange.unexpected_finish

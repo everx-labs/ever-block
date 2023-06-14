@@ -349,46 +349,53 @@ impl ConfigParams {
 #[repr(u64)]
 pub enum GlobalCapabilities {
     CapNone                   = 0,
-    CapIhrEnabled             = 0x0000_0001,
-    CapCreateStatsEnabled     = 0x0000_0002,
-    CapBounceMsgBody          = 0x0000_0004,
-    CapReportVersion          = 0x0000_0008,
-    CapSplitMergeTransactions = 0x0000_0010,
-    CapShortDequeue           = 0x0000_0020,
-    CapMbppEnabled            = 0x0000_0040,
-    CapFastStorageStat        = 0x0000_0080,
-    CapInitCodeHash           = 0x0000_0100,
-    CapOffHypercube           = 0x0000_0200,
-    CapMycode                 = 0x0000_0400,
-    CapSetLibCode             = 0x0000_0800,
-    CapFixTupleIndexBug       = 0x0000_1000,
-    CapRemp                   = 0x0000_2000,
-    CapDelections             = 0x0000_4000,
-    CapFullBodyInBounced      = 0x0001_0000,
-    CapStorageFeeToTvm        = 0x0002_0000,
-    CapCopyleft               = 0x0004_0000,
-    CapIndexAccounts          = 0x0008_0000,
+    CapIhrEnabled             = 0x0000_0000_0001,
+    CapCreateStatsEnabled     = 0x0000_0000_0002,
+    CapBounceMsgBody          = 0x0000_0000_0004,
+    CapReportVersion          = 0x0000_0000_0008,
+    CapSplitMergeTransactions = 0x0000_0000_0010,
+    CapShortDequeue           = 0x0000_0000_0020,
+    CapMbppEnabled            = 0x0000_0000_0040,
+    CapFastStorageStat        = 0x0000_0000_0080,
+    CapInitCodeHash           = 0x0000_0000_0100,
+    CapOffHypercube           = 0x0000_0000_0200,
+    CapMycode                 = 0x0000_0000_0400,
+    CapSetLibCode             = 0x0000_0000_0800,
+    CapFixTupleIndexBug       = 0x0000_0000_1000,
+    CapRemp                   = 0x0000_0000_2000,
+    CapDelections             = 0x0000_0000_4000,
+    CapFullBodyInBounced      = 0x0000_0001_0000,
+    CapStorageFeeToTvm        = 0x0000_0002_0000,
+    CapCopyleft               = 0x0000_0004_0000,
+    CapIndexAccounts          = 0x0000_0008_0000,
     #[cfg(feature = "gosh")]
-    CapDiff                   = 0x0010_0000,
-    CapsTvmBugfixes2022       = 0x0020_0000, // popsave, exception handler, loops
-    CapWorkchains             = 0x0040_0000,
-    CapStcontNewFormat        = 0x0080_0000, // support old format continuation serialization
-    CapFastStorageStatBugfix  = 0x0100_0000, // calc cell datasize using fast storage stat
-    CapResolveMerkleCell      = 0x0200_0000,
+    CapDiff                   = 0x0000_0010_0000,
+    CapsTvmBugfixes2022       = 0x0000_0020_0000, // popsave, exception handler, loops
+    CapWorkchains             = 0x0000_0040_0000,
+    CapStcontNewFormat        = 0x0000_0080_0000, // support old format continuation serialization
+    CapFastStorageStatBugfix  = 0x0000_0100_0000, // calc cell datasize using fast storage stat
+    CapResolveMerkleCell      = 0x0000_0200_0000,
     #[cfg(feature = "signature_with_id")]
-    CapSignatureWithId        = 0x0400_0000, // use some predefined id during signature check
-    CapBounceAfterFailedAction= 0x0800_0000,
+    CapSignatureWithId        = 0x0000_0400_0000, // use some predefined id during signature check
+    CapBounceAfterFailedAction= 0x0000_0800_0000,
     #[cfg(feature = "groth")]
-    CapGroth16                = 0x1000_0000,
-    CapFeeInGasUnits          = 0x2000_0000, // all fees in config are in gas units
-    CapBigCells               = 0x4000_0000,
-    CapSuspendedList          = 0x8000_0000,
+    CapGroth16                = 0x0000_1000_0000,
+    CapFeeInGasUnits          = 0x0000_2000_0000, // all fees in config are in gas units
+    CapBigCells               = 0x0000_4000_0000,
+    CapSuspendedList          = 0x0000_8000_0000,
+    #[cfg(feature = "fast_finality")]
+    CapFastFinality           = 0x0001_0000_0000,
 }
 
 impl ConfigParams {
     pub fn get_lt_align(&self) -> u64 {
         1_000_000
     }
+    #[cfg(feature = "fast_finality")]
+    pub fn get_max_lt_growth(&self) -> u64 {
+        100 * self.get_lt_align() - 1
+    }
+    #[cfg(not(feature = "fast_finality"))]
     pub fn get_max_lt_growth(&self) -> u64 {
         10 * self.get_lt_align() - 1
     }
