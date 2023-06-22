@@ -33,10 +33,12 @@ action_send_msg#0ec3c86d out_msg:^Message = OutAction;
 action_set_code#ad4de08e new_code:^Cell = OutAction;
 */
 
+
 ///
 /// List of output actions
 ///
 pub type OutActions = LinkedList<OutAction>;
+
 
 ///
 /// Implementation of Serializable for OutActions
@@ -60,6 +62,7 @@ impl Serializable for OutActions {
     }
 }
 
+
 ///
 /// Implementation of Deserializable for OutActions
 ///
@@ -78,6 +81,8 @@ impl Deserializable for OutActions {
         Ok(())
     }
 }
+
+
 
 ///
 /// Enum OutAction

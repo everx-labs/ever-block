@@ -62,6 +62,7 @@ impl Deserializable for ProcessedInfoKey {
     }
 }
 
+
 ///
 /// Struct ProcessedUpto
 /// 
@@ -69,8 +70,6 @@ impl Deserializable for ProcessedInfoKey {
 pub struct ProcessedUpto {
     pub last_msg_lt: u64,
     pub last_msg_hash: UInt256,
-    #[cfg(feature = "fast_finality")]
-    pub original_shard: Option<u64>,
 }
 
 impl ProcessedUpto {
@@ -78,14 +77,10 @@ impl ProcessedUpto {
     pub fn with_params(
         last_msg_lt: u64,
         last_msg_hash: UInt256,
-        #[cfg(feature = "fast_finality")]
-        original_shard: Option<u64>,
     ) -> Self {
         Self {
             last_msg_lt,
             last_msg_hash,
-            #[cfg(feature = "fast_finality")]
-            original_shard,
         }   
     }
 }
@@ -94,10 +89,6 @@ impl Serializable for ProcessedUpto {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.last_msg_lt.write_to(cell)?;
         self.last_msg_hash.write_to(cell)?;
-        #[cfg(feature = "fast_finality")] {
-            use crate::MaybeSerialize;
-            self.original_shard.write_maybe_to(cell)?;
-        }
         Ok(())
     }
 }
@@ -106,13 +97,6 @@ impl Deserializable for ProcessedUpto {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.last_msg_lt.read_from(cell)?;
         self.last_msg_hash.read_from(cell)?;
-        #[cfg(feature = "fast_finality")] {
-            self.original_shard = if cell.is_empty() {
-                None
-            } else {
-                Deserializable::construct_maybe_from(cell)?
-            };
-        }
         Ok(())
     }
 }

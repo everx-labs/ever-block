@@ -2,7 +2,7 @@
 build = 'common/build/build.rs'
 edition = '2021'
 name = 'ton_block'
-version = '1.9.79'
+version = '1.9.80'
 
 [dependencies]
 base64 = '0.13'
@@ -19,7 +19,6 @@ ton_types = { git = 'https://github.com/tonlabs/ever-types.git', tag = '2.0.15' 
 
 [features]
 default = [  ]
-fast_finality = [  ]
 gosh = [  ]
 groth = [  ]
 signature_with_id = [  ]

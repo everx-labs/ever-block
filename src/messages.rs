@@ -257,6 +257,7 @@ impl MsgAddress {
     }
 }
 
+
 impl FromStr for MsgAddress {
     type Err = failure::Error;
     fn from_str(string: &str) -> Result<Self> {
@@ -1286,6 +1287,7 @@ impl Message {
     /// Get value transmitted by the message
     ///
     pub fn get_value_mut(&mut self) -> Option<&mut CurrencyCollection> { self.value_mut() }
+
 
     ///
     /// Get value transmitted by the message

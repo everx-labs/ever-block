@@ -506,6 +506,7 @@ pub struct InMsgIHR {
     proof_created: Cell,
 }
 
+
 impl InMsgIHR {
     pub fn with_cells(msg_cell: Cell, tr_cell: Cell, ihr_fee: Grams, proof_created: Cell) -> Self {
         InMsgIHR {
@@ -540,6 +541,7 @@ impl InMsgIHR {
         &self.proof_created
     }
 }
+
 
 impl Serializable for InMsgIHR {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {

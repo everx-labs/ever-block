@@ -668,6 +668,7 @@ impl Deserializable for SplitMergeInfo {
     }
 }
 
+
 /*
 trans_ord$0000
     storage_ph:(Maybe TrStoragePhase)
@@ -1191,6 +1192,7 @@ impl Deserializable for TransactionDescr {
     }
 }
 
+
 /*
 update_hashes#72 {X:Type} old_hash:bits256 new_hash:bits256
   = HASH_UPDATE X;
@@ -1462,6 +1464,7 @@ impl Transaction {
         self.outmsg_cnt += 1;
         Ok(())
     }
+
 
     pub fn read_state_update(&self) -> Result<HashUpdate> {
         self.state_update.read_struct()
