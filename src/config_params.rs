@@ -383,19 +383,12 @@ pub enum GlobalCapabilities {
     CapFeeInGasUnits          = 0x0000_2000_0000, // all fees in config are in gas units
     CapBigCells               = 0x0000_4000_0000,
     CapSuspendedList          = 0x0000_8000_0000,
-    #[cfg(feature = "fast_finality")]
-    CapFastFinality           = 0x0001_0000_0000,
 }
 
 impl ConfigParams {
     pub fn get_lt_align(&self) -> u64 {
         1_000_000
     }
-    #[cfg(feature = "fast_finality")]
-    pub fn get_max_lt_growth(&self) -> u64 {
-        100 * self.get_lt_align() - 1
-    }
-    #[cfg(not(feature = "fast_finality"))]
     pub fn get_max_lt_growth(&self) -> u64 {
         10 * self.get_lt_align() - 1
     }
@@ -508,6 +501,7 @@ impl Deserializable for ConfigParams {
         Ok(())
     }
 }
+
 
 impl Serializable for ConfigParams {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -1335,6 +1329,7 @@ impl ConfigParam18 {
     }
 }
 
+
 impl Deserializable for ConfigParam18 {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.map.read_hashmap_root(slice)?;
@@ -1516,6 +1511,7 @@ config_mc_gas_prices#_ GasLimitsPrices = ConfigParam 20;
 config_gas_prices#_ GasLimitsPrices = ConfigParam 21;
 */
 
+
 /*
 
 // msg_fwd_fees = (lump_price + ceil((bit_price * msg.bits + cell_price * msg.cells)/2^16)) nanograms
@@ -1594,6 +1590,7 @@ config_mc_fwd_prices#_ MsgForwardPrices = ConfigParam 24;
 config_fwd_prices#_ MsgForwardPrices = ConfigParam 25;
 
 */
+
 
 /*
 catchain_config#c1 
@@ -1680,6 +1677,7 @@ impl Serializable for CatchainConfig {
 /*
  _ CatchainConfig = ConfigParam 28;
  */
+
 
 /*
 _ fundamental_smc_addr:(HashmapE 256 True) = ConfigParam 31;
@@ -2043,6 +2041,7 @@ impl WorkchainFormat1 {
     }
 }
 
+
 impl Deserializable for WorkchainFormat1 {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         let vm_version = Deserializable::construct_from(slice)?;
@@ -2058,6 +2057,7 @@ impl Serializable for WorkchainFormat1 {
         Ok(())
     }
 }
+
 
 /*
 wfmt_ext#0 
@@ -2260,6 +2260,8 @@ impl Serializable for WorkchainFormat0 {
         }
     }
 }
+
+
 
 /*
 workchain#a5 
@@ -2640,6 +2642,7 @@ impl ConfigParam12 {
     }
 }
 
+
 impl Deserializable for ConfigParam12 {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.workchains.read_from(slice)?;
@@ -2771,6 +2774,7 @@ impl Serializable for ValidatorTempKey {
         Ok(())
     }
 }
+
 
 // signed_temp_key#4
 //     key:^ValidatorTempKey

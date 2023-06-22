@@ -74,6 +74,7 @@ impl ValidatorInfo {
     }
 }
 
+
 impl Serializable for ValidatorInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.validator_list_hash_short.write_to(cell)?;
@@ -91,6 +92,7 @@ impl Deserializable for ValidatorInfo {
         Ok(())
     }
 }
+
 
 /*
 validator_base_info$_
@@ -126,6 +128,7 @@ impl ValidatorBaseInfo {
         }
     }
 }
+
 
 impl Serializable for ValidatorBaseInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {

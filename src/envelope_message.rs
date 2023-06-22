@@ -242,6 +242,7 @@ impl Deserializable for IntermediateAddressRegular{
 /// interm_addr_simple$10 workchain_id:int8 addr_pfx:(64 * Bit) = IntermediateAddress;
 /// 
 
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct IntermediateAddressSimple{
     pub workchain_id: i8,
@@ -300,6 +301,7 @@ impl Deserializable for IntermediateAddressSimple{
 /// 
 /// interm_addr_ext$11 workchain_id:int32 addr_pfx:(64 * Bit) = IntermediateAddress;
 /// 
+
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct IntermediateAddressExt{

@@ -192,6 +192,7 @@ macro_rules! define_VarIntegerN {
             }
         }
 
+
         impl Default for $varname {
             fn default() -> Self {
                 $varname(BigInt::default())

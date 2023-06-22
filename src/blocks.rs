@@ -26,8 +26,6 @@ use crate::{
     validators::ValidatorSet,
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
 };
-#[cfg(feature = "fast_finality")]
-use crate::RefShardBlocks;
 use std::borrow::Cow;
 use std::{
     cmp::Ordering,
@@ -238,8 +236,6 @@ pub struct BlockInfo {
 
     shard: ShardIdent,
     gen_utime: UnixTime32,
-    #[cfg(feature = "fast_finality")]
-    gen_utime_ms: u16,
 
     start_lt: u64,
     end_lt: u64,
@@ -270,8 +266,6 @@ impl Default for BlockInfo {
             vert_seq_no: 0,
             shard: ShardIdent::default(),
             gen_utime: Default::default(),
-            #[cfg(feature = "fast_finality")]
-            gen_utime_ms: 0,
             start_lt: 0,
             end_lt: 0,
             gen_validator_list_hash_short: 0,
@@ -310,6 +304,7 @@ impl BlockInfo {
     pub fn key_block(&self) -> bool { self.key_block }
     pub fn set_key_block(&mut self, key_block: bool) { self.key_block = key_block }
 
+
     pub fn flags(&self) -> u8 { self.flags }
     // For now flags is related only on gen_software, so it is set automatically if need
     //pub fn set_flags(&mut self, flags) { self.flags = flags }
@@ -323,6 +318,7 @@ impl BlockInfo {
         Ok(())
     }
 
+
     pub fn shard(&self) -> &ShardIdent { &self.shard }
     pub fn set_shard(&mut self, shard: ShardIdent) { self.shard = shard }
 
@@ -331,14 +327,8 @@ impl BlockInfo {
 
     pub fn set_gen_utime_ms(&mut self, gen_utime_millis: u64) {
         self.gen_utime = ((gen_utime_millis / 1000) as u32).into();
-        #[cfg(feature = "fast_finality")] {
-            self.gen_utime_ms = (gen_utime_millis % 1000) as u16;
-        }
     }
 
-    #[cfg(feature = "fast_finality")]
-    pub fn gen_utime_ms(&self) -> u64 { self.gen_utime_ms as u64 + self.gen_utime().as_u32() as u64 * 1000 }
-    #[cfg(not(feature = "fast_finality"))]
     pub fn gen_utime_ms(&self) -> u64 { self.gen_utime().as_u32() as u64 * 1000 }
 
     pub fn start_lt(&self) -> u64 { self.start_lt }
@@ -770,8 +760,6 @@ pub struct BlockExtra {
     pub rand_seed: UInt256,
     pub created_by: UInt256,
     custom: Option<ChildCell<McBlockExtra>>,
-    #[cfg(feature = "fast_finality")]
-    ref_shard_blocks: RefShardBlocks,
 }
 
 impl BlockExtra {
@@ -783,8 +771,6 @@ impl BlockExtra {
             rand_seed: UInt256::rand(),
             created_by: UInt256::default(), // TODO: Need to fill?
             custom: None,
-            #[cfg(feature = "fast_finality")]
-            ref_shard_blocks: RefShardBlocks::default(),
         }
     }
 
@@ -853,32 +839,17 @@ impl BlockExtra {
         self.custom.as_ref().map(|c| c.cell())
     }
 
-    #[cfg(feature = "fast_finality")]
-    pub fn ref_shard_blocks(&self) -> &RefShardBlocks {
-        &self.ref_shard_blocks
-    }
-
-    #[cfg(feature = "fast_finality")]
-    pub fn set_ref_shard_blocks(&mut self, value: RefShardBlocks) {
-        self.ref_shard_blocks = value;
-    }
-
     pub fn is_key_block(&self) -> bool {
         self.custom.is_some()
     }
 }
 
 const BLOCK_EXTRA_TAG: u32 = 0x4a33f6fd;
-#[cfg(feature = "fast_finality")]
-const BLOCK_EXTRA_TAG_2: u32 = 0x4a33f6fc;
 
 impl Deserializable for BlockExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        #[cfg(not(feature = "fast_finality"))]
         let wrong_tag = tag != BLOCK_EXTRA_TAG;
-        #[cfg(feature = "fast_finality")]
-        let wrong_tag = tag != BLOCK_EXTRA_TAG && tag != BLOCK_EXTRA_TAG_2;
         if wrong_tag {
             fail!(BlockError::InvalidConstructorTag {
                     t: tag,
@@ -894,12 +865,6 @@ impl Deserializable for BlockExtra {
         if tag == BLOCK_EXTRA_TAG {
             self.custom = ChildCell::construct_maybe_from_reference(cell)?;
         }
-        #[cfg(feature = "fast_finality")]
-        if tag == BLOCK_EXTRA_TAG_2 {
-            let mut child = SliceData::load_cell(cell.checked_drain_reference()?)?;
-            self.custom = ChildCell::construct_maybe_from_reference(&mut child)?;
-            self.ref_shard_blocks.read_from(&mut child)?;
-        }
 
         Ok(())
     }
@@ -907,9 +872,6 @@ impl Deserializable for BlockExtra {
 
 impl Serializable for BlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        #[cfg(feature = "fast_finality")]
-        cell.append_u32(BLOCK_EXTRA_TAG_2)?;
-        #[cfg(not(feature = "fast_finality"))]
         cell.append_u32(BLOCK_EXTRA_TAG)?;
         cell.checked_append_reference(self.in_msg_descr.cell())?;
         cell.checked_append_reference(self.out_msg_descr.cell())?;
@@ -917,15 +879,8 @@ impl Serializable for BlockExtra {
         self.rand_seed.write_to(cell)?;
         self.created_by.write_to(cell)?;
 
-        #[cfg(not(feature = "fast_finality"))]
         ChildCell::write_maybe_to(cell, self.custom.as_ref())?;
         
-        #[cfg(feature = "fast_finality")] {
-            let mut child = BuilderData::new();
-            ChildCell::write_maybe_to(&mut child, self.custom.as_ref())?;
-            self.ref_shard_blocks.write_to(&mut child)?;
-            cell.checked_append_reference(child.into_cell()?)?;
-        }
         Ok(())
     }
 }
@@ -1106,8 +1061,6 @@ const BLOCK_TAG_1: u32 = 0x11ef55aa;
 const BLOCK_TAG_2: u32 = 0x11ef55bb;
 
 const BLOCK_INFO_TAG_1: u32 = 0x9bc7a987;
-#[cfg(feature = "fast_finality")]
-const BLOCK_INFO_TAG_2: u32 = 0x9bc7a988;
 
 impl Serializable for BlockInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -1138,9 +1091,6 @@ impl Serializable for BlockInfo {
             byte |= 1;
         }
 
-        #[cfg(feature = "fast_finality")]
-        let tag = BLOCK_INFO_TAG_2;
-        #[cfg(not(feature = "fast_finality"))]
         let tag = BLOCK_INFO_TAG_1;
 
         cell.append_u32(tag)?
@@ -1155,9 +1105,6 @@ impl Serializable for BlockInfo {
 
         let builder = cell.append_u32(self.gen_utime.into())?;
 
-        #[cfg(feature = "fast_finality")]
-        builder.append_u16(self.gen_utime_ms)?;
-
         builder
             .append_u64(self.start_lt)?
             .append_u64(self.end_lt)?
@@ -1165,6 +1112,7 @@ impl Serializable for BlockInfo {
             .append_u32(self.gen_catchain_seqno)?
             .append_u32(self.min_ref_mc_seqno)?
             .append_u32(self.prev_key_block_seqno)?;
+
 
         if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
             if let Some(gen_software) = self.gen_software.as_ref() {
@@ -1258,9 +1206,6 @@ impl Deserializable for ValueFlow {
 impl Deserializable for BlockInfo {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        #[cfg(feature = "fast_finality")]
-        let wrong_tag = tag != BLOCK_INFO_TAG_1 && tag != BLOCK_INFO_TAG_2;
-        #[cfg(not(feature = "fast_finality"))]
         let wrong_tag = tag != BLOCK_INFO_TAG_1;
         if wrong_tag {
             fail!(
@@ -1288,10 +1233,6 @@ impl Deserializable for BlockInfo {
         let vert_seq_no = cell.get_next_u32()?;
         self.shard.read_from(cell)?;
         self.gen_utime = cell.get_next_u32()?.into();
-        #[cfg(feature = "fast_finality")]
-        if tag == BLOCK_INFO_TAG_2{
-            self.gen_utime_ms = cell.get_next_u16()?;
-        }
         self.start_lt = cell.get_next_u64()?;
         self.end_lt = cell.get_next_u64()?;
         self.gen_validator_list_hash_short = cell.get_next_u32()?;
@@ -1421,7 +1362,6 @@ impl Serializable for ProofChain {
 impl Deserializable for ProofChain {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let len = slice.get_next_int(8)?;
-        #[cfg(not(feature = "fast_finality"))]
         if !(1..=8).contains(&len) {
             fail!(
                 BlockError::InvalidData(
