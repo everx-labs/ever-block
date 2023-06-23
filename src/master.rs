@@ -1536,14 +1536,6 @@ impl RefShardBlocks {
         Ok(None)
     }
 
-    pub fn collect_ref_shard_blocks(&self) -> Result<HashSet<BlockIdExt>> {
-        let mut res = HashSet::new();
-        self.iterate_shard_block_refs(|block_id| {
-            res.insert(block_id);
-            Ok(true)
-        })?;
-        Ok(res)
-    }
 }                                                                                                                                                                         
 
 // Shard description (header)
