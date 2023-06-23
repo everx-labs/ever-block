@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.84
+
+- Fix the build for fast finality
+
 ## Version 1.9.77
 
 - Added GlobalCapabilities::CapOptimisticConsensus
