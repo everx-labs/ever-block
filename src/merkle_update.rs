@@ -15,10 +15,16 @@ use crate::{
     error::BlockError,
     Serializable, Deserializable, MerkleProof,
 };
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, time::Duration};
 use ton_types::{
     error, fail, Result, UInt256, BuilderData, Cell, CellType, IBitstring, LevelMask, SliceData,
 };
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct MerkleUdateApplyMetrics {
+    pub loaded_old_cells: usize,
+    pub loaded_old_cells_time: Duration,
+}
 
 /*
 !merkle_update {X:Type} old_hash:uint256 new_hash:uint256
@@ -266,7 +272,7 @@ impl MerkleUpdate {
     /// Applies update to given tree of cells by returning new updated one
     pub fn apply_for(&self, old_root: &Cell) -> Result<Cell> {
 
-        let old_cells = self.check(old_root)?;
+        let old_cells = self.check(old_root, None)?;
 
         // cells for new bag
         if self.new_hash == self.old_hash {
@@ -283,9 +289,34 @@ impl MerkleUpdate {
         }
     }
 
+    pub fn apply_for_with_metrics(&self, old_root: &Cell) -> Result<(Cell, MerkleUdateApplyMetrics)> {
+
+        let mut metrics = MerkleUdateApplyMetrics::default();
+
+        let old_cells = self.check(old_root, Some(&mut metrics))?;
+
+        // cells for new bag
+        if self.new_hash == self.old_hash {
+            Ok((old_root.clone(), MerkleUdateApplyMetrics::default()))
+        } else {
+            let new_root = self.traverse_on_apply(&self.new, &old_cells, &mut HashMap::new(), 0)?;
+
+            // constructed tree's hash have to coinside with self.new_hash
+            if new_root.repr_hash() != self.new_hash {
+                fail!(BlockError::WrongMerkleUpdate("new bag's hash mismatch".to_string()))
+            }
+
+            Ok((new_root, metrics))
+        }
+    }
+
     /// Check the update corresponds given bag.
     /// The function is called from `apply_for`
-    pub fn check(&self, old_root: &Cell) -> Result<HashMap<UInt256, Cell>> {
+    fn check(
+        &self,
+        old_root: &Cell,
+        metrics: Option<&mut MerkleUdateApplyMetrics>
+    ) -> Result<HashMap<UInt256, Cell>> {
 
         // check that hash of `old_tree` is equal old hash from `self`
         if self.old_hash != old_root.repr_hash() {
@@ -295,7 +326,16 @@ impl MerkleUpdate {
         // traversal along `self.new` and check all pruned branches.
         // All new tree's pruned branches have to be contained in old one
         let mut known_cells = HashSet::new();
-        Self::traverse_old_on_check(&self.old, &mut known_cells, &mut HashSet::new(), 0);
+        let mut visited = HashSet::new();
+        #[cfg(not(target_family = "wasm"))]
+        let start = std::time::Instant::now();
+        Self::traverse_old_on_check(&self.old, &mut known_cells, &mut visited, 0);
+        if let Some(metrics) = metrics {
+            metrics.loaded_old_cells = visited.len();
+            #[cfg(not(target_family = "wasm"))] {
+                metrics.loaded_old_cells_time = start.elapsed();
+            }
+        }
         Self::traverse_new_on_check(&self.new, &known_cells, &mut HashSet::new(), 0)?;
 
         let mut known_cells_vals = HashMap::new();

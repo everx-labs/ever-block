@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.90
+
+- Added new method MerkleUdate::apply_for_with_metrics()
+
 ## Version 1.9.89
 
 - Remove compiler warning
