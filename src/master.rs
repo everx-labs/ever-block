@@ -122,7 +122,7 @@ impl ShardHashes {
     where F: FnMut(ShardIdent, ShardDescr, Option<ShardDescr>) -> Result<bool> {
         self.iterate_with_keys(|wc_id: i32, InRefValue(shards)| {
             shards.iterate_pairs(|prefix, shard_descr, sibling| {
-                let prefix = SliceData::load_builder(prefix)?;
+                let prefix = SliceData::load_bitstring(prefix)?;
                 let shard_ident = ShardIdent::with_prefix_slice(wc_id, prefix)?;
                 func(shard_ident, shard_descr, sibling)
             })

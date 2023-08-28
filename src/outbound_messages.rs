@@ -428,7 +428,7 @@ impl OutMsgQueueInfo {
         ) -> Result<(UInt256, UInt256)> {
             let queue_info = state.read_out_msg_queue_info()?;
             let sub_queue_root_hash = queue_info.out_queue()
-                .subtree_root_cell(&SliceData::load_builder(workchain_id.write_to_new_cell()?)?)?
+                .subtree_root_cell(&SliceData::load_bitstring(workchain_id.write_to_new_cell()?)?)?
                 .map(|c| c.repr_hash()).unwrap_or_default();
             let proc_info_root_hash = queue_info.proc_info().root()
                 .map(|c| c.repr_hash()).unwrap_or_default();

@@ -314,7 +314,7 @@ pub trait HashmapAugType<
     }
     /// gets aug and item in combined slice
     fn get_raw(&self, key: &K) -> Leaf {
-        let key = SliceData::load_builder(key.write_to_new_cell()?)?;
+        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
         self.get_serialized_raw(key)
     }
     /// get item as slice
@@ -364,7 +364,7 @@ pub trait HashmapAugType<
     }
     /// sets item to hashmapaug
     fn set_augmentable(&mut self, key: &K, value: &X) -> Result<()> {
-        let key = SliceData::load_builder(key.write_to_new_cell()?)?;
+        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
         let aug = value.aug()?;
         let value = value.write_to_new_cell()?;
         self.set_builder_serialized(key, &value, &aug)?;
@@ -372,7 +372,7 @@ pub trait HashmapAugType<
     }
     /// sets item to hashmapaug as ref
     fn setref(&mut self, key: &K, value: &Cell, aug: &Y) -> Result<()> {
-        let key = SliceData::load_builder(key.write_to_new_cell()?)?;
+        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
         let value = value.write_to_new_cell()?;
         self.set_builder_serialized(key, &value, aug)?;
         Ok(())
@@ -392,7 +392,7 @@ pub trait HashmapAugType<
                     root.clone(), &mut path, self.bit_len(), next_index, index, &mut 0
                 )?;
                 match result {
-                    Some(value) => Ok(Some((SliceData::load_builder(path)?, value))),
+                    Some(value) => Ok(Some((SliceData::load_bitstring(path)?, value))),
                     None => Ok(None)
                 }
             }
@@ -452,7 +452,7 @@ pub trait HashmapAugType<
     /// deserialize not empty root
     fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
         let mut root = slice.clone(); // copy to get as data
-        let label = slice.get_label(self.bit_len())?;
+        let label = ton_types::LabelReader::read_label(slice, self.bit_len())?;
         if label.remaining_bits() != self.bit_len() { // fork
             slice.shrink_references(2..); // left, right
             self.set_root_extra(Y::construct_from(slice)?);
@@ -470,8 +470,8 @@ pub trait HashmapAugType<
     fn single(&self) -> Result<Option<SliceData>> {
         if let Some(root) = self.data() {
             let mut slice = SliceData::load_cell_ref(root)?;
-            let label = slice.get_label(self.bit_len())?;
-            if label.remaining_bits() == self.bit_len() {
+            let label = ton_types::LabelReader::read_label_raw(&mut slice, &mut self.bit_len(), Default::default())?;
+            if label.length_in_bits() == self.bit_len() {
                 Y::skip(&mut slice)?;
                 return Ok(Some(slice))
             }
@@ -789,7 +789,7 @@ pub trait HashmapAugRemover<
         })
     }
     fn del(&mut self, key: &Y) -> Result<()> {
-        self.remove(SliceData::load_builder(key.write_to_new_cell()?)?)?;
+        self.remove(SliceData::load_bitstring(key.write_to_new_cell()?)?)?;
         Ok(())
     }
 }

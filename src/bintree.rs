@@ -193,7 +193,7 @@ where
         iterate_internal(&mut SliceData::load_cell(cursor.checked_drain_reference()?)?, left_key, p)? &&
         iterate_internal(&mut SliceData::load_cell(cursor.checked_drain_reference()?)?, key, p)?
     } else {
-        return p(SliceData::load_builder(key)?, X::construct_from(cursor)?)
+        return p(SliceData::load_bitstring(key)?, X::construct_from(cursor)?)
     };
     Ok(result)
 }

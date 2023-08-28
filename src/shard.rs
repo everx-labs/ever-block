@@ -349,7 +349,7 @@ impl ShardIdent {
             let prefix = self.shard_prefix_with_tag() >> (64 - prefix_len);
             cell.append_bits(prefix as usize, prefix_len as usize).unwrap();
         }
-        SliceData::load_builder(cell).unwrap()
+        SliceData::load_bitstring(cell).unwrap()
     }
 
     /// Get bitstring-key for BinTree operation for Shard
@@ -357,14 +357,14 @@ impl ShardIdent {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)?
             .append_u64(self.shard_prefix_without_tag())?;
-        SliceData::load_builder(cell)
+        SliceData::load_bitstring(cell)
     }
 
     pub fn full_key_with_tag(&self) -> Result<SliceData> {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)?
             .append_u64(self.shard_prefix_with_tag())?;
-        SliceData::load_builder(cell)
+        SliceData::load_bitstring(cell)
     }
 
     pub fn workchain_id(&self) -> i32 {

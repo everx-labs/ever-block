@@ -93,7 +93,7 @@ where
         let bit_len = K::default().write_to_new_cell()?.length_in_bits();
         let mut dictionary = HashmapE::with_bit_len(bit_len);
         for (key, value) in self.iter() {
-            let key = SliceData::load_builder(key.write_to_new_cell()?)?;
+            let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
             dictionary.set_builder(key, &value.write_to_new_cell()?)?;
         }
         dictionary.write_to(cell)
