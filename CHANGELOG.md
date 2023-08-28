@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.93
+
+- Use new functions for hashmap manipulation
+
 ## Version 1.9.90
 
 - Added new method MerkleUdate::apply_for_with_metrics()
