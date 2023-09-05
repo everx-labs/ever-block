@@ -270,8 +270,7 @@ impl ShardHashes {
         reg_mc_seqno: u32,
         zerostate_root_hash: UInt256,
         zerostate_file_hash: UInt256,
-        #[cfg(feature = "fast_finality")]
-        collators: ShardCollators,
+        collators: Option<ShardCollators>,
     ) -> Result<()> {
 
         if self.has_workchain(workchain_id)? {
@@ -283,8 +282,7 @@ impl ShardHashes {
             root_hash: zerostate_root_hash,
             file_hash: zerostate_file_hash,
             next_validator_shard: SHARD_FULL,
-            #[cfg(feature = "fast_finality")]
-            collators: Some(collators),
+            collators,
             ..ShardDescr::default()
         };
         let tree = BinTree::with_item(&descr)?;
@@ -354,7 +352,6 @@ impl McShardRecord {
                     funds_created: value_flow.created,
                     copyleft_rewards: value_flow.copyleft_rewards,
                     proof_chain: None,
-                    #[cfg(feature = "fast_finality")]
                     collators: None,
                 },
                 block_id,
@@ -1299,7 +1296,6 @@ impl Serializable for FutureSplitMerge {
     }
 }
 
-#[cfg(feature = "fast_finality")]
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct CollatorRange {
     pub collator: u16,
@@ -1307,14 +1303,12 @@ pub struct CollatorRange {
     pub finish: u32,
 }
 
-#[cfg(feature = "fast_finality")]
 impl fmt::Display for CollatorRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ({}..{})", self.collator, self.start, self.finish)
     }
 }
 
-#[cfg(feature = "fast_finality")]
 impl Serializable for CollatorRange {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.collator.write_to(cell)?;
@@ -1324,7 +1318,6 @@ impl Serializable for CollatorRange {
     }
 }
 
-#[cfg(feature = "fast_finality")]
 impl Deserializable for CollatorRange {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         Ok(Self {
@@ -1335,7 +1328,6 @@ impl Deserializable for CollatorRange {
     }
 }
 
-#[cfg(feature = "fast_finality")]
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ShardCollators {
     pub prev: CollatorRange,
@@ -1346,7 +1338,6 @@ pub struct ShardCollators {
     pub updated_at: u32,
 }
 
-#[cfg(feature = "fast_finality")]
 impl fmt::Display for ShardCollators {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "prev: {}", self.prev)?;
@@ -1367,10 +1358,8 @@ impl fmt::Display for ShardCollators {
     }
 }
 
-#[cfg(feature = "fast_finality")]
 const SHARD_COLLATORS_TAG: u8 = 0x1; // 4 bits
 
-#[cfg(feature = "fast_finality")]
 impl Serializable for ShardCollators {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(SHARD_COLLATORS_TAG as usize, 4)?;
@@ -1384,7 +1373,6 @@ impl Serializable for ShardCollators {
     }
 }
 
-#[cfg(feature = "fast_finality")]
 impl Deserializable for ShardCollators {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         let tag = slice.get_next_int(4)? as u8;
@@ -1457,10 +1445,8 @@ impl ShardBlockRef {
 }
 
 // workchain_id -> bintree_of_shards -> (seq_no, root_hash, file_hash)
-#[cfg(feature = "fast_finality")]
 define_HashmapE!{RefShardBlocks, 32, BinTree<ShardBlockRef>}
 
-#[cfg(feature = "fast_finality")]
 impl RefShardBlocks {
     pub fn with_ids<'a>(ids: impl IntoIterator<Item = &'a (BlockIdExt, u64)>) -> Result<Self> {
         // Naive implementation. 
@@ -1562,7 +1548,6 @@ pub struct ShardDescr {
     pub funds_created: CurrencyCollection,
     pub copyleft_rewards: CopyleftRewards,
     pub proof_chain: Option<ProofChain>, // Some when CapWc2WcQueueUpdates is set
-    #[cfg(feature = "fast_finality")]
     pub collators: Option<ShardCollators>,
 }
 
@@ -1593,7 +1578,6 @@ impl ShardDescr {
             funds_created: CurrencyCollection::default(),
             copyleft_rewards: CopyleftRewards::default(),
             proof_chain: None,
-            #[cfg(feature = "fast_finality")]
             collators: None,
         }
     }
@@ -1636,19 +1620,14 @@ const SHARD_IDENT_TAG_A: u8 = 0xa; // 4 bit
 const SHARD_IDENT_TAG_B: u8 = 0xb; // 4 bit
 const SHARD_IDENT_TAG_C: u8 = 0xc; // 4 bit
 const SHARD_IDENT_TAG_D: u8 = 0xd; // 4 bit // with all previous and proof chain
-#[cfg(feature = "fast_finality")]
 const SHARD_IDENT_TAG_E: u8 = 0xe; // 4 bit // with proof chain & collators & base shard blocks, without copyleft
 const SHARD_IDENT_TAG_LEN: usize = 4;
 
 impl Deserializable for ShardDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(SHARD_IDENT_TAG_LEN)? as u8;
-        #[cfg(feature = "fast_finality")]
         let wrong_tag = tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B 
             && tag != SHARD_IDENT_TAG_C && tag != SHARD_IDENT_TAG_D && tag != SHARD_IDENT_TAG_E;
-        #[cfg(not(feature = "fast_finality"))]
-        let wrong_tag = tag != SHARD_IDENT_TAG_A && tag != SHARD_IDENT_TAG_B 
-            && tag != SHARD_IDENT_TAG_C && tag != SHARD_IDENT_TAG_D;
         if wrong_tag {
             fail!(
                 BlockError::InvalidConstructorTag {
@@ -1681,35 +1660,40 @@ impl Deserializable for ShardDescr {
         self.min_ref_mc_seqno.read_from(slice)?;
         self.gen_utime.read_from(slice)?;
         self.split_merge_at.read_from(slice)?;
-        if tag == SHARD_IDENT_TAG_B {
-            self.fees_collected.read_from(slice)?;
-            self.funds_created.read_from(slice)?;
-        } else if tag == SHARD_IDENT_TAG_A {
-            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
-            self.fees_collected.read_from(&mut slice1)?;
-            self.funds_created.read_from(&mut slice1)?;
-        } else if tag == SHARD_IDENT_TAG_C {
-            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
-            self.fees_collected.read_from(&mut slice1)?;
-            self.funds_created.read_from(&mut slice1)?;
-            self.copyleft_rewards.read_from(&mut slice1)?;
-        } else if tag == SHARD_IDENT_TAG_D {
-            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
-            self.fees_collected.read_from(&mut slice1)?;
-            self.funds_created.read_from(&mut slice1)?;
-            if slice1.get_next_bit()? {
+        match tag {
+            SHARD_IDENT_TAG_B => {
+                self.fees_collected.read_from(slice)?;
+                self.funds_created.read_from(slice)?;
+            }
+            SHARD_IDENT_TAG_A => {
+                let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
+                self.fees_collected.read_from(&mut slice1)?;
+                self.funds_created.read_from(&mut slice1)?;
+            }
+            SHARD_IDENT_TAG_C => {
+                let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
+                self.fees_collected.read_from(&mut slice1)?;
+                self.funds_created.read_from(&mut slice1)?;
                 self.copyleft_rewards.read_from(&mut slice1)?;
             }
-            let proof_chain = ProofChain::construct_from(&mut slice1)?;
-            self.proof_chain = Some(proof_chain);
-        }
-        #[cfg(feature = "fast_finality")]
-        if tag == SHARD_IDENT_TAG_E {
-            let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
-            self.fees_collected.read_from(&mut slice1)?;
-            self.funds_created.read_from(&mut slice1)?;
-            self.proof_chain = Vec::<Cell>::read_maybe_from(&mut slice1)?;
-            self.collators = ShardCollators::read_maybe_from(&mut slice1)?;
+            SHARD_IDENT_TAG_D => {
+                let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
+                self.fees_collected.read_from(&mut slice1)?;
+                self.funds_created.read_from(&mut slice1)?;
+                if slice1.get_next_bit()? {
+                    self.copyleft_rewards.read_from(&mut slice1)?;
+                }
+                let proof_chain = ProofChain::construct_from(&mut slice1)?;
+                self.proof_chain = Some(proof_chain);
+            }
+            SHARD_IDENT_TAG_E => {
+                let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
+                self.fees_collected.read_from(&mut slice1)?;
+                self.funds_created.read_from(&mut slice1)?;
+                self.proof_chain = Vec::<Cell>::read_maybe_from(&mut slice1)?;
+                self.collators = ShardCollators::read_maybe_from(&mut slice1)?;
+            }
+            _ => ()
         }
 
         Ok(())
@@ -1723,9 +1707,7 @@ impl Serializable for ShardDescr {
             tag = SHARD_IDENT_TAG_D;
         } else if !self.copyleft_rewards.is_empty() {
             tag = SHARD_IDENT_TAG_C
-        };
-        #[cfg(feature = "fast_finality")]
-        if self.collators.is_some() {
+        } else if self.collators.is_some() {
             if !self.copyleft_rewards.is_empty() {
                 fail!("copyleft_rewards is not supported in fast_finality mode");
             }
@@ -1772,23 +1754,26 @@ impl Serializable for ShardDescr {
         let mut child = BuilderData::new();
         self.fees_collected.write_to(&mut child)?;
         self.funds_created.write_to(&mut child)?;
-        #[cfg(feature = "fast_finality")]
-        if tag == SHARD_IDENT_TAG_E {
-            self.proof_chain.write_maybe_to(&mut child)?;
-            self.collators.write_maybe_to(&mut child)?;
-        }
-        if tag == SHARD_IDENT_TAG_D {
-            let proof_chain = self.proof_chain.as_ref()
-                .ok_or_else(|| error!("INTARNAL ERROR: proof_chain is None"))?;
-            if !self.copyleft_rewards.is_empty() {
-                child.append_bit_one()?;
-                self.copyleft_rewards.write_to(&mut child)?;
-            } else {
-                child.append_bit_zero()?;
+        match tag {
+            SHARD_IDENT_TAG_E => {
+                self.proof_chain.write_maybe_to(&mut child)?;
+                self.collators.write_maybe_to(&mut child)?;
             }
-            proof_chain.write_to(&mut child)?;
-        } else if tag == SHARD_IDENT_TAG_C {
-            self.copyleft_rewards.write_to(&mut child)?;
+            SHARD_IDENT_TAG_D => {
+                let proof_chain = self.proof_chain.as_ref()
+                    .ok_or_else(|| error!("INTARNAL ERROR: proof_chain is None"))?;
+                if !self.copyleft_rewards.is_empty() {
+                    child.append_bit_one()?;
+                    self.copyleft_rewards.write_to(&mut child)?;
+                } else {
+                    child.append_bit_zero()?;
+                }
+                proof_chain.write_to(&mut child)?;
+            }
+            SHARD_IDENT_TAG_C => {
+                self.copyleft_rewards.write_to(&mut child)?;
+            }
+            _ => ()
         }
         cell.checked_append_reference(child.into_cell()?)?;
 
