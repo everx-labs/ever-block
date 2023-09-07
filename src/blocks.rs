@@ -439,6 +439,76 @@ impl BlockInfo {
         self.prev_vert_ref = prev_vert_ref.map(|v| ChildCell::with_struct(&v)).transpose()?;
         Ok(())
     }
+
+    pub fn read_from_ex(&mut self, slice: &mut SliceData, allow_v2: bool) -> Result<()> {
+        let tag = slice.get_next_u32()?;
+        if tag != BLOCK_INFO_TAG_1 && (!allow_v2 || tag != BLOCK_INFO_TAG_2) {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag,
+                    s: "BlockInfo".to_string()
+                }
+            )
+        }
+        self.version = slice.get_next_u32()?;
+
+        let next_byte = slice.get_next_byte()?;
+        let not_master = (next_byte >> 7) & 1 == 1;
+        let after_merge = (next_byte >> 6) & 1 == 1;
+        self.before_split = (next_byte >> 5) & 1 == 1;
+        self.after_split = (next_byte >> 4) & 1 == 1;
+        self.want_split = (next_byte >> 3) & 1 == 1;
+        self.want_merge = (next_byte >> 2) & 1 == 1;
+        self.key_block = (next_byte >> 1) & 1 == 1;
+        let vert_seqno_incr = ((next_byte) & 1) as u32;
+
+        self.flags = slice.get_next_byte()?;
+        let seq_no = slice.get_next_u32()?;
+        self.set_seq_no(seq_no)?;
+        let vert_seq_no = slice.get_next_u32()?;
+        self.shard.read_from(slice)?;
+        self.gen_utime = slice.get_next_u32()?.into();
+        if tag == BLOCK_INFO_TAG_2{
+            self.gen_utime_ms_part = slice.get_next_u16()?;
+        } else {
+            self.gen_utime_ms_part = 0;
+        }
+        self.start_lt = slice.get_next_u64()?;
+        self.end_lt = slice.get_next_u64()?;
+        self.gen_validator_list_hash_short = slice.get_next_u32()?;
+        self.gen_catchain_seqno = slice.get_next_u32()?;
+        self.min_ref_mc_seqno = slice.get_next_u32()?;
+        self.prev_key_block_seqno = slice.get_next_u32()?;
+
+        if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
+            self.gen_software = Some(GlobalVersion::construct_from(slice)?);
+        }
+
+        self.master_ref = if not_master {
+            let mut bli = BlkMasterInfo::default();
+            bli.read_from_reference(slice)?;
+            Some(ChildCell::with_struct(&bli)?)
+        } else {
+            None
+        };
+
+        let mut prev_ref = if after_merge {
+            BlkPrevInfo::default_blocks()
+        } else {
+            BlkPrevInfo::default_block()
+        };
+        prev_ref.read_from_reference(slice)?;
+        self.set_prev_stuff(after_merge, &prev_ref)?;
+
+        let prev_vert_ref = if vert_seqno_incr == 0 {
+            None
+        } else {
+            Some(BlkPrevInfo::construct_from_reference(slice)?)
+        };
+        self.set_vertical_stuff(vert_seqno_incr, vert_seq_no, prev_vert_ref)?;
+
+        Ok(())
+    }
 }
 
 /*
@@ -1246,77 +1316,8 @@ impl Deserializable for ValueFlow {
 }
 
 impl Deserializable for BlockInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let tag = cell.get_next_u32()?;
-        let wrong_tag = tag != BLOCK_INFO_TAG_1 && tag != BLOCK_INFO_TAG_2;
-        if wrong_tag {
-            fail!(
-                BlockError::InvalidConstructorTag {
-                    t: tag,
-                    s: "BlockInfo".to_string()
-                }
-            )
-        }
-        self.version = cell.get_next_u32()?;
-
-        let next_byte = cell.get_next_byte()?;
-        let not_master = (next_byte >> 7) & 1 == 1;
-        let after_merge = (next_byte >> 6) & 1 == 1;
-        self.before_split = (next_byte >> 5) & 1 == 1;
-        self.after_split = (next_byte >> 4) & 1 == 1;
-        self.want_split = (next_byte >> 3) & 1 == 1;
-        self.want_merge = (next_byte >> 2) & 1 == 1;
-        self.key_block = (next_byte >> 1) & 1 == 1;
-        let vert_seqno_incr = ((next_byte) & 1) as u32;
-
-        self.flags = cell.get_next_byte()?;
-        let seq_no = cell.get_next_u32()?;
-        self.set_seq_no(seq_no)?;
-        let vert_seq_no = cell.get_next_u32()?;
-        self.shard.read_from(cell)?;
-        self.gen_utime = cell.get_next_u32()?.into();
-        if tag == BLOCK_INFO_TAG_2{
-            self.gen_utime_ms_part = cell.get_next_u16()?;
-            if self.gen_utime_ms_part == 0 {
-                fail!("gen_utime_ms_part is 0, but tag is BLOCK_INFO_TAG_2");
-            }
-        } else {
-            self.gen_utime_ms_part = 0;
-        }
-        self.start_lt = cell.get_next_u64()?;
-        self.end_lt = cell.get_next_u64()?;
-        self.gen_validator_list_hash_short = cell.get_next_u32()?;
-        self.gen_catchain_seqno = cell.get_next_u32()?;
-        self.min_ref_mc_seqno = cell.get_next_u32()?;
-        self.prev_key_block_seqno = cell.get_next_u32()?;
-
-        if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
-            self.gen_software = Some(GlobalVersion::construct_from(cell)?);
-        }
-
-        self.master_ref = if not_master {
-            let mut bli = BlkMasterInfo::default();
-            bli.read_from_reference(cell)?;
-            Some(ChildCell::with_struct(&bli)?)
-        } else {
-            None
-        };
-
-        let mut prev_ref = if after_merge {
-            BlkPrevInfo::default_blocks()
-        } else {
-            BlkPrevInfo::default_block()
-        };
-        prev_ref.read_from_reference(cell)?;
-        self.set_prev_stuff(after_merge, &prev_ref)?;
-
-        let prev_vert_ref = if vert_seqno_incr == 0 {
-            None
-        } else {
-            Some(BlkPrevInfo::construct_from_reference(cell)?)
-        };
-        self.set_vertical_stuff(vert_seqno_incr, vert_seq_no, prev_vert_ref)?;
-
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        self.read_from_ex(slice, true)?;
         Ok(())
     }
 }
