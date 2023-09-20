@@ -333,7 +333,7 @@ impl BlockInfo {
         self.gen_utime_ms_part = 0;
     }
     pub fn set_gen_utime_ms(&mut self, gen_utime_millis: u64) {
-        self.gen_utime = UnixTime32::new(gen_utime_millis as u32 / 1000);
+        self.gen_utime = UnixTime32::new((gen_utime_millis / 1000) as u32);
         self.gen_utime_ms_part = (gen_utime_millis % 1000) as u16;
     }
 
