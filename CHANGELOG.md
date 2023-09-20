@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.104
+
+- Fixed `Block::set_gen_utime_ms` method
+
 ## Version 1.9.101
 
 - Fixed deserialization of BlockInfo. Added method BlockInfo::read_from_ex()
