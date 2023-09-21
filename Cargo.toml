@@ -15,7 +15,7 @@ log = '0.4'
 num = '0.4'
 num-traits = '0.2'
 sha2 = '0.10'
-ton_types = { git = 'https://github.com/tonlabs/ever-types.git', tag = '2.0.28' }
+ton_types = { git = 'ssh://git@github.com/tonlabs/ever-types.git', tag = 'tag-tmp-rc' }
 
 [features]
 default = [  ]
