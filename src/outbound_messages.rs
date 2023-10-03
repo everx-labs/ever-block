@@ -132,30 +132,49 @@ impl Deserializable for EnqueuedMsg {
 define_HashmapAugE!(OutMsgDescr, 256, UInt256, OutMsg, CurrencyCollection);
 
 impl OutMsgDescr {
+    /// insert new or replace existing (returning prev existing value), key - hash of Message
+    pub fn insert_with_key_return_prev(&mut self, key: UInt256, out_msg: &OutMsg) -> Result<Option<SliceData>> {
+        let aug = out_msg.aug()?;
+        self.set_return_prev(&key, out_msg, &aug)
+    }
     /// insert new or replace existing, key - hash of Message
     pub fn insert_with_key(&mut self, key: UInt256, out_msg: &OutMsg) -> Result<()> {
-        let aug = out_msg.aug()?;
-        self.set(&key, out_msg, &aug)
+        self.insert_with_key_return_prev(key, out_msg)?;
+        Ok(())
     }
 
-    /// insert new or replace existing
-    pub fn insert(&mut self, out_msg: &OutMsg) -> Result<()> {
+    /// insert new or replace existing (returning prev existing value)
+    pub fn insert_return_prev(&mut self, out_msg: &OutMsg) -> Result<()> {
         self.insert_with_key(out_msg.read_message_hash()?, out_msg)
     }
+    /// insert new or replace existing
+    pub fn insert(&mut self, out_msg: &OutMsg) -> Result<()> {
+        self.insert_return_prev(out_msg)?;
+        Ok(())
+    }
 
-    /// insert or replace existion record
+    /// insert or replace existion record (returning prev existing value)
     /// use to improve speed
+    pub fn insert_serialized_return_prev(
+        &mut self, 
+        key: &SliceData, 
+        msg_slice: &SliceData, 
+        exported: &CurrencyCollection
+    ) -> Result<Option<SliceData>> {
+        if let Ok(ret) = self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), exported) {
+            Ok(ret)
+        } else {
+            fail!(BlockError::Other("Error insert serialized message".to_string()))
+        }
+    }
     pub fn insert_serialized(
         &mut self, 
         key: &SliceData, 
         msg_slice: &SliceData, 
         exported: &CurrencyCollection
     ) -> Result<()> {
-        if self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), exported).is_ok() {
-            Ok(())
-        } else {
-            fail!(BlockError::Other("Error insert serialized message".to_string()))
-        }
+        self.insert_serialized_return_prev(key, msg_slice, exported)?;
+        Ok(())
     }
 
     pub fn full_exported(&self) -> &CurrencyCollection {
