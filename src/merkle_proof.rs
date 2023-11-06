@@ -24,7 +24,7 @@ use crate::{
 };
 use std::{cmp::max, collections::{HashMap, HashSet}};
 use ton_types::{
-    Cell, CellType, BuilderData, error, fail, IBitstring, LevelMask, SliceData, Result, 
+    Cell, CellType, BuilderData, error, fail, IBitstring, SliceData, Result,
     UsageTree, types::UInt256
 };
 
@@ -86,7 +86,6 @@ impl Serializable for MerkleProof {
         self.hash.write_to(cell)?;
         cell.append_u16(self.depth)?;
         cell.checked_append_reference(self.proof.clone())?;
-        cell.set_level_mask(LevelMask::for_merkle_cell(self.proof.level_mask()));
         Ok(())
     }
 }
@@ -180,12 +179,6 @@ impl MerkleProof {
             child_mask |= proof_child.level_mask();
             proof_cell.replace_reference_cell(i, proof_child);
         }
-        
-        proof_cell.set_level_mask(if cell.is_merkle() {
-            LevelMask::for_merkle_cell(child_mask)
-        } else {
-            child_mask
-        });
 
         let proof_cell = proof_cell.into_cell()?;
         done_cells.insert(cell.repr_hash(), proof_cell.clone());

@@ -118,7 +118,6 @@ impl Serializable for MerkleUpdate {
         cell.append_u16(self.new_depth)?;
         cell.checked_append_reference(self.old.clone())?;
         cell.checked_append_reference(self.new.clone())?;
-        cell.set_level_mask(LevelMask::for_merkle_cell(self.old.level_mask() | self.new.level_mask()));
         Ok(())
     }
 }
@@ -401,12 +400,6 @@ impl MerkleUpdate {
             new_cell.checked_append_reference(new_child)?;
         }
 
-        new_cell.set_level_mask(if update_cell.is_merkle() {
-            LevelMask::for_merkle_cell(child_mask)
-        } else {
-            child_mask
-        });
-
         // Copy data from update to constructed cell
         new_cell.append_bytestring(&SliceData::load_cell_ref(update_cell)?)?;
 
@@ -430,12 +423,6 @@ impl MerkleUpdate {
             level_mask |= update_child.level_mask();
             new_update_cell.checked_append_reference(update_child)?;
         }
-
-        new_update_cell.set_level_mask(if new_cell.is_merkle() {
-            LevelMask::for_merkle_cell(level_mask)
-        } else {
-            level_mask
-        });
 
         new_update_cell.append_bytestring(&SliceData::load_cell_ref(new_cell)?)?;
 
@@ -482,7 +469,6 @@ impl MerkleUpdate {
 
             let mut old_update_cell = BuilderData::new();
             old_update_cell.set_type(old_cell.cell_type());
-            let mut child_mask = LevelMask::with_mask(0);
             for (i, child_opt) in childs.into_iter().enumerate() {
                 let child = match child_opt {
                     None => {
@@ -491,14 +477,8 @@ impl MerkleUpdate {
                     }
                     Some(child) => child
                 };
-                child_mask |= child.level_mask();
                 old_update_cell.checked_append_reference(child.into_cell()?)?;
             }
-            old_update_cell.set_level_mask(if old_cell.is_merkle() {
-                LevelMask::for_merkle_cell(child_mask)
-            } else {
-                child_mask
-            });
 
             old_update_cell.append_bytestring(&SliceData::load_cell_ref(old_cell)?)?;
             Ok(Some(old_update_cell))
@@ -527,7 +507,6 @@ impl MerkleUpdate {
         let mut result = BuilderData::new();
         let level_mask = Self::add_one_hash(cell, merkle_depth)?;
         result.set_type(CellType::PrunedBranch);
-        result.set_level_mask(level_mask);
         result.append_u8(u8::from(CellType::PrunedBranch))?;
         result.append_u8(level_mask.mask())?;
         for hash in cell.hashes() {
