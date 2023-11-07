@@ -384,6 +384,7 @@ pub enum GlobalCapabilities {
     CapBigCells               = 0x0000_4000_0000,
     CapSuspendedList          = 0x0000_8000_0000,
     CapFastFinality           = 0x0001_0000_0000,
+    CapTvmV19                 = 0x0002_0000_0000, // TVM v1.9.x improvemements
 }
 
 impl ConfigParams {
