@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.110
+
+- BLS data structures have been added
+
 ## Version 1.9.107
 
 - Add new capability constant for TVM improvements
