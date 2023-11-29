@@ -108,6 +108,7 @@ impl Deserializable for ProcessedUpto {
             64 => Some(cell.get_next_u64()?),
             // Compatibility with data serialized with old version of the library 
             // (with "fast_finality" feature)
+            1 => None,
             65 => Deserializable::construct_maybe_from(cell)?,
             _ => fail!("Invalid cell size"),
         };
