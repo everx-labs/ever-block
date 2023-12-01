@@ -28,6 +28,10 @@ use ton_types::{
     UsageTree, types::UInt256
 };
 
+#[cfg(test)]
+#[path = "tests/test_merkle_proof.rs"]
+mod tests;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MerkleProof {
     pub hash: UInt256,

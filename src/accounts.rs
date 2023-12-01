@@ -27,6 +27,10 @@ use ton_types::{
     UInt256, AccountId, BuilderData, Cell, IBitstring, SliceData, UsageTree, HashmapType,
 };
 
+#[cfg(test)]
+#[path = "tests/test_accounts.rs"]
+mod tests;
+
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// 4.1.5. Storage profile of an account.
@@ -802,6 +806,16 @@ impl Account {
         match self.stuff_mut() {
             Some(stuff) => stuff.update_storage_stat_fast(),
             None => Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    /// getting statistic using storage for calculate storage/transfer fee
+    fn get_storage_stat(&self) -> Result<StorageUsed> {
+        if let Some(stuff) = self.stuff() {
+            StorageUsed::calculate_for_struct(&stuff.storage)
+        } else {
+            Ok(StorageUsed::new())
         }
     }
 

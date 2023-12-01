@@ -29,6 +29,10 @@ use ton_types::{
     SliceData, UInt256, UsageTree, MAX_DATA_BITS, MAX_REFERENCES_COUNT,
 };
 
+#[cfg(test)]
+#[path = "tests/test_messages.rs"]
+mod tests;
+
 ///////////////////////////////////////////////////////////////////////////////
 ///
 /// MessageAddress
@@ -1406,6 +1410,16 @@ impl Message {
         }
 
         MerkleProof::create_by_usage_tree(block_root, usage_tree)?.serialize()
+    }
+
+    #[cfg(test)]
+    pub fn serialization_params(&self) -> (Option<bool>, Option<bool>) {
+        (self.body_to_ref, self.init_to_ref)
+    }
+    #[cfg(test)]
+    pub fn set_serialization_params(&mut self, body_to_ref: Option<bool>, init_to_ref: Option<bool>) {
+        self.body_to_ref = body_to_ref;
+        self.init_to_ref = init_to_ref;
     }
 
     pub fn serialize_with_params(

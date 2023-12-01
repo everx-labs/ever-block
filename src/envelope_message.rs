@@ -25,6 +25,10 @@ use ton_types::{
     BuilderData, Cell, IBitstring, SliceData, UInt256,
 };
 
+#[cfg(test)]
+#[path = "tests/test_envelope_message.rs"]
+mod tests;
+
 /*
 
 3.1.15. Enveloped messages. Message envelopes are used for attaching

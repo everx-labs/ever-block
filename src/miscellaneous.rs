@@ -20,6 +20,10 @@ use ton_types::{
     HashmapE, HashmapType, HashmapSubtree, fail,
 };
 
+#[cfg(test)]
+#[path = "tests/test_miscellaneous.rs"]
+mod tests;
+
 /*
 // key is [ shard:uint64 mc_seqno:uint32 ]  
 _ (HashmapE 96 ProcessedUpto) = ProcessedInfo;
