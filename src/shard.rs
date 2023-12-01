@@ -34,6 +34,10 @@ use ton_types::{
     SliceData, UInt256,
 };
 
+#[cfg(test)]
+#[path = "tests/test_shard.rs"]
+mod tests;
+
 pub const MAX_SPLIT_DEPTH: u8 = 60;
 pub const MASTERCHAIN_ID: i32 = -1;
 pub const BASE_WORKCHAIN_ID: i32 = 0;

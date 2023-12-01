@@ -39,6 +39,10 @@ use ton_types::{
     Result, SliceData, UInt256,
 };
 
+#[cfg(test)]
+#[path = "tests/test_blocks.rs"]
+mod tests;
+
 /*
 block_id_ext$_
     shard_id:ShardIdent

@@ -32,6 +32,10 @@ use ton_types::{
     HashmapType, HashmapSubtree, hm_label, UsageTree,
 };
 
+#[cfg(test)]
+#[path = "tests/test_out_msgs.rs"]
+mod tests;
+
 /*
         3.3 Outbound message queue and descriptors
  This section discusses OutMsgDescr, the structure representing all outbound

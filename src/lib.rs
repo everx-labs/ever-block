@@ -332,3 +332,14 @@ pub fn id_from_key(key: &ed25519_dalek::PublicKey) -> u64 {
     ])
 }
 
+#[cfg(test)]
+pub fn write_read_and_assert<T>(s: T) -> T
+where T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq {
+    let cell = s.write_to_new_cell().unwrap();
+    let mut slice = SliceData::load_builder(cell).unwrap();
+    println!("slice: {}", slice);
+    let s2 = T::construct_from(&mut slice).unwrap();
+    s2.serialize().unwrap();
+    pretty_assertions::assert_eq!(s, s2);
+    s2
+}

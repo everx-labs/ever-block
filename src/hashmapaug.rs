@@ -527,6 +527,11 @@ pub trait HashmapAugType<
             p(key, <X>::construct_from(&mut slice)?, aug)
         })
     }
+    #[cfg(test)]
+    /// Puts element to the tree
+    fn set_serialized(&mut self, key: SliceData, leaf: &SliceData, extra: &Y) -> Result<Option<SliceData>> {
+        self.set_builder_serialized(key, &leaf.as_builder(), extra)
+    }
     /// Puts element to the tree
     fn set_builder_serialized(
         &mut self, 
@@ -794,3 +799,6 @@ pub trait HashmapAugRemover<
     }
 }
 
+#[cfg(test)]
+#[path = "tests/test_hashmapaug.rs"]
+mod tests;
