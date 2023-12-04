@@ -798,6 +798,54 @@ fn test_suspended_addresses() {
     write_read_and_assert(get_suspended_addresses());
 }
 
+fn get_mesh_config() -> MeshConfig {
+    let mut mesh_config = MeshConfig::default();
+    for id in 1..10 {
+        let mut hardforks = vec!();
+        for n in 0..id {
+            hardforks.push(BlockIdExt {
+                shard_id: ShardIdent::masterchain(),
+                seq_no: n,
+                root_hash: UInt256::rand(),
+                file_hash: UInt256::rand(),
+            });
+        }
+
+        let info = ConnectedNwConfig {
+            zerostate: BlockIdExt {
+                shard_id: ShardIdent::masterchain(),
+                seq_no: 0,
+                root_hash: UInt256::rand(),
+                file_hash: UInt256::rand(),
+            },
+            is_active: true,
+            currency_id: id,
+            init_block: BlockIdExt {
+                shard_id: ShardIdent::masterchain(),
+                seq_no: 0,
+                root_hash: UInt256::rand(),
+                file_hash: UInt256::rand(),
+            },
+            emergency_guard_addr: UInt256::rand(),
+            pull_addr: UInt256::rand(),
+            minter_addr: UInt256::rand(),
+            hardforks,
+        };
+
+        write_read_and_assert(info.clone());
+
+        mesh_config.set(&id, &info).unwrap();
+
+        println!("1");
+    }
+    mesh_config
+}
+
+#[test]
+fn test_mesh_config() {
+    write_read_and_assert(get_mesh_config());
+}
+
 #[test]
 fn test_real_ton_config_params() {
     let bytes = std::fs::read("src/tests/data/config.boc").unwrap();

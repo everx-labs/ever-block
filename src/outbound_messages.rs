@@ -274,6 +274,59 @@ impl fmt::LowerHex for OutMsgQueueKey {
 }
 
 /*
+define_HashmapE!(MeshMsgQueuesInfo, 32, OutMsgQueueInfo);
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct OutMsgQueuesInfo {
+    local_queue: OutMsgQueueInfo,
+    mesh_queues: MeshMsgQueuesInfo,
+}
+
+impl OutMsgQueuesInfo {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn with_params(local_queue: OutMsgQueueInfo, mesh_queues: MeshMsgQueuesInfo) -> Self {
+        Self { local_queue, mesh_queues }
+    }
+
+    // fn with_local_queue()
+
+    fn local_queue(&self) -> &OutMsgQueueInfo {
+        &self.local_queue
+    }
+
+    fn local_queue_mut(&mut self) -> &mut OutMsgQueueInfo {
+        &mut self.local_queue
+    }
+
+    fn mesh_queues(&self) -> &MeshMsgQueuesInfo {
+        &self.mesh_queues
+    }
+
+    fn mesh_queues_mut(&mut self) -> &mut MeshMsgQueuesInfo {
+        &mut self.mesh_queues
+    }
+}
+
+impl Serializable for OutMsgQueuesInfo {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.local_queue.write_to(cell)?;
+        self.mesh_queues.write_to(cell)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for OutMsgQueuesInfo {
+    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
+        self.local_queue.read_from(cell)?;
+        self.mesh_queues.read_from(cell)?;
+        Ok(())
+    }
+}*/
+
+/*
 _ out_queue:OutMsgQueue proc_info:ProcessedInfo
 ihr_pending:IhrPendingInfo = OutMsgQueueInfo;
 */

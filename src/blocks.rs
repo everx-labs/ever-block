@@ -24,7 +24,7 @@ use crate::{
     transactions::ShardAccountBlocks,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32, AddSub},
     validators::ValidatorSet,
-    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
+    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, VarUInteger32,
     fail_if, SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY,
 };
 use crate::RefShardBlocks;
@@ -1107,6 +1107,8 @@ impl CopyleftRewards {
     }
 }
 
+define_HashmapE!(MeshExported, 32, VarUInteger32);
+
 /// value_flow ^[ from_prev_blk:CurrencyCollection
 ///   to_next_blk:CurrencyCollection
 ///   imported:CurrencyCollection
@@ -1135,6 +1137,7 @@ pub struct ValueFlow {
     pub created: CurrencyCollection,       // serialized into another cell 2
     pub minted: CurrencyCollection,        // serialized into another cell 2
     pub copyleft_rewards: CopyleftRewards,
+    pub mesh_exported: MeshExported,
 }
 
 impl fmt::Display for ValueFlow {
@@ -1158,7 +1161,12 @@ impl fmt::Display for ValueFlow {
             self.recovered,
             self.created,
             self.minted
-        )
+        )?;
+        let _ = self.mesh_exported.iterate_with_keys(|key: u32, value| {
+            write!(f, ", mesh_exported {}: {}", key, value)?;
+            Ok(true)
+        });
+        Ok(())
     }
 }
 
@@ -1174,6 +1182,7 @@ impl ValueFlow {
         self.created.other.iterate(|_value| Ok(true))?;
         self.minted.other.iterate(|_value| Ok(true))?;
         self.copyleft_rewards.iterate(|_value| Ok(true))?;
+        self.mesh_exported.iterate(|_value| Ok(true))?;
         Ok(())
     }
 }
@@ -1318,31 +1327,38 @@ const VALUE_FLOW_TAG: u32 = 0xb8e48dfb;
 const VALUE_FLOW_TAG_V2: u32 = 0xe0864f6d;
 
 impl Serializable for ValueFlow {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        let tag = if self.copyleft_rewards.is_empty() {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        let tag = if self.copyleft_rewards.is_empty() && self.mesh_exported.is_empty() {
             VALUE_FLOW_TAG
         } else {
             VALUE_FLOW_TAG_V2
         };
-        cell.append_u32(tag)?;
+        builder.append_u32(tag)?;
 
-        let mut cell1 = BuilderData::new();
-        self.from_prev_blk.write_to(&mut cell1)?;
-        self.to_next_blk.write_to(&mut cell1)?;
-        self.imported.write_to(&mut cell1)?;
-        self.exported.write_to(&mut cell1)?;
-        cell.checked_append_reference(cell1.into_cell()?)?;
-        self.fees_collected.write_to(cell)?;
+        let mut builder1 = BuilderData::new();
+        self.from_prev_blk.write_to(&mut builder1)?;
+        self.to_next_blk.write_to(&mut builder1)?;
+        self.imported.write_to(&mut builder1)?;
+        self.exported.write_to(&mut builder1)?;
+        builder.checked_append_reference(builder1.into_cell()?)?;
 
-        let mut cell2 = BuilderData::new();
-        self.fees_imported.write_to(&mut cell2)?;
-        self.recovered.write_to(&mut cell2)?;
-        self.created.write_to(&mut cell2)?;
-        self.minted.write_to(&mut cell2)?;
-        cell.checked_append_reference(cell2.into_cell()?)?;
+        if tag == VALUE_FLOW_TAG {
+            self.fees_collected.write_to(builder)?;
+        }
 
-        if !self.copyleft_rewards.is_empty() {
-            self.copyleft_rewards.write_to(cell)?;
+        let mut builder2 = BuilderData::new();
+        self.fees_imported.write_to(&mut builder2)?;
+        self.recovered.write_to(&mut builder2)?;
+        self.created.write_to(&mut builder2)?;
+        self.minted.write_to(&mut builder2)?;
+        builder.checked_append_reference(builder2.into_cell()?)?;
+
+        if tag == VALUE_FLOW_TAG_V2 {
+            let mut builder3 = BuilderData::new();
+            self.fees_collected.write_to(&mut builder3)?;
+            self.copyleft_rewards.write_to(&mut builder3)?;
+            self.mesh_exported.write_to(&mut builder3)?;
+            builder.checked_append_reference(builder3.into_cell()?)?;
         }
 
         Ok(())
@@ -1350,8 +1366,8 @@ impl Serializable for ValueFlow {
 }
 
 impl Deserializable for ValueFlow {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let tag = cell.get_next_u32()?;
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_u32()?;
         if tag != VALUE_FLOW_TAG && tag != VALUE_FLOW_TAG_V2 {
             fail!(
                 BlockError::InvalidConstructorTag {
@@ -1360,21 +1376,27 @@ impl Deserializable for ValueFlow {
                 }
             )
         }
-        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
-        self.from_prev_blk.read_from(cell1)?;
-        self.to_next_blk.read_from(cell1)?;
-        self.imported.read_from(cell1)?;
-        self.exported.read_from(cell1)?;
-        self.fees_collected.read_from(cell)?;
+        let slice1 = &mut SliceData::load_cell(slice.checked_drain_reference()?)?;
+        self.from_prev_blk.read_from(slice1)?;
+        self.to_next_blk.read_from(slice1)?;
+        self.imported.read_from(slice1)?;
+        self.exported.read_from(slice1)?;
 
-        let cell2 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
-        self.fees_imported.read_from(cell2)?;
-        self.recovered.read_from(cell2)?;
-        self.created.read_from(cell2)?;
-        self.minted.read_from(cell2)?;
+        if tag == VALUE_FLOW_TAG {
+            self.fees_collected.read_from(slice)?;
+        }
+
+        let slice2 = &mut SliceData::load_cell(slice.checked_drain_reference()?)?;
+        self.fees_imported.read_from(slice2)?;
+        self.recovered.read_from(slice2)?;
+        self.created.read_from(slice2)?;
+        self.minted.read_from(slice2)?;
 
         if tag == VALUE_FLOW_TAG_V2 {
-            self.copyleft_rewards.read_from(cell)?;
+            let slice3 = &mut SliceData::load_cell(slice.checked_drain_reference()?)?;
+            self.fees_collected.read_from(slice3)?;
+            self.copyleft_rewards.read_from(slice3)?;
+            self.mesh_exported.read_from(slice3)?;
         }
 
         Ok(())

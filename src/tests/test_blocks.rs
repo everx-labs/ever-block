@@ -58,6 +58,7 @@ fn test_blockinfo(block_info: BlockInfo) {
         created: CurrencyCollection::new(),
         minted: CurrencyCollection::new(),
         copyleft_rewards: CopyleftRewards::new(),
+        mesh_exported: MeshExported::new(),
     };
 
     let state_update = MerkleUpdate::default();
@@ -266,6 +267,7 @@ fn test_value_flow() {
         created: created.clone(),
         minted: minted.clone(),
         copyleft_rewards,
+        mesh_exported: MeshExported::new(),
     };
 
     write_read_and_assert(value_flow);
@@ -281,6 +283,7 @@ fn test_value_flow() {
         created,
         minted,
         copyleft_rewards: CopyleftRewards::default(),
+        mesh_exported: MeshExported::new(),
     };
 
     write_read_and_assert(value_flow_without_copyleft);
