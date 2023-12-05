@@ -17,7 +17,7 @@ use crate::{
 };
 use ton_types::{
     Result, BuilderData, Cell, SliceData, UInt256,
-    HashmapE, HashmapType, HashmapSubtree, fail,
+    HashmapE, HashmapType, HashmapSubtree, fail, error
 };
 
 #[cfg(test)]

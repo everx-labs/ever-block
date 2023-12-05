@@ -25,7 +25,7 @@ use crate::{
     types::{ChildCell, CurrencyCollection},
     validators::ValidatorSet,
     CopyleftRewards, Deserializable, IntermediateAddress, MaybeDeserialize, MaybeSerialize,
-    Serializable, Account,
+    Serializable, Account, SERDE_OPTS_EMPTY,
 };
 use crate::RefShardBlocks;
 use std::fmt::{self, Display, Formatter};
@@ -851,8 +851,13 @@ pub struct ShardStateUnsplit {
 
 impl ShardStateUnsplit {
     pub fn with_ident(shard_id: ShardIdent) -> Self {
+        Self::with_ident_and_opts(shard_id, SERDE_OPTS_EMPTY)
+    }
+    
+    pub fn with_ident_and_opts(shard_id: ShardIdent, opts: u8) -> Self {
         Self {
             shard_id,
+            out_msg_queue_info: ChildCell::with_serde_opts(opts),
             ..ShardStateUnsplit::default()
         }
     }

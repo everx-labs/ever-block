@@ -13,9 +13,10 @@
 
 use super::*;
 use crate::{
-    transactions::tests::generate_test_shard_account_block, write_read_and_assert, Block,
+    transactions::tests::generate_test_shard_account_block, write_read_and_assert, 
+    write_read_and_assert_with_opts, Block,
     BlockExtra, Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit,
-    BASE_WORKCHAIN_ID,
+    BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY, CommonMessage, Transaction,
 };
 use std::collections::{HashMap, HashSet};
 use ton_types::read_single_root_boc;
@@ -190,7 +191,7 @@ fn test_mc_block_extra() {
     let extra = write_read_and_assert(extra);
 
     let mut block_extra = BlockExtra::default();
-    block_extra.write_account_blocks(&generate_test_shard_account_block()).unwrap();
+    block_extra.write_account_blocks(&generate_test_shard_account_block(SERDE_OPTS_EMPTY)).unwrap();
     block_extra.write_custom(Some(&extra)).unwrap();
 
     write_read_and_assert(block_extra);
@@ -204,6 +205,22 @@ fn test_mc_block_extra() {
     //     }).unwrap();
     //     Ok(true)
     // }).unwrap();
+}
+
+#[test]
+fn test_common_msg_mcblockextra() {
+    let extra: McBlockExtra = McBlockExtra::with_common_message_support();
+    let _extra = write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE);
+    let mut extra = McBlockExtra::with_common_message_support();
+    let opts = SERDE_OPTS_COMMON_MESSAGE;
+    let in_msg = InMsg::external(
+        ChildCell::with_struct_and_opts(&CommonMessage::default(), opts).unwrap(),
+        ChildCell::with_struct_and_opts(&Transaction::with_common_msg_support(AccountId::from([0;32])), opts).unwrap()
+    );
+    extra.write_recover_create_msg(Some(&in_msg)).unwrap();
+    extra.write_mint_msg(Some(&in_msg)).unwrap();
+    extra.write_copyleft_msgs(&[in_msg]).unwrap();
+    let _extra = write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE);
 }
 
 #[test]

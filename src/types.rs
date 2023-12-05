@@ -30,6 +30,7 @@ use crate::{
     error::BlockError,
     hashmapaug::Augmentable,
     Serializable, Deserializable,
+    SERDE_OPTS_EMPTY,
 };
 
 #[cfg(test)]
@@ -662,7 +663,7 @@ define_HashmapE!{ExtraCurrencyCollection, 32, VarUInteger32}
 
 impl From<HashmapE> for ExtraCurrencyCollection {
     fn from(other: HashmapE) -> Self {
-        Self(other)
+        Self(other, SERDE_OPTS_EMPTY)
     }
 }
 
@@ -1035,11 +1036,18 @@ impl<X: Deserializable + Serializable> Deserializable for InRefValue<X> {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         Ok(Self(X::construct_from_reference(slice)?))
     }
+    fn construct_from_with_opts(slice: &mut SliceData, opts: u8) -> Result<Self> {
+        Ok(Self(X::construct_from_cell_with_opts(slice.checked_drain_reference()?, opts)?))
+    }
 }
 
 impl<X: Deserializable + Serializable> Serializable for InRefValue<X> {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.checked_append_reference(self.0.serialize()?)?;
+        Ok(())
+    }
+    fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
+        cell.checked_append_reference(self.0.serialize_with_opts(opts)?)?;
         Ok(())
     }
 }
@@ -1060,7 +1068,7 @@ impl<X: Serializable> Serializable for Arc<X> {
 macro_rules! define_HashmapE {
     ( $varname:ident, $bit_len:expr, $x_type:ty ) => {
         #[derive(PartialEq, Clone, Debug, Eq)]
-        pub struct $varname(HashmapE);
+        pub struct $varname(HashmapE, u8);
 
         #[allow(dead_code)]
         impl $varname {
@@ -1068,17 +1076,26 @@ macro_rules! define_HashmapE {
             pub const fn default() -> Self { Self::new() }
             /// default const constructor
             pub const fn new() -> Self {
-                Self(HashmapE::with_hashmap($bit_len, None))
+                Self(
+                    HashmapE::with_hashmap($bit_len, None),
+                    crate::SERDE_OPTS_EMPTY,
+                )
+            }
+            pub const fn with_serde_opts(opts: u8) -> Self {
+                Self(HashmapE::with_hashmap($bit_len, None), opts)
             }
             /// constructor with HashmapE root
-            pub const fn with_hashmap(data: Option<Cell>) -> Self {
-                Self(HashmapE::with_hashmap($bit_len, data))
+            pub const fn with_hashmap(data: Option<Cell>, opts: u8) -> Self {
+                Self(HashmapE::with_hashmap($bit_len, data), opts)
             }
             pub fn root(&self) -> Option<&Cell> {
                 self.0.data()
             }
             pub fn inner(self) -> HashmapE {
                 self.0
+            }
+            pub fn serde_opts(&self) -> u8 {
+                self.1
             }
             /// Used for not empty Hashmaps
             pub fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
@@ -1105,7 +1122,9 @@ macro_rules! define_HashmapE {
             /// iterates items
             pub fn iterate<F>(&self, mut p: F) -> Result<bool>
             where F: FnMut($x_type) -> Result<bool> {
-                self.0.iterate_slices(|_, ref mut slice| p(<$x_type>::construct_from(slice)?))
+                self.0.iterate_slices(|_, ref mut slice| p(
+                    <$x_type>::construct_from_with_opts(slice, self.1)?
+                ))
             }
             /// iterates items as raw slices
             pub fn iterate_slices<F>(&self, mut p: F) -> Result<bool>
@@ -1116,15 +1135,15 @@ macro_rules! define_HashmapE {
             pub fn iterate_keys<K, F>(&self, mut p: F) -> Result<bool>
             where K: Default + Deserializable, F: FnMut(K) -> Result<bool> {
                 self.0.iterate_slices(|mut key, _| p(
-                    K::construct_from(&mut key)?
+                    K::construct_from_with_opts(&mut key, self.1)?
                 ))
             }
             /// iterates items with keys
             pub fn iterate_with_keys<K, F>(&self, mut p: F) -> Result<bool>
             where K: Default + Deserializable, F: FnMut(K, $x_type) -> Result<bool> {
                 self.0.iterate_slices(|ref mut key, ref mut slice| p(
-                    K::construct_from(key)?,
-                    <$x_type>::construct_from(slice)?
+                    K::construct_from_with_opts(key, self.1)?,
+                    <$x_type>::construct_from_with_opts(slice, self.1)?
                 ))
             }
             /// iterates items as slices with keys
@@ -1133,46 +1152,46 @@ macro_rules! define_HashmapE {
                 self.0.iterate_slices(|key, slice| p(key, slice))
             }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
-                let value = value.write_to_new_cell()?;
+                let key = SliceData::load_bitstring(K::write_to_new_cell_with_opts(key, self.1)?)?;
+                let value = <$x_type>::write_to_new_cell_with_opts(value, self.1)?;
                 self.0.set_builder(key, &value)?;
                 Ok(())
             }
             pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = SliceData::load_bitstring(K::write_to_new_cell_with_opts(key, self.1)?)?;
                 self.0.setref(key, value)?;
                 Ok(())
             }
             pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = SliceData::load_bitstring(K::write_to_new_cell_with_opts(key, self.1)?)?;
                 let value = BuilderData::default();
                 self.0.set_builder(key, &value)?;
                 Ok(())
             }
             pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {
                 self.get_as_slice(key)?
-                    .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
+                    .map(|ref mut slice| <$x_type>::construct_from_with_opts(slice, self.1)).transpose()
             }
             pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = SliceData::load_bitstring(K::write_to_new_cell_with_opts(key, self.1)?)?;
                 self.get_raw(key)
             }
             pub fn get_raw(&self, key: SliceData) -> Result<Option<SliceData>> {
                 self.0.get(key)
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = SliceData::load_bitstring(K::write_to_new_cell_with_opts(key, self.1)?)?;
                 let leaf = self.0.remove(key)?;
                 Ok(leaf.is_some())
             }
             pub fn check_key<K: Serializable>(&self, key: &K) -> Result<bool> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = SliceData::load_bitstring(K::write_to_new_cell_with_opts(key, self.1)?)?;
                 self.0.get(key).map(|value| value.is_some())
             }
             pub fn export_vector(&self) -> Result<Vec<$x_type>> {
                 let mut vec = Vec::new();
                 self.0.iterate_slices(|_, ref mut slice| {
-                    vec.push(<$x_type>::construct_from(slice)?);
+                    vec.push(<$x_type>::construct_from_with_opts(slice, self.1)?);
                     Ok(true)
                 })?;
                 Ok(vec)
@@ -1181,29 +1200,42 @@ macro_rules! define_HashmapE {
                 self.0.merge(&other.0, split_key)
             }
             pub fn split(&self, split_key: &SliceData) -> Result<(Self, Self)> {
-                self.0.split(split_key).map(|(left, right)| (Self(left), Self(right)))
+                self.0.split(split_key).map(|(left, right)| (
+                    Self(left, self.1),
+                    Self(right, self.1)
+                ))
             }
             pub fn combine_with(&mut self, other: &Self) -> Result<bool> {
                 self.0.combine_with(&other.0)
             }
             pub fn scan_diff<K, F>(&self, other: &Self, mut op: F) -> Result<bool>
-            where K: Deserializable, F: FnMut(K, Option<$x_type>, Option<$x_type>) -> Result<bool> {
+            where 
+                K: Deserializable,
+                F: FnMut(K, Option<$x_type>, Option<$x_type>) -> Result<bool>,
+            {
                 self.0.scan_diff(&other.0, |mut key, value1, value2| {
-                    let key = K::construct_from(&mut key)?;
-                    let value1 = value1.map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()?;
-                    let value2 = value2.map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()?;
+                    let key = K::construct_from_with_opts(&mut key, self.1)?;
+                    let value1 = value1
+                        .map(|ref mut slice| <$x_type>::construct_from_with_opts(slice, self.1))
+                        .transpose()?;
+                    let value2 = value2
+                        .map(|ref mut slice| <$x_type>::construct_from_with_opts(slice, self.1))
+                        .transpose()?;
                     op(key, value1, value2)
                 })
             }
 
             pub fn filter<K, F>(&mut self, mut op: F) -> Result<()>
-            where K: Deserializable, K : Serializable, F: FnMut(&K, &$x_type) -> Result<bool> {
-                let mut other_tree = $varname(HashmapE::with_bit_len($bit_len));
+            where 
+                K: Deserializable + Serializable,
+                F: FnMut(&K, &$x_type) -> Result<bool>,
+            {
+                let mut other_tree = $varname(HashmapE::with_bit_len($bit_len), self.1);
                 self.iterate_with_keys(&mut |key : K, value| {
                     if op(&key, &value)? {
                         other_tree.set(&key, &value)?;
                     };
-                    return Ok(true);
+                    Ok(true)
                 })?;
                 *self = other_tree;
                 Ok(())
@@ -1225,11 +1257,11 @@ macro_rules! define_HashmapE {
                 eq: bool,
                 signed_int: bool,
             ) -> Result<Option<(K, $x_type)>> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = SliceData::load_bitstring(K::write_to_new_cell_with_opts(key, self.1)?)?;
                 if let Some((k, mut v)) = self.0.find_leaf(key, next, eq, signed_int, &mut 0)? {
                     // BuilderData, SliceData
-                    let key = K::construct_from_cell(k.into_cell()?)?;
-                    let value = <$x_type>::construct_from(&mut v)?;
+                    let key = K::construct_from_cell_with_opts(k.into_cell()?, self.1)?;
+                    let value = <$x_type>::construct_from_with_opts(&mut v, self.1)?;
                     Ok(Some((key, value)))
                 } else {
                     Ok(None)
@@ -1239,19 +1271,38 @@ macro_rules! define_HashmapE {
 
         impl Default for $varname {
             fn default() -> Self {
-                $varname(HashmapE::with_bit_len($bit_len))
+                $varname(HashmapE::with_bit_len($bit_len), crate::SERDE_OPTS_EMPTY)
             }
         }
 
         impl Serializable for $varname {
             fn write_to(&self, cell: &mut BuilderData) -> Result<()>{
-                self.0.write_to(cell)
+                self.write_with_opts(cell, crate::SERDE_OPTS_EMPTY)
+            }
+            fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
+                crate::fail_if!(
+                    opts != self.1,
+                    crate::error::BlockError::MismatchedSerdeOptions(
+                        std::any::type_name::<Self>().to_string(),
+                        self.1 as usize,
+                        opts as usize,
+                    )
+                );
+                self.0.write_with_opts(cell, opts)
             }
         }
 
         impl Deserializable for $varname {
             fn read_from(&mut self, slice: &mut SliceData) -> Result<()>{
                 self.0.read_from(slice)
+            }
+            fn construct_from_with_opts(slice: &mut SliceData, opts: u8) -> Result<Self> {
+                let mut x = Self::with_serde_opts(opts);
+                x.read_from_with_opts(slice, opts)?;
+                Ok(x)
+            }
+            fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
+                self.0.read_from_with_opts(slice, opts)
             }
         }
     }
@@ -1306,27 +1357,37 @@ impl Display for UnixTime32 {
 #[derive(Debug, Default, Clone, Eq)]
 pub struct ChildCell<T: Default + Serializable + Deserializable> {
     cell: Option<Cell>,
-    phantom: PhantomData<T>
+    opts: u8,
+    phantom: PhantomData<T>,
 }
 
 impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
+    pub fn with_serde_opts(opts: u8) -> Self {
+        Self {
+            opts,
+            ..Default::default()
+        }
+    }
     pub fn with_cell(cell: Cell) -> Self {
+        Self::with_cell_and_opts(cell, SERDE_OPTS_EMPTY)
+    }
+    pub fn with_cell_and_opts(cell: Cell, opts: u8) -> Self {
         Self {
             cell: Some(cell),
-            phantom: PhantomData
+            opts,
+            phantom: PhantomData,
         }
     }
     pub fn with_struct(s: &T) -> Result<Self> {
-        Ok(
-            ChildCell {
-                cell: Some(s.serialize()?),
-                phantom: PhantomData
-            }
-        )
+        Ok(Self::with_cell_and_opts(s.serialize()?, SERDE_OPTS_EMPTY))
+    }
+
+    pub fn with_struct_and_opts(s: &T, opts: u8) -> Result<Self> {
+        Ok(Self::with_cell_and_opts(s.serialize_with_opts(opts)?, opts))
     }
 
     pub fn write_struct(&mut self, s: &T) -> Result<()> {
-        self.cell = Some(s.serialize()?);
+        self.cell = Some(s.serialize_with_opts(self.opts)?);
         Ok(())
     }
 
@@ -1351,7 +1412,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
                         BlockError::PrunedCellAccess(std::any::type_name::<T>().into())
                     )
                 }
-                T::construct_from_cell(cell)
+                T::construct_from_cell_with_opts(cell, self.opts)
             }
             None => Ok(T::default())
         }
@@ -1376,9 +1437,23 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         Ok(())
     }
 
+    pub fn read_from_reference_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
+        self.cell = Some(slice.checked_drain_reference()?);
+        self.opts = opts;
+        Ok(())
+    }
+
     pub fn construct_from_reference(slice: &mut SliceData) -> Result<Self> {
         let cell = slice.checked_drain_reference()?;
         Ok(Self::with_cell(cell))
+    }
+
+    pub fn construct_from_reference_with_opts(
+        slice: &mut SliceData,
+        opts: u8
+    ) -> Result<Self> {
+        let cell = slice.checked_drain_reference()?;
+        Ok(Self::with_cell_and_opts(cell, opts))
     }
 
     pub fn construct_maybe_from_reference(slice: &mut SliceData) -> Result<Option<Self>> {
@@ -1388,22 +1463,41 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         }
     }
 
+    pub fn construct_maybe_from_reference_with_opts(slice: &mut SliceData, opts: u8) -> Result<Option<Self>> {
+        match slice.get_next_bit()? {
+            true => Ok(Some(Self::with_cell_and_opts(slice.checked_drain_reference()?, opts))),
+            false => Ok(None)
+        }
+    }
+
     pub fn cell(&self)-> Cell {
         match self.cell.as_ref() {
             Some(cell) => cell.clone(),
-            None => T::default().serialize().unwrap_or_default()
+            None => T::default().serialize_with_opts(self.opts).unwrap_or_default()
         }
+    }
+
+    pub fn serde_opts(&self) -> u8 {
+        self.opts
     }
 
     pub fn set_cell(&mut self, cell: Cell) {
         self.cell = Some(cell);
     }
 
+    pub fn set_options(&mut self, opts: u8) {
+        self.opts = opts;
+    }
+
     pub fn hash(&self) -> UInt256 {
         match self.cell.as_ref() {
             Some(cell) => cell.repr_hash(),
-            None => T::default().serialize().unwrap_or_default().repr_hash()
+            None => T::default().serialize_with_opts(self.opts).unwrap_or_default().repr_hash()
         }
+    }
+
+    pub fn empty(&self) -> bool {
+        self.cell.is_none()
     }
 }
 
@@ -1415,7 +1509,9 @@ impl<T: Default + Serializable + Deserializable> PartialEq for ChildCell<T> {
         match (self.cell.as_ref(), other.cell.as_ref()) {
             (Some(cell), Some(other)) => cell.eq(other),
             (None, Some(cell)) |
-            (Some(cell), None) => cell.eq(&T::default().serialize().unwrap_or_default()),
+            (Some(cell), None) => cell.eq(
+                &T::default().serialize_with_opts(self.opts).unwrap_or_default()
+            ),
             (None, None) => true
         }
     }

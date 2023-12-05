@@ -13,7 +13,7 @@
 
 use crate::{
     error::BlockError,
-    Serializable, Deserializable
+    Serializable, Deserializable,
 };
 use ton_types::{
     error, fail, Result, IBitstring, BuilderData, Cell, SliceData,
@@ -56,17 +56,22 @@ macro_rules! define_HashmapAugE {
             extra: $y_type,
             bit_len: usize,
             data: Option<Cell>,
+            opts: u8,
         }
 
         impl $varname {
             /// Dumps hashmap contents
             pub fn dump(&self) {
                 self.iterate_slices(|ref mut key, ref mut value| {
-                    dbg!(<$k_type>::construct_from(key).unwrap());
-                    dbg!(<$y_type>::construct_from(value).unwrap());
-                    dbg!(<$x_type>::construct_from(value).unwrap());
+                    dbg!(<$k_type>::construct_from_with_opts(key, self.opts).unwrap());
+                    dbg!(<$x_type>::construct_from_with_opts(value, self.opts).unwrap());
+                    dbg!(<$y_type>::construct_from_with_opts(value, self.opts).unwrap());
                     Ok(true)
                 }).unwrap();
+            }
+            #[cfg(test)]
+            pub fn serde_opts(&self) -> u8 {
+                self.opts
             }
             /// Constructs new HashmapAugE for bit_len keys
             pub fn new() -> Self {
@@ -74,6 +79,15 @@ macro_rules! define_HashmapAugE {
                     extra: <$y_type>::default(),
                     bit_len: $bit_len,
                     data: None,
+                    opts: crate::SERDE_OPTS_EMPTY,
+                }
+            }
+            pub fn with_serde_opts(opts: u8) -> Self {
+                Self {
+                    extra: <$y_type>::default(),
+                    bit_len: $bit_len,
+                    data: None,
+                    opts,
                 }
             }
             /// Constructs from cell, extracts total aug
@@ -86,6 +100,7 @@ macro_rules! define_HashmapAugE {
                     extra,
                     bit_len: $bit_len,
                     data,
+                    opts: crate::SERDE_OPTS_EMPTY,
                 })
             }
             /// split map by key
@@ -187,6 +202,9 @@ macro_rules! define_HashmapAugE {
             fn set_root_extra(&mut self, aug: $y_type) {
                 self.extra = aug;
             }
+            fn serde_opts(&self) -> u8 {
+                self.opts
+            }
         }
 
         impl ton_types::HashmapRemover for $varname {
@@ -204,10 +222,11 @@ macro_rules! define_HashmapAugE {
             /// scans differences in two hashmaps
             pub fn scan_diff_with_aug<F>(&self, other: &Self, mut op: F) -> Result<bool>
             where F: FnMut($k_type, Option<($x_type, $y_type)>, Option<($x_type, $y_type)>) -> Result<bool> {
+                let opts = self.opts;
                 self.scan_diff(&other, |mut key, value_aug1, value_aug2| {
-                    let key = <$k_type>::construct_from(&mut key)?;
-                    let value_aug1 = value_aug1.map(|ref mut slice| Self::value_aug(slice)).transpose()?;
-                    let value_aug2 = value_aug2.map(|ref mut slice| Self::value_aug(slice)).transpose()?;
+                    let key = <$k_type>::construct_from_with_opts(&mut key, opts)?;
+                    let value_aug1 = value_aug1.map(|ref mut slice| Self::value_aug(opts, slice)).transpose()?;
+                    let value_aug2 = value_aug2.map(|ref mut slice| Self::value_aug(opts, slice)).transpose()?;
                     op(key, value_aug1, value_aug2)
                 })
             }
@@ -217,38 +236,61 @@ macro_rules! define_HashmapAugE {
                 Self {
                     extra: <$y_type>::default(),
                     bit_len: $bit_len,
-                    data: None
+                    data: None,
+                    opts: crate::SERDE_OPTS_EMPTY,
                 }
             }
         }
 
         impl Serializable for $varname {
             fn write_to(&self, cell: &mut BuilderData) -> Result<()>{
+                self.write_with_opts(cell, crate::SERDE_OPTS_EMPTY)
+            }
+            fn write_with_opts(
+                &self,
+                cell: &mut BuilderData,
+                opts: u8
+            ) -> Result<()> {
+                crate::fail_if!(
+                    self.opts != opts,
+                    crate::BlockError::MismatchedSerdeOptions(
+                        std::any::type_name::<Self>().to_string(),
+                        self.opts as usize,
+                        opts as usize
+                    )
+                );
                 if let Some(root) = self.data() {
                     cell.append_bit_one()?;
                     cell.checked_append_reference(root.clone())?;
                 } else {
                     cell.append_bit_zero()?;
                 }
-                self.root_extra().write_to(cell)?;
+                self.root_extra().write_with_opts(cell, opts)?;
                 Ok(())
             }
         }
 
         impl Deserializable for $varname {
             fn construct_from(slice: &mut SliceData) -> Result<Self>{
+                Self::construct_from_with_opts(slice, crate::SERDE_OPTS_EMPTY)
+            }
+            fn construct_from_with_opts(
+                slice: &mut SliceData,
+                opts: u8
+            ) -> Result<Self> {
                 let data = match slice.get_next_bit()? {
                     true => Some(slice.checked_drain_reference()?),
                     false => None
                 };
-                let extra = <$y_type>::construct_from(slice)?;
+                let extra = <$y_type>::construct_from_with_opts(slice, opts)?;
                 if data.is_none() && extra != <$y_type>::default() {
                     fail!("root extra for empty HashmapAugE {} is not default", std::any::type_name::<Self>())
                 }
                 Ok(Self {
                     extra,
                     bit_len: $bit_len,
-                    data
+                    data,
+                    opts,
                 })
             }
         }
@@ -269,6 +311,7 @@ pub trait HashmapAugType<
     X: Deserializable + Serializable + Augmentation<Y>, 
     Y: Augmentable
 >: HashmapType {
+    fn serde_opts(&self) -> u8;
     fn root_extra(&self) -> &Y;
     fn set_root_extra(&mut self, aug: Y);
     fn update_root_extra(&mut self) -> Result<&Y> {
@@ -279,21 +322,22 @@ pub trait HashmapAugType<
         self.set_root_extra(aug);
         Ok(self.root_extra())
     }
-    fn value_aug(slice: &mut SliceData) -> Result<(X, Y)> {
-        let aug = Y::construct_from(slice)?;
-        let val = X::construct_from(slice)?;
+    fn value_aug(opts: u8, slice: &mut SliceData) -> Result<(X, Y)> {
+        let aug = Y::construct_from_with_opts(slice, opts)?;
+        let val = X::construct_from_with_opts(slice, opts)?;
         Ok((val, aug))
     }
-    fn aug_value(slice: &mut SliceData) -> Result<(Y, X)> {
-        let aug = Y::construct_from(slice)?;
-        let val = X::construct_from(slice)?;
-        Ok((aug, val))
-    }
-    fn key_value_aug(key: BuilderData, mut slice: SliceData) -> Result<(K, X, Y)> {
-        let key = K::construct_from_cell(key.into_cell()?)?;
-        let (val, aug) = Self::value_aug(&mut slice)?;
-        Ok((key, val, aug))
-    }
+    /// TODO unused code?
+    //fn aug_value(slice: &mut SliceData) -> Result<(Y, X)> {
+    //    let aug = Y::construct_from(slice)?;
+    //    let val = X::construct_from(slice)?;
+    //    Ok((aug, val))
+    //}
+    //fn key_value_aug(key: BuilderData, mut slice: SliceData) -> Result<(K, X, Y)> {
+    //    let key = K::construct_from_cell(key.into_cell()?)?;
+    //    let (val, aug) = Self::value_aug(&mut slice)?;
+    //    Ok((key, val, aug))
+    //}
     fn get_serialized_raw(&self, key: SliceData) -> Leaf {
         self.hashmap_get(key, &mut 0)
     }
@@ -304,17 +348,21 @@ pub trait HashmapAugType<
         }).transpose()
     }
     fn get_serialized(&self, key: SliceData) -> Result<Option<X>> {
-        self.get_serialized_as_slice(key)?.map(|mut slice| X::construct_from(&mut slice)).transpose()
+        self.get_serialized_as_slice(key)?.map(|mut slice| {
+            X::construct_from_with_opts(&mut slice, self.serde_opts())
+        }).transpose()
     }
     fn get_serialized_with_aug(&self, key: SliceData) -> Result<Option<(X, Y)>> {
         self.get_serialized_raw(key)?.map(|mut slice| {
-            let aug = Y::construct_from(&mut slice)?;
-            Ok((X::construct_from(&mut slice)?, aug))
+            let aug = Y::construct_from_with_opts(&mut slice, self.serde_opts())?;
+            Ok((X::construct_from_with_opts(&mut slice, self.serde_opts())?, aug))
         }).transpose()
     }
     /// gets aug and item in combined slice
     fn get_raw(&self, key: &K) -> Leaf {
-        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+        let key = SliceData::load_bitstring(
+            key.write_to_new_cell_with_opts(self.serde_opts())?
+        )?;
         self.get_serialized_raw(key)
     }
     /// get item as slice
@@ -333,13 +381,15 @@ pub trait HashmapAugType<
     }
     /// get item and aug
     fn get(&self, key: &K) -> Result<Option<X>> {
-        self.get_as_slice(key)?.map(|mut slice| X::construct_from(&mut slice)).transpose()
+        self.get_as_slice(key)?
+        .map(|mut slice| X::construct_from_with_opts(&mut slice, self.serde_opts()))
+        .transpose()
     }
     /// get item as slice and aug
     fn get_as_slice_with_aug(&self, key: &K) -> Result<Option<(SliceData, Y)>> {
         match self.get_raw(key)? {
             Some(mut slice) => {
-                let aug = Y::construct_from(&mut slice)?;
+                let aug = Y::construct_from_with_opts(&mut slice, self.serde_opts())?;
                 Ok(Some((slice, aug)))
             }
             None => Ok(None)
@@ -349,31 +399,35 @@ pub trait HashmapAugType<
     fn get_with_aug(&self, key: &K) -> Result<Option<(X, Y)>> {
         match self.get_raw(key)? {
             Some(mut slice) => {
-                let aug = Y::construct_from(&mut slice)?;
-                Ok(Some((X::construct_from(&mut slice)?, aug)))
+                let aug = Y::construct_from_with_opts(&mut slice, self.serde_opts())?;
+                Ok(Some((X::construct_from_with_opts(&mut slice, self.serde_opts())?, aug)))
             }
             None => Ok(None)
         }
     }
     /// sets item to hashmapaug
     fn set(&mut self, key: &K, value: &X, aug: &Y) -> Result<()> {
-        let key = SliceData::load_builder(key.write_to_new_cell()?)?;
-        let value = value.write_to_new_cell()?;
+        let key = SliceData::load_builder(
+            key.write_to_new_cell_with_opts(self.serde_opts())?
+        )?;
+        let value = value.write_to_new_cell_with_opts(self.serde_opts())?;
         self.set_builder_serialized(key, &value, aug)?;
         Ok(())
     }
     /// sets item to hashmapaug
     fn set_augmentable(&mut self, key: &K, value: &X) -> Result<()> {
-        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+        let key = SliceData::load_bitstring(
+            key.write_to_new_cell_with_opts(self.serde_opts())?
+        )?;
         let aug = value.aug()?;
-        let value = value.write_to_new_cell()?;
+        let value = value.write_to_new_cell_with_opts(self.serde_opts())?;
         self.set_builder_serialized(key, &value, &aug)?;
         Ok(())
     }
     /// sets item to hashmapaug as ref
     fn setref(&mut self, key: &K, value: &Cell, aug: &Y) -> Result<()> {
-        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
-        let value = value.write_to_new_cell()?;
+        let key = SliceData::load_bitstring(key.write_to_new_cell_with_opts(self.serde_opts())?)?;
+        let value = value.write_to_new_cell_with_opts(self.serde_opts())?;
         self.set_builder_serialized(key, &value, aug)?;
         Ok(())
     }
@@ -403,9 +457,9 @@ pub trait HashmapAugType<
     fn get_min(&self, signed: bool) -> Result<Option<(K, X)>> {
         match self.find_key(true, signed)? {
             Some((mut key, mut val)) => {
-                let key = K::construct_from(&mut key)?;
+                let key = K::construct_from_with_opts(&mut key, self.serde_opts())?;
                 Y::skip(&mut val)?;
-                let val = X::construct_from(&mut val)?;
+                let val = X::construct_from_with_opts(&mut val, self.serde_opts())?;
                 Ok(Some((key, val)))
             },
             None => Ok(None)
@@ -415,9 +469,9 @@ pub trait HashmapAugType<
     fn get_max(&self, signed: bool) -> Result<Option<(K, X)>> {
         match self.find_key(false, signed)? {
             Some((mut key, mut val)) => {
-                let key = K::construct_from(&mut key)?;
+                let key = K::construct_from_with_opts(&mut key, self.serde_opts())?;
                 Y::skip(&mut val)?;
-                let val = X::construct_from(&mut val)?;
+                let val = X::construct_from_with_opts(&mut val, self.serde_opts())?;
                 Ok(Some((key, val)))
             },
             None => Ok(None)
@@ -427,9 +481,9 @@ pub trait HashmapAugType<
     fn get_minmax(&self, min: bool, signed: bool) -> Result<Option<(K, X, Y)>> {
         match self.find_key(min, signed)? {
             Some((mut key, mut val)) => {
-                let key = K::construct_from(&mut key)?;
-                let aug = Y::construct_from(&mut val)?;
-                let val = X::construct_from(&mut val)?;
+                let key = K::construct_from_with_opts(&mut key, self.serde_opts())?;
+                let aug = Y::construct_from_with_opts(&mut val, self.serde_opts())?;
+                let val = X::construct_from_with_opts(&mut val, self.serde_opts())?;
                 Ok(Some((key, val, aug)))
             },
             None => Ok(None)
@@ -455,11 +509,11 @@ pub trait HashmapAugType<
         let label = ton_types::LabelReader::read_label(slice, self.bit_len())?;
         if label.remaining_bits() != self.bit_len() { // fork
             slice.shrink_references(2..); // left, right
-            self.set_root_extra(Y::construct_from(slice)?);
+            self.set_root_extra(Y::construct_from_with_opts(slice, self.serde_opts())?);
         } else { // single leaf as root
-            self.set_root_extra(Y::construct_from(slice)?);
+            self.set_root_extra(Y::construct_from_with_opts(slice, self.serde_opts())?);
             let mut value = X::default();
-            value.read_from(slice)?;
+            value.read_from_with_opts(slice, self.serde_opts())?;
         }
         root.shrink_by_remainder(slice);
 
@@ -480,13 +534,15 @@ pub trait HashmapAugType<
     }
     /// return object if it is single in hashmap
     fn single_value(&self) -> Result<Option<X>> {
-        self.single()?.map(|ref mut slice| X::construct_from(slice)).transpose()
+        self.single()?
+        .map(|ref mut slice| X::construct_from_with_opts(slice, self.serde_opts()))
+        .transpose()
     }
     /// iterates all objects in tree with callback function
     fn iterate_slices_with_keys<F> (&self, mut p: F) -> Result<bool>
     where F: FnMut(K, SliceData) -> Result<bool> {
         self.iterate_slices(|mut key, mut slice| {
-            let key = K::construct_from(&mut key)?;
+            let key = K::construct_from_with_opts(&mut key, self.serde_opts())?;
             Y::skip(&mut slice)?;
             p(key, slice)
         })
@@ -495,8 +551,8 @@ pub trait HashmapAugType<
     fn iterate_slices_with_keys_and_aug<F> (&self, mut p: F) -> Result<bool>
     where F: FnMut(K, SliceData, Y) -> Result<bool> {
         self.iterate_slices(|mut key, mut slice| {
-            let key = K::construct_from(&mut key)?;
-            let aug = Y::construct_from(&mut slice)?;
+            let key = K::construct_from_with_opts(&mut key, self.serde_opts())?;
+            let aug = Y::construct_from_with_opts(&mut slice, self.serde_opts())?;
             p(key, slice, aug)
         })
     }
@@ -506,25 +562,25 @@ pub trait HashmapAugType<
     where F: FnMut(X) -> Result<bool> {
         self.iterate_slices(|_, mut slice| {
             <Y>::skip(&mut slice)?;
-            p(<X>::construct_from(&mut slice)?)
+            p(X::construct_from_with_opts(&mut slice, self.serde_opts())?)
         })
     }
     /// iterate objects with keys
     fn iterate_with_keys<F>(&self, mut p: F) -> Result<bool>
     where F: FnMut(K, X) -> Result<bool> {
         self.iterate_slices(|mut key, mut slice| {
-            let key = K::construct_from(&mut key)?;
+            let key = K::construct_from_with_opts(&mut key, self.serde_opts())?;
             <Y>::skip(&mut slice)?;
-            p(key, <X>::construct_from(&mut slice)?)
+            p(key, X::construct_from_with_opts(&mut slice, self.serde_opts())?)
         })
     }
     /// iterate objects with keys and augs
     fn iterate_with_keys_and_aug<F>(&self, mut p: F) -> Result<bool>
     where F: FnMut(K, X, Y) -> Result<bool> {
         self.iterate_slices(|mut key, mut slice| {
-            let key = K::construct_from(&mut key)?;
-            let aug = <Y>::construct_from(&mut slice)?;
-            p(key, <X>::construct_from(&mut slice)?, aug)
+            let key = K::construct_from_with_opts(&mut key, self.serde_opts())?;
+            let aug = Y::construct_from_with_opts(&mut slice, self.serde_opts())?;
+            p(key, X::construct_from_with_opts(&mut slice, self.serde_opts())?, aug)
         })
     }
     #[cfg(test)]
@@ -544,7 +600,7 @@ pub trait HashmapAugType<
         // ahme_empty$0 {n:#} {X:Type} {Y:Type} extra:Y = HashmapAugE n X Y;
         // ahme_root$1 {n:#} {X:Type} {Y:Type} root:^(HashmapAug n X Y) extra:Y = HashmapAugE n X Y;
         let result = if let Some(mut root) = self.data().cloned() {
-            let (result, extra) = Self::put_to_node(&mut root, bit_len, key, leaf, extra)?;
+            let (result, extra) = self.put_to_node(&mut root, bit_len, key, leaf, extra)?;
             self.set_root_extra(extra);
             *self.data_mut() = Some(root);
             result
@@ -559,6 +615,7 @@ pub trait HashmapAugType<
     }
     // Puts element to required branch by first bit
     fn put_to_fork(
+        &self,
         slice: &mut SliceData,
         bit_len: usize,
         mut key: SliceData,
@@ -576,7 +633,7 @@ pub trait HashmapAugType<
         let mut references = slice.shrink_references(2..); // left and right, drop extra
         assert_eq!(references.len(), 2);
         let mut fork_extra = Self::find_extra(&mut SliceData::load_cell_ref(&references[1 - next_index])?, bit_len - 1)?;
-        let (result, extra) = Self::put_to_node(&mut references[next_index], bit_len - 1, key, leaf, extra)?;
+        let (result, extra) = self.put_to_node(&mut references[next_index], bit_len - 1, key, leaf, extra)?;
         fork_extra.calc(&extra)?;
         let mut builder = BuilderData::new();
         for reference in references.drain(..) {
@@ -588,6 +645,7 @@ pub trait HashmapAugType<
     }
     // Continues or finishes search of place
     fn put_to_node(
+        &self,
         cell: &mut Cell,
         bit_len: usize,
         key: SliceData,
@@ -607,13 +665,13 @@ pub trait HashmapAugType<
             )?
         } else if label.is_empty() {
             // 1-bit edge just recalc extra
-            result = Self::put_to_fork(&mut slice, bit_len, key, leaf, extra);
+            result = self.put_to_fork(&mut slice, bit_len, key, leaf, extra);
             Self::make_cell_with_label_and_data(label, bit_len, false, &slice)?
         } else {
             match SliceData::common_prefix(&label, &key) {
                 (label_prefix, Some(label_remainder), Some(key_remainder)) => {
                     // new leaf insert 
-                    let extra = Self::slice_edge(
+                    let extra = self.slice_edge(
                         &mut slice, bit_len,
                         label_prefix.unwrap_or_default(), label_remainder, key_remainder,
                         leaf, extra,
@@ -623,7 +681,7 @@ pub trait HashmapAugType<
                 }
                 (Some(prefix), None, Some(key_remainder)) => {
                     // next iteration
-                    result = Self::put_to_fork(
+                    result = self.put_to_fork(
                         &mut slice, bit_len - prefix.remaining_bits(), key_remainder, leaf, extra
                     );
                     Self::make_cell_with_label_and_data(label, bit_len, false, &slice)?
@@ -644,6 +702,7 @@ pub trait HashmapAugType<
     }
     // Slices the edge and put new leaf
     fn slice_edge(
+        &self,
         slice: &mut SliceData, // slice without label
         bit_len: usize,
         prefix: SliceData,
@@ -667,7 +726,7 @@ pub trait HashmapAugType<
             }
             slice.shrink_references(2..); // drain left, right
         }
-        let mut fork_extra = Y::construct_from(slice)?;
+        let mut fork_extra = Y::construct_from_with_opts(slice, self.serde_opts())?;
         fork_extra.calc(extra)?;
         // Leaf for fork
         let another_cell = Self::make_cell_with_label_and_builder(key, length, true, &Self::combine(extra, leaf)?)?;
@@ -697,6 +756,7 @@ pub trait HashmapAugType<
             }
             slice.shrink_references(2..);
         }
+        // TODO use self.serde()
         Y::construct_from(slice)
     }
     // Calc new extra for fork
@@ -708,10 +768,11 @@ pub trait HashmapAugType<
     //
     fn traverse<F, R>(&self, mut p: F) -> Result<Option<R>>
     where F: FnMut(&[u8], usize, Y, Option<X>) -> Result<TraverseNextStep<R>> {
+        let opts = self.serde_opts();
         self.traverse_slices(|key_prefix, prefix_len, mut label| {
-            let aug = Y::construct_from(&mut label)?;
+            let aug = Y::construct_from_with_opts(&mut  label, opts)?;
             if prefix_len == self.bit_len() {
-                let val = X::construct_from(&mut label)?;
+                let val = X::construct_from_with_opts(&mut label, opts)?;
                 p(key_prefix, prefix_len, aug, Some(val))
             } else {
                 p(key_prefix, prefix_len, aug, None)
@@ -787,15 +848,17 @@ pub trait HashmapAugRemover<
     Y: Augmentable
 >: HashmapAugType<K, X, Y> + HashmapRemover {
     fn filter<F: FnMut(K, X, Y) -> Result<HashmapFilterResult>> (&mut self, mut func: F) -> Result<()> {
+        let opts = self.serde_opts();
         Self::hashmap_filter(self, |key, mut aug_val| {
-            let key = K::construct_from_cell(key.clone().into_cell()?)?;
-            let (val, aug) = Self::value_aug(&mut aug_val)?;
+            let key = K::construct_from_cell_with_opts(key.clone().into_cell()?, opts)?;
+            let (val, aug) = Self::value_aug(opts, &mut aug_val)?;
             func(key, val, aug)
         })
     }
     fn del(&mut self, key: &Y) -> Result<()> {
-        self.remove(SliceData::load_bitstring(key.write_to_new_cell()?)?)?;
-        Ok(())
+        self.remove(SliceData::load_bitstring(
+            Y::write_to_new_cell_with_opts(key, self.serde_opts())?
+        )?).map(|_|())
     }
 }
 

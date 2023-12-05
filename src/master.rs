@@ -23,7 +23,7 @@ use crate::{
     signature::CryptoSignaturePair,
     types::{ChildCell, CurrencyCollection, InRefValue},
     validators::ValidatorInfo,
-    CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15, Augmentation,
+    CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15, Augmentation, SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY,
 };
 use std::{collections::HashMap, fmt};
 use ton_types::{
@@ -437,11 +437,19 @@ pub struct McBlockExtra {
     recover_create_msg: Option<ChildCell<InMsg>>,
     copyleft_msgs: CopyleftMessages,
     mint_msg: Option<ChildCell<InMsg>>,
-    config: Option<ConfigParams>
+    config: Option<ConfigParams>,
+    serde_opts: u8,
 }
 
 impl McBlockExtra {
-
+    pub fn with_common_message_support() -> Self {
+        let serde_opts = SERDE_OPTS_COMMON_MESSAGE;
+        Self {
+            serde_opts,
+            copyleft_msgs: CopyleftMessages::with_serde_opts(serde_opts),
+            ..Default::default()
+        }
+    }
     ///
     /// Get all fees for blockchain
     ///
@@ -482,7 +490,9 @@ impl McBlockExtra {
         self.recover_create_msg.as_ref().map(|mr| mr.read_struct()).transpose()
     }
     pub fn write_recover_create_msg(&mut self, value: Option<&InMsg>) -> Result<()> {
-        self.recover_create_msg = value.map(ChildCell::with_struct).transpose()?;
+        self.recover_create_msg = value
+            .map(|v| ChildCell::with_struct_and_opts(v, self.serde_opts))
+            .transpose()?;
         Ok(())
     }
     pub fn recover_create_msg_cell(&self) -> Option<Cell> {
@@ -493,7 +503,7 @@ impl McBlockExtra {
         self.mint_msg.as_ref().map(ChildCell::read_struct).transpose()
     }
     pub fn write_mint_msg(&mut self, value: Option<&InMsg>) -> Result<()> {
-        self.mint_msg = value.map(ChildCell::with_struct).transpose()?;
+        self.mint_msg = value.map(|v| ChildCell::with_struct_and_opts(v, self.serde_opts)).transpose()?;
         Ok(())
     }
     pub fn mint_msg_cell(&self) -> Option<Cell> {
@@ -509,7 +519,7 @@ impl McBlockExtra {
     }
     pub fn write_copyleft_msgs(&mut self, value: &[InMsg]) -> Result<()> {
         for (i, rec) in value.iter().enumerate() {
-            self.copyleft_msgs.setref(&U15(i as i16), &rec.serialize()?)?;
+            self.copyleft_msgs.setref(&U15(i as i16), &rec.serialize_with_opts(self.serde_opts)?)?;
         }
         Ok(())
     }
@@ -517,11 +527,12 @@ impl McBlockExtra {
 
 const MC_BLOCK_EXTRA_TAG : u16 = 0xCCA5;
 const MC_BLOCK_EXTRA_TAG_2 : u16 = 0xdc75;
+const MC_BLOCK_EXTRA_TAG_3 : u16 = 0xdc76;
 
 impl Deserializable for McBlockExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u16()?;
-        if tag != MC_BLOCK_EXTRA_TAG && tag != MC_BLOCK_EXTRA_TAG_2 {
+        if tag != MC_BLOCK_EXTRA_TAG && tag != MC_BLOCK_EXTRA_TAG_2 && tag != MC_BLOCK_EXTRA_TAG_3 {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag.into(),
@@ -529,17 +540,21 @@ impl Deserializable for McBlockExtra {
                 }
             )
         }
+        let opts = match tag {
+            MC_BLOCK_EXTRA_TAG_3 => SERDE_OPTS_COMMON_MESSAGE,
+            _ => 0,
+        };
         let key_block = cell.get_next_bit()?;
         self.shards.read_from(cell)?;
         self.fees.read_from(cell)?;
 
         let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         self.prev_blk_signatures.read_from(cell1)?;
-        self.recover_create_msg = ChildCell::construct_maybe_from_reference(cell1)?;
-        self.mint_msg = ChildCell::construct_maybe_from_reference(cell1)?;
+        self.recover_create_msg = ChildCell::construct_maybe_from_reference_with_opts(cell1, opts)?;
+        self.mint_msg = ChildCell::construct_maybe_from_reference_with_opts(cell1, opts)?;
 
-        if tag == MC_BLOCK_EXTRA_TAG_2 {
-            self.copyleft_msgs.read_from(cell1)?;
+        if tag == MC_BLOCK_EXTRA_TAG_2 || tag == MC_BLOCK_EXTRA_TAG_3 {
+            self.copyleft_msgs.read_from_with_opts(cell1, opts)?;
         }
 
         self.config = if key_block {
@@ -554,7 +569,12 @@ impl Deserializable for McBlockExtra {
 
 impl Serializable for McBlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        let tag = if self.copyleft_msgs.is_empty() {
+        self.write_with_opts(cell, SERDE_OPTS_EMPTY)
+    }
+    fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
+        let tag = if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+            MC_BLOCK_EXTRA_TAG_3
+        } else if self.copyleft_msgs.is_empty() {
             MC_BLOCK_EXTRA_TAG
         } else {
             MC_BLOCK_EXTRA_TAG_2
@@ -568,7 +588,7 @@ impl Serializable for McBlockExtra {
         ChildCell::write_maybe_to(&mut cell1, self.recover_create_msg.as_ref())?;
         ChildCell::write_maybe_to(&mut cell1, self.mint_msg.as_ref())?;
 
-        if !self.copyleft_msgs.is_empty() {
+        if tag != MC_BLOCK_EXTRA_TAG {
             self.copyleft_msgs.write_to(&mut cell1)?;
         }
 

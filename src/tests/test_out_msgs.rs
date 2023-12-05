@@ -55,13 +55,13 @@ fn transaction() -> Transaction {
 
     let mut tr = Transaction::with_address_and_status(
         AccountId::from([1; 32]),
-        AccountStatus::AccStateActive
+        AccountStatus::AccStateActive,
     );
 
-    let s_in_msg = get_message();
-    let s_out_msg1 = get_message();
-    let s_out_msg2 = get_message();
-    let s_out_msg3 = get_message();
+    let s_in_msg = CommonMessage::Std(get_message());
+    let s_out_msg1 = CommonMessage::Std(get_message());
+    let s_out_msg2 = CommonMessage::Std(get_message());
+    let s_out_msg3 = CommonMessage::Std(get_message());
 
     let s_status_update = HashUpdate::default();
     let s_tr_desc = TransactionDescr::default();
@@ -79,8 +79,10 @@ fn transaction() -> Transaction {
 }
 
 fn get_out_ext_msg() -> OutMsg {
-    let tr_cell = transaction().serialize().unwrap();
-    let msg_cell = get_message().serialize().unwrap();
+    let tr_cell = ChildCell::with_struct(&transaction()).unwrap();
+    let msg_cell = ChildCell::with_struct(
+        &CommonMessage::Std(get_message())
+    ).unwrap();
     OutMsg::external(msg_cell, tr_cell)
 }
 
@@ -104,12 +106,11 @@ fn test_out_msg_external_serialization()
 
 #[test]
 fn test_out_msg_immediately_serialization() {
-    let tr_cell = transaction().serialize().unwrap();
     let mut b = BuilderData::new();
     let out_msg = OutMsg::immediate(
-        MsgEnvelope::default().serialize().unwrap(),
-        tr_cell,
-        InMsg::External(InMsgExternal::default()).serialize().unwrap(),
+        ChildCell::with_struct(&MsgEnvelope::default()).unwrap(),
+        ChildCell::with_struct(&transaction()).unwrap(),
+        ChildCell::with_struct(&InMsg::External(InMsgExternal::default())).unwrap(),
     );
 
     out_msg.write_to(&mut b).unwrap();
@@ -126,10 +127,9 @@ fn test_out_msg_immediately_serialization() {
 
 #[test]
 fn test_out_msg_new_serialization() {
-    let tr_cell = transaction().serialize().unwrap();
-    let env_cell = MsgEnvelope::default().serialize().unwrap();
+    let tr_cell = ChildCell::with_struct(&transaction()).unwrap();
+    let env_cell = ChildCell::with_struct(&MsgEnvelope::default()).unwrap();
     let out_msg = OutMsg::new(env_cell, tr_cell);
-
     write_read_and_assert(out_msg);
 }
 
@@ -137,11 +137,10 @@ fn test_out_msg_new_serialization() {
 fn test_out_msg_transit_serialization()
 {
     let mut b = BuilderData::new();
-    let out_msg = OutMsg::Transit(
-        OutMsgTransit::with_cells(
-            MsgEnvelope::default().serialize().unwrap(),
-            InMsg::External(InMsgExternal::default()).serialize().unwrap(),
-        )
+    let out_msg = OutMsg::transit(
+        ChildCell::with_struct(&MsgEnvelope::default()).unwrap(),
+        ChildCell::with_struct(&InMsg::External(InMsgExternal::default())).unwrap(),
+        false,
     );
 
     out_msg.write_to(&mut b).unwrap();
@@ -162,7 +161,7 @@ fn test_out_msg_dequeue_serialization()
     let mut b = BuilderData::new();
     let out_msg = OutMsg::Dequeue(
         OutMsgDequeue::with_cells(
-            MsgEnvelope::default().serialize().unwrap(),
+            ChildCell::with_struct(&MsgEnvelope::default()).unwrap(),
             243563457456709,
     ));
 
@@ -239,18 +238,29 @@ fn create_account_id(n: u8) -> AccountId{
 
 #[test]
 fn test_work_with_out_msg_desc(){
-    let tr_cell = transaction().serialize().unwrap();
+    let tr = transaction();
+    let tr_cell = ChildCell::with_struct(&tr).unwrap();
     let mut msg_desc = OutMsgDescr::default();
 
     // test OutMsg::External
-    let msg = get_message_with_addrs(create_account_id(1), create_account_id(2));
-    let out_msg_ext = OutMsg::External(OutMsgExternal::with_cells(msg.serialize().unwrap(), tr_cell.clone()));
+    let msg = CommonMessage::Std(
+        get_message_with_addrs(create_account_id(1), create_account_id(2))
+    );
+    let out_msg_ext = OutMsg::external(
+        ChildCell::with_struct(&msg).unwrap(), 
+        tr_cell.clone(),
+    );
 
     msg_desc.insert(&out_msg_ext).unwrap();
     assert_eq!(msg_desc.len().unwrap(), 1);
 
-    let msg = get_message_with_addrs(create_account_id(2), create_account_id(1));
-    let out_msg_ext = OutMsg::External(OutMsgExternal::with_cells(msg.serialize().unwrap(), tr_cell.clone()));
+    let msg = CommonMessage::Std(
+        get_message_with_addrs(create_account_id(2), create_account_id(1))
+    );
+    let out_msg_ext = OutMsg::external(
+        ChildCell::with_struct(&msg).unwrap(),
+        tr_cell.clone(),
+    );
 
     msg_desc.insert(&out_msg_ext).unwrap();
     assert_eq!(msg_desc.len().unwrap(), 2);
@@ -260,11 +270,23 @@ fn test_work_with_out_msg_desc(){
     // assert_eq!(msg_desc.len().unwrap(), 1);
 
     // test OutMsg::Immediate
-    let msg = get_message_with_addrs(create_account_id(3), create_account_id(4));
-    let msg_in = InMsg::External(InMsgExternal::with_cells(msg.serialize().unwrap(), tr_cell.clone()));
+    let msg = CommonMessage::Std(
+        get_message_with_addrs(create_account_id(3), create_account_id(4))
+    );
+    let msg_in = InMsg::external(
+        ChildCell::with_struct(&msg).unwrap(),
+        tr_cell.clone(),
+    );
 
-    let env = MsgEnvelope::with_message_and_fee(&msg, Grams::one()).unwrap();
-    let out_msg = OutMsgImmediate::with_cells(env.serialize().unwrap(), tr_cell.clone(), msg_in.serialize().unwrap());
+    let env = MsgEnvelope::with_message_and_fee(
+        &msg.get_std().unwrap(),
+        Grams::one()
+    ).unwrap();
+    let out_msg = OutMsgImmediate::with_cells(
+        ChildCell::with_struct(&env).unwrap(),
+        tr_cell.clone(),
+        ChildCell::with_struct(&msg_in).unwrap()
+    );
     let out_msg_imm = OutMsg::Immediate(out_msg);
 
     msg_desc.insert(&out_msg_imm).unwrap();
@@ -275,19 +297,29 @@ fn test_work_with_out_msg_desc(){
     let msg = get_message_with_addrs(create_account_id(4), create_account_id(5));
     let env = MsgEnvelope::with_message_and_fee(&msg, Grams::one()).unwrap();
 
-    let out_msg_new = OutMsg::new(env.serialize().unwrap(), tr_cell.clone());
+    let out_msg_new = OutMsg::new(
+        ChildCell::with_struct(&env).unwrap(),
+        tr_cell.clone(),
+    );
 
     msg_desc.insert(&out_msg_new).unwrap();
     assert_eq!(msg_desc.len().unwrap(), 4);
 
     // test OutMsg::OutMsgTransit
-    let msg = get_message_with_addrs(create_account_id(5), create_account_id(6));
-    let msg_in = InMsg::External(InMsgExternal::with_cells(msg.serialize().unwrap(), tr_cell.clone()));
+    let msg = CommonMessage::Std(
+        get_message_with_addrs(create_account_id(5), create_account_id(6))
+    );
+    let msg_in = InMsg::external(
+        ChildCell::with_struct(&msg).unwrap(),
+        tr_cell.clone(),
+    );
 
     let out_msg_transit = OutMsg::Transit(
         OutMsgTransit::with_cells(
-            MsgEnvelope::with_message_and_fee(&msg, Grams::one()).unwrap().serialize().unwrap(),
-            msg_in.serialize().unwrap()
+            ChildCell::with_struct(
+                &MsgEnvelope::with_message_and_fee(&msg.get_std().unwrap(), Grams::one()).unwrap()
+            ).unwrap(),
+            ChildCell::with_struct(&msg_in).unwrap()
         ),
     );
 
@@ -297,7 +329,10 @@ fn test_work_with_out_msg_desc(){
     // test OutMsg::OutMsgDequeue
     let msg = get_message_with_addrs(create_account_id(6), create_account_id(7));
     let env = MsgEnvelope::with_message_and_fee(&msg, Grams::one()).unwrap();
-    let out_msg = OutMsgDequeue::with_cells(env.serialize().unwrap(), 32523);
+    let out_msg = OutMsgDequeue::with_cells(
+        ChildCell::with_struct(&env).unwrap(), 
+        32523,
+    );
     let out_msg_dequeue = OutMsg::Dequeue(out_msg);
 
     msg_desc.insert(&out_msg_dequeue).unwrap();
@@ -320,12 +355,14 @@ fn test_work_with_out_msg_desc(){
 
     // test OutMsg::OutMsgTransitRequeued
     let msg = get_message_with_addrs(create_account_id(8), create_account_id(9));
-    let msg_in = InMsg::External(InMsgExternal::with_cells(msg.serialize().unwrap(), tr_cell));
-
+    let msg_in = InMsg::external(
+        ChildCell::with_cell(msg.serialize().unwrap()), 
+        tr_cell.clone(),
+    );
     let out_msg_transit = OutMsg::TransitRequeued(
         OutMsgTransitRequeued::with_cells(
-            MsgEnvelope::with_message_and_fee(&msg, Grams::one()).unwrap().serialize().unwrap(),
-            msg_in.serialize().unwrap()
+            ChildCell::with_struct(&MsgEnvelope::with_message_and_fee(&msg, Grams::one()).unwrap()).unwrap(),
+            ChildCell::with_struct(&msg_in).unwrap(),
         )
     );
 
@@ -375,4 +412,126 @@ fn test_enqueued_msg() {
 
     write_read_and_assert(em1);
     write_read_and_assert(em2);
+}
+
+#[test]
+fn test_outmsgdescr_common_msg() {
+    let mut msg_descr = OutMsgDescr::with_serde_opts(SERDE_OPTS_COMMON_MESSAGE);
+    assert_eq!(msg_descr.serde_opts(), SERDE_OPTS_COMMON_MESSAGE);
+    let cmn_std_msg = CommonMessage::Std(Message::default());
+    let enveloped = MsgEnvelope::with_common_msg_support(
+        &cmn_std_msg,
+        1.into(),
+    ).unwrap();
+    let mut tr = Transaction::with_common_msg_support(
+        cmn_std_msg.get_std().unwrap().int_dst_account_id().unwrap()
+    );
+    tr.set_logical_time(1);
+    tr.write_in_msg(Some(&cmn_std_msg)).unwrap();
+    tr.orig_status = AccountStatus::AccStateActive;
+
+    let out_msg = OutMsg::new(
+        ChildCell::with_struct_and_opts(
+                &enveloped,
+                SERDE_OPTS_COMMON_MESSAGE,
+            ).unwrap(),
+        ChildCell::with_struct_and_opts(
+            &tr,
+            SERDE_OPTS_COMMON_MESSAGE
+        ).unwrap(),
+    );
+    msg_descr.insert(&out_msg).unwrap();
+
+    assert_eq!(msg_descr.serde_opts(), SERDE_OPTS_COMMON_MESSAGE);
+    let cell = msg_descr.serialize_with_opts(SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    assert!(matches!(msg_descr.serialize(), Err(_)));
+
+    let descr = OutMsgDescr::construct_from_cell_with_opts(cell.clone(), SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    let mut msg = None;
+    let _ = descr.iterate_objects(|x| {
+        let enveloped = x.read_out_message()?.unwrap();
+        msg = Some(enveloped.read_common_message()?);
+        Ok(true)
+    }).unwrap();
+    let msg = msg.unwrap();
+    assert_eq!(msg.get_std().unwrap(), &Message::default());
+
+    let descr = OutMsgDescr::construct_from_cell(cell).unwrap();
+    assert_eq!(descr.serde_opts(), SERDE_OPTS_EMPTY);
+    assert!(matches!(descr.get(&out_msg.read_message_hash().unwrap()), Err(_)));
+}
+
+#[test]
+fn test_outmsgdescr_with_cmnmsg_serialize_without_opts() {
+    let msg_descr = OutMsgDescr::with_serde_opts(SERDE_OPTS_COMMON_MESSAGE);
+    assert!(matches!(msg_descr.serialize(), Err(_)));
+    msg_descr.serialize_with_opts(SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    assert!(matches!(msg_descr.serialize_with_opts(SERDE_OPTS_EMPTY), Err(_)));
+}
+
+#[test]
+fn test_outmsg_serde_with_cmnmsg_success() {
+    for opts in [SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY] {
+        let msg = CommonMessage::default();
+        let orig_status = AccountStatus::AccStateActive;
+        let acc_id = AccountId::from([1; 32]);
+        let tr = match opts {
+            SERDE_OPTS_COMMON_MESSAGE => Transaction::with_common_msg_support(acc_id.clone()),
+            SERDE_OPTS_EMPTY => Transaction::with_address_and_status(acc_id.clone(), orig_status),
+            _ => unreachable!(),
+        };
+        let enveloped = match opts {
+            SERDE_OPTS_COMMON_MESSAGE => MsgEnvelope::with_common_msg_support(&msg, 10.into()).unwrap(),
+            SERDE_OPTS_EMPTY => MsgEnvelope::with_message_and_fee(&msg.get_std().unwrap(), 10.into()).unwrap(),
+            _ => unreachable!(),
+        };
+        let msg_cell = ChildCell::with_struct_and_opts(&msg, opts).unwrap();
+        let tr_cell =  ChildCell::with_struct_and_opts(&tr, opts).unwrap();
+        let env_cell = ChildCell::with_struct_and_opts(&enveloped, opts).unwrap();
+        let reimport_msg = InMsg::external(msg_cell.clone(), tr_cell.clone());
+        let reimport_msg_cell = ChildCell::with_struct_and_opts(&reimport_msg, opts).unwrap();
+
+        let outmsg_variants = [
+            OutMsg::external(msg_cell.clone(), tr_cell.clone()),
+            OutMsg::new(env_cell.clone(), tr_cell.clone()),
+            OutMsg::immediate(env_cell.clone(), tr_cell.clone(), reimport_msg_cell.clone()),
+            OutMsg::transit(env_cell.clone(), reimport_msg_cell.clone(), true),
+            OutMsg::transit(env_cell.clone(), reimport_msg_cell.clone(), false),
+            OutMsg::dequeue_long(env_cell.clone(), 12345),
+            OutMsg::dequeue_short(enveloped.message_hash(), &AccountIdPrefixFull::default(), 12345),
+            OutMsg::dequeue_immediate(env_cell, reimport_msg_cell),
+        ];
+        for ref outmsg in outmsg_variants {
+            let cell = outmsg.serialize_with_opts(opts).unwrap();
+            let outmsg2 = OutMsg::construct_from_cell_with_opts(cell, opts).unwrap();
+            assert_eq!(outmsg, &outmsg2);
+            
+            match outmsg {
+                OutMsg::External(_) | OutMsg::DequeueShort(_) => (),
+                _ => {
+                    let msg_env2 = outmsg2.read_out_message().unwrap().unwrap();
+                    let msg2 = msg_env2.read_message().unwrap();
+                    assert_eq!(&msg2, msg.get_std().unwrap());
+
+                    let msg3 = outmsg2.read_message().unwrap().unwrap();
+                    assert_eq!(&msg3, msg.get_std().unwrap());
+                }
+            };
+            match outmsg {
+                OutMsg::External(_) | OutMsg::Immediate(_) | OutMsg::New(_) => {
+                    let tr2 = outmsg2.read_transaction().unwrap().unwrap();
+                    assert_eq!(tr2, tr);
+                },
+                _ => (),
+            };
+
+            match outmsg {
+                OutMsg::Immediate(_) | OutMsg::Transit(_) | OutMsg::DequeueImmediate(_) | OutMsg::TransitRequeued(_) => {
+                    let inmsg = outmsg2.read_reimport_message().unwrap().unwrap();
+                    assert_eq!(inmsg, reimport_msg);
+                },
+                _ => (),
+            };
+        }
+    }
 }

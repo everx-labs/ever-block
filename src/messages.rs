@@ -1732,7 +1732,10 @@ impl StateInit {
     pub fn libraries(&self) -> StateInitLib { self.library.clone() }
 
     pub fn set_library(&mut self, val: Cell) {
-        self.library = StateInitLib::with_hashmap(Some(val));
+        self.library = StateInitLib::with_hashmap(
+            Some(val), 
+            crate::SERDE_OPTS_EMPTY
+        );
     }
 
     pub fn set_library_code(&mut self, code: Cell, public: bool) -> Result<()> {

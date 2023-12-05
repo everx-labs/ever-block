@@ -18,7 +18,7 @@ use crate::{
     types::{Number16, UnixTime32},
     Serializable, Deserializable,
     config_params::CatchainConfig,
-    shard::{SHARD_FULL, MASTERCHAIN_ID}
+    shard::{SHARD_FULL, MASTERCHAIN_ID},
 };
 
 use crc::{Crc, CRC_32_ISCSI};
