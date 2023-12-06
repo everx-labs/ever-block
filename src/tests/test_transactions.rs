@@ -142,6 +142,22 @@ fn test_account_block_serde_with_cmnmsg() {
     assert!(matches!(write_read_and_assert_with_opts(account_block, SERDE_OPTS_EMPTY), Err(_)));
 }
 
+#[test]
+fn test_account_block_serde_mesh() {
+
+    std::env::set_var("RUST_BACKTRACE", "full");
+
+    let address = AccountId::from([0x11; 32]);
+    let mut account_block = generate_account_block(address.clone(), 32, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    for _ in 0..10 {
+        let transaction = generate_transaction_with_opts(address.clone(), SERDE_OPTS_COMMON_MESSAGE);
+        account_block.add_mesh_transaction(23, &transaction).unwrap();
+    }
+    write_read_and_assert_with_opts(account_block.clone(), SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    assert!(matches!(write_read_and_assert_with_opts(account_block, SERDE_OPTS_EMPTY), Err(_)));
+}
+
+
 fn generate_account_block(address: AccountId, tr_count: usize, opts: u8) -> Result<AccountBlock> {
 
     let s_status_update = HashUpdate::default();

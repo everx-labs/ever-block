@@ -1280,14 +1280,13 @@ macro_rules! define_HashmapE {
                 self.write_with_opts(cell, crate::SERDE_OPTS_EMPTY)
             }
             fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
-                crate::fail_if!(
-                    opts != self.1,
-                    crate::error::BlockError::MismatchedSerdeOptions(
+                if opts != self.1 {
+                    fail!(crate::error::BlockError::MismatchedSerdeOptions(
                         std::any::type_name::<Self>().to_string(),
                         self.1 as usize,
                         opts as usize,
-                    )
-                );
+                    ));
+                }
                 self.0.write_with_opts(cell, opts)
             }
         }

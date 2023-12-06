@@ -25,7 +25,7 @@ use crate::{
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32, AddSub},
     validators::ValidatorSet,
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, VarUInteger32,
-    fail_if, SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY,
+    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY,
 };
 use crate::RefShardBlocks;
 use std::borrow::Cow;
@@ -1456,14 +1456,13 @@ fn serialize_block(
     tag: u32,
     opts: u8,
 ) -> Result<()> {
-    fail_if!(
-        opts != block.extra.serde_opts(),
-        BlockError::MismatchedSerdeOptions(
-            "Block".to_string(),
+    if opts != block.extra.serde_opts() {
+        fail!(BlockError::MismatchedSerdeOptions(
+            std::any::type_name::<Block>().to_string(),
             opts as usize,
             block.extra.serde_opts() as usize
-        )
-    );
+        ))
+    }
     builder.append_u32(tag)?;
     builder.append_i32(block.global_id)?;
     builder.checked_append_reference(block.info.cell())?; // info:^BlockInfo

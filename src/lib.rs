@@ -386,22 +386,3 @@ where
     pretty_assertions::assert_eq!(s, s2);
     Ok(s2)
 }
-
-#[macro_export]
-macro_rules! fail_if {
-    ($cond:expr, $error:literal) => {
-        if $cond {
-            return Err(failure::err_msg(format!("{} {}:{}", $error, file!(), line!())));
-        }
-    };
-    ($cond:expr, $error:expr) => {
-        if $cond {
-            return Err(error!($error));
-        }
-    };
-    ($cond:expr, $fmt:expr, $($arg:tt)*) => {
-        if $cond {
-            return Err(failure::err_msg(format!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!())));
-        }
-    };
-}

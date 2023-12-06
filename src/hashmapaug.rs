@@ -251,14 +251,13 @@ macro_rules! define_HashmapAugE {
                 cell: &mut BuilderData,
                 opts: u8
             ) -> Result<()> {
-                crate::fail_if!(
-                    self.opts != opts,
-                    crate::BlockError::MismatchedSerdeOptions(
+                if self.opts != opts {
+                    fail!(crate::BlockError::MismatchedSerdeOptions(
                         std::any::type_name::<Self>().to_string(),
                         self.opts as usize,
                         opts as usize
-                    )
-                );
+                    ));
+                }
                 if let Some(root) = self.data() {
                     cell.append_bit_one()?;
                     cell.checked_append_reference(root.clone())?;
