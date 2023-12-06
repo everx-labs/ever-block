@@ -151,6 +151,38 @@ fn test_shard_state_unsplit_serialize_fast_finality() {
     }
 }
 
+
+#[test]
+fn test_shard_state_unsplit_serialize_mesh() {
+    use crate::write_read_and_assert;
+
+    
+    let in_path = "src/tests/data/shard_state.boc";
+    let bytes = std::fs::read(in_path).unwrap();
+    let root_cell = read_single_root_boc(&bytes).unwrap();
+
+    let ss = ShardState::construct_from_cell(root_cell).unwrap();
+
+    match ss {
+        ShardState::UnsplitState(mut ss) => {
+            *ss.shard_mut() = ShardIdent::with_tagged_prefix(0, SHARD_FULL).unwrap();
+            ss.write_custom(None).unwrap();
+
+            let local = ss.read_out_msg_queue_info().unwrap();
+            let mut mesh = MeshMsgQueuesInfo::default();
+            mesh.set(&123, &local.clone()).unwrap();
+
+            ss.write_out_msg_queues_info(local, mesh).unwrap();
+
+            write_read_and_assert(ss);
+        },
+        ShardState::SplitState(_) => {
+            unreachable!()
+        }
+    }
+}
+
+
 #[test]
 fn test_shard_prefix_as_str_with_tag() {
     let sp = ShardIdent::with_prefix_len(

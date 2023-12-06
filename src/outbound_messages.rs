@@ -12,7 +12,7 @@
 */
 
 use crate::{
-    define_HashmapAugE,
+    define_HashmapAugE, define_HashmapE, HashmapE,
     error::BlockError,
     envelope_message::MsgEnvelope,
     hashmapaug::{Augmentable, Augmentation, HashmapAugType},
@@ -273,47 +273,41 @@ impl fmt::LowerHex for OutMsgQueueKey {
     }
 }
 
-/*
 define_HashmapE!(MeshMsgQueuesInfo, 32, OutMsgQueueInfo);
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct OutMsgQueuesInfo {
-    local_queue: OutMsgQueueInfo,
-    mesh_queues: MeshMsgQueuesInfo,
+pub(crate) struct OutMsgQueuesInfo {
+    pub local_queue: OutMsgQueueInfo,
+    pub mesh_queues: MeshMsgQueuesInfo,
+    pub serde_opts: u8,
 }
 
 impl OutMsgQueuesInfo {
-    fn new() -> Self {
-        Self::default()
+    pub fn with_local_queue(local_queue: OutMsgQueueInfo) -> Self {
+        Self { local_queue, mesh_queues: MeshMsgQueuesInfo::default(), serde_opts: SERDE_OPTS_EMPTY }
     }
 
-    fn with_params(local_queue: OutMsgQueueInfo, mesh_queues: MeshMsgQueuesInfo) -> Self {
-        Self { local_queue, mesh_queues }
-    }
-
-    // fn with_local_queue()
-
-    fn local_queue(&self) -> &OutMsgQueueInfo {
-        &self.local_queue
-    }
-
-    fn local_queue_mut(&mut self) -> &mut OutMsgQueueInfo {
-        &mut self.local_queue
-    }
-
-    fn mesh_queues(&self) -> &MeshMsgQueuesInfo {
-        &self.mesh_queues
-    }
-
-    fn mesh_queues_mut(&mut self) -> &mut MeshMsgQueuesInfo {
-        &mut self.mesh_queues
+    pub fn with_params(local_queue: OutMsgQueueInfo, mesh_queues: MeshMsgQueuesInfo) -> Self {
+        Self { local_queue, mesh_queues, serde_opts: SERDE_OPTS_COMMON_MESSAGE }
     }
 }
 
+const OUT_MSG_QUEUES_TAG: u8 = 0x01;
+
 impl Serializable for OutMsgQueuesInfo {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.local_queue.write_to(cell)?;
-        self.mesh_queues.write_to(cell)?;
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        if self.serde_opts == SERDE_OPTS_EMPTY {
+            self.local_queue.write_to(builder)?;
+        } else if self.serde_opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+            builder.append_u8(OUT_MSG_QUEUES_TAG)?;
+            self.local_queue.write_to(builder)?;
+            self.mesh_queues.write_to(builder)?;
+        } else {
+            fail!(BlockError::UnsupportedSerdeOptions(
+                std::any::type_name::<Self>().to_string(),
+                self.serde_opts as usize
+            ))
+        }
         Ok(())
     }
 }
@@ -321,10 +315,33 @@ impl Serializable for OutMsgQueuesInfo {
 impl Deserializable for OutMsgQueuesInfo {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.local_queue.read_from(cell)?;
-        self.mesh_queues.read_from(cell)?;
+        self.mesh_queues = MeshMsgQueuesInfo::default();
         Ok(())
     }
-}*/
+
+    fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
+        if opts == SERDE_OPTS_EMPTY {
+            self.read_from(slice)?;
+        } else if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+            let tag = slice.get_next_byte()?;
+            if tag != OUT_MSG_QUEUES_TAG {
+                fail!(BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: std::any::type_name::<Self>().to_string()
+                })
+            }
+            self.local_queue.read_from(slice)?;
+            self.mesh_queues.read_from(slice)?;
+        } else {
+            fail!(BlockError::UnsupportedSerdeOptions(
+                std::any::type_name::<Self>().to_string(),
+                opts as usize
+            ))
+        }
+        self.serde_opts = opts;
+        Ok(())
+    }
+}
 
 /*
 _ out_queue:OutMsgQueue proc_info:ProcessedInfo

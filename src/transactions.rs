@@ -1738,6 +1738,8 @@ impl Deserializable for Transaction {
 
 define_HashmapAugE!(Transactions, 64, u64, InRefValue<Transaction>, CurrencyCollection);
 
+define_HashmapE!(MeshTransactions, 32, Transactions);
+
 impl Transactions {
     pub fn insert(&mut self, tr: &Transaction) -> Result<()> {
         let cell = tr.serialize()?;
@@ -1772,6 +1774,7 @@ impl Augmentation<CurrencyCollection> for InRefValue<Transaction> {
 pub struct AccountBlock {
     account_addr: AccountId,
     transactions: Transactions,      // HashmapAug 64 ^Transaction CurrencyCollection
+    //mesh_transactions: MeshTransactions, // HashmapE 32 Transactions
     state_update: ChildCell<HashUpdate>,        // ^(HASH_UPDATE Account)
 }
 
@@ -1788,6 +1791,7 @@ impl AccountBlock {
         AccountBlock {
             account_addr,
             transactions: Transactions::default(),
+            //mesh_transactions: MeshTransactions::default(),
             state_update: ChildCell::default(),
         }
     }
@@ -1799,6 +1803,7 @@ impl AccountBlock {
         AccountBlock {
             account_addr,
             transactions: Transactions::with_serde_opts(opts),
+            //mesh_transactions: MeshTransactions::default(),
             state_update: ChildCell::with_serde_opts(opts),
         }
     }
@@ -1813,6 +1818,7 @@ impl AccountBlock {
         Ok(AccountBlock {
             account_addr,
             transactions,
+            //mesh_transactions: MeshTransactions::default(),
             state_update: transaction.state_update.clone(),
         })
     }
@@ -1821,6 +1827,7 @@ impl AccountBlock {
         Ok(Self{
             account_addr: account_addr.clone(),
             transactions: transactions.clone(),
+            //mesh_transactions: MeshTransactions::with_serde_opts(SERDE_OPTS_COMMON_MESSAGE),
             state_update: ChildCell::with_struct(state_update)?,
         })
     }
@@ -1842,6 +1849,35 @@ impl AccountBlock {
         )?;
         Ok(())
     }
+
+    /* 
+    pub fn add_mesh_transaction(&mut self, nw_id: u32, transaction: &Transaction) -> Result<()> {
+        self.add_serialized_mesh_transaction(
+            nw_id,
+            transaction,
+            &transaction.serialize_with_opts(SERDE_OPTS_COMMON_MESSAGE)?,
+        )
+    }
+    pub fn add_serialized_mesh_transaction(
+        &mut self,
+        nw_id: u32,
+        transaction: &Transaction,
+        transaction_cell: &Cell
+    ) -> Result<()> {
+        let mut trs = if let Some(trs) = self.mesh_transactions.get(&nw_id)? {
+            trs
+        } else {
+            Transactions::with_serde_opts(SERDE_OPTS_COMMON_MESSAGE)
+        };
+        trs.setref(
+            &transaction.logical_time(),
+            transaction_cell,
+            transaction.total_fees()
+        )?;
+        self.mesh_transactions.set(&nw_id, &trs)?;
+        Ok(())
+    }
+    */
 
     /// get hash update for Account
     pub fn read_state_update(&self) -> Result<HashUpdate> {
@@ -1874,6 +1910,22 @@ impl AccountBlock {
             false => self.transactions.len()
         }
     }
+
+    /*
+    /// get sum of all acoount's transactions for connected network with given id
+    pub fn total_mesh_fee(&self, nw_id: u32) -> CurrencyCollection {
+        self.mesh_transactions.get(&nw_id)
+            .ok().flatten()
+            .map(|trs| trs.root_extra().clone()).unwrap_or_default()
+    }
+
+    pub fn transaction_count_mesh(&self, nw_id: u32) -> usize {
+        self.mesh_transactions.get(&nw_id)
+            .ok().flatten()
+            .map(|trs| trs.len().unwrap_or_default())
+            .unwrap_or_default()
+    }*/
+
     /// update
     pub fn calculate_and_write_state(&mut self, old_state: &ShardStateUnsplit, new_state: &ShardStateUnsplit) -> Result<()> {
         if self.transactions.is_empty() {
@@ -1934,14 +1986,14 @@ impl Serializable for AccountBlock {
         cell.append_bits(ACCOUNT_BLOCK_TAG, 4)?;
         self.account_addr.write_to(cell)?; // account_addr: AccountId,
         self.transactions.write_hashmap_root(cell)?;
-        cell.checked_append_reference(self.state_update.cell())?; // ^(HASH_UPDATE Account)
+                cell.checked_append_reference(self.state_update.cell())?; // ^(HASH_UPDATE Account)
         Ok(())
     }
 }
 
 impl Deserializable for AccountBlock {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        self.read_from_with_opts(slice, SERDE_OPTS_EMPTY)
+self.read_from_with_opts(slice, SERDE_OPTS_EMPTY)
     }
     fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
         let tag = slice.get_next_int(4)? as usize;
