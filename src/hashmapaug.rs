@@ -355,11 +355,15 @@ pub trait HashmapAugType<
             None => Ok(None)
         }
     }
-    /// sets item to hashmapaug
-    fn set(&mut self, key: &K, value: &X, aug: &Y) -> Result<()> {
+    /// sets item to hashmapaug returning prev value if exists by key
+    fn set_return_prev(&mut self, key: &K, value: &X, aug: &Y) -> Result<Option<SliceData>> {
         let key = SliceData::load_builder(key.write_to_new_cell()?)?;
         let value = value.write_to_new_cell()?;
-        self.set_builder_serialized(key, &value, aug)?;
+        self.set_builder_serialized(key, &value, aug)
+    }
+    /// sets item to hashmapaug
+    fn set(&mut self, key: &K, value: &X, aug: &Y) -> Result<()> {
+        self.set_return_prev(key, value, aug)?;
         Ok(())
     }
     /// sets item to hashmapaug
