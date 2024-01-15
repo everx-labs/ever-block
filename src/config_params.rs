@@ -390,6 +390,7 @@ pub enum GlobalCapabilities {
     CapFastFinality           = 0x0001_0000_0000,
     CapTvmV19                 = 0x0002_0000_0000, // TVM v1.9.x improvemements
     CapSmft                   = 0x0004_0000_0000,
+    CapNoSplitOutQueue        = 0x0008_0000_0000, // Don't split out queue on shard splitting
 }
 
 impl ConfigParams {
