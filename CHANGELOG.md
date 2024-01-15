@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.120
+
+- Add new capability for disabling split of out queues during shard split
+
 ## Version 1.9.119
 
 - HashMapAug and OutMsgQueue insertion API extended
