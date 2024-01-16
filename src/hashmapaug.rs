@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -69,13 +69,7 @@ macro_rules! define_HashmapAugE {
                 }).unwrap();
             }
             /// Constructs new HashmapAugE for bit_len keys
-            pub fn new() -> Self {
-                Self {
-                    extra: <$y_type>::default(),
-                    bit_len: $bit_len,
-                    data: None,
-                }
-            }
+            pub fn new() -> Self { Self::default() }
             /// Constructs from cell, extracts total aug
             pub fn with_hashmap(data: Option<Cell>) -> Result<Self> {
                 let extra = match data {
