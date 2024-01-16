@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -21,22 +21,17 @@ use crate::{
     shard::{SHARD_FULL, MASTERCHAIN_ID}
 };
 
-use crc::{Crc, CRC_32_ISCSI};
 use std::{
     io::{Write, Cursor},
     convert::TryInto,
     cmp::{min, Ordering},
     borrow::Cow,
 };
-use sha2::{Digest, Sha256, Sha512};
-use ton_types::types::ByteOrderRead;
 use ton_types::{
-    error, fail, Result,
-    UInt256, BuilderData, Cell, HashmapE, HashmapType, IBitstring, SliceData,
+    error, fail, BuilderData, ByteOrderRead, Cell, Crc32, HashmapE, HashmapType, 
+    IBitstring, Result, sha512_digest, SliceData, UInt256, 
+    bls::BLS_PUBLIC_KEY_LEN 
 };
-use ton_types::bls::BLS_PUBLIC_KEY_LEN;
-
-pub const CASTAGNOLI: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 /*
 validator_info$_
@@ -55,14 +50,6 @@ pub struct ValidatorInfo {
 }
 
 impl ValidatorInfo {
-    pub const fn new() -> Self {
-        ValidatorInfo {
-            validator_list_hash_short: 0,
-            catchain_seqno: 0,
-            nx_cc_updated: false
-        }
-    }
-
     pub fn with_params(
         validator_list_hash_short: u32, 
         catchain_seqno: u32, 
@@ -113,12 +100,7 @@ pub struct ValidatorBaseInfo {
 }
 
 impl ValidatorBaseInfo {
-    pub fn new() -> Self {
-        ValidatorBaseInfo {
-            validator_list_hash_short: 0,
-            catchain_seqno: 0,
-        }
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn with_params(
         validator_list_hash_short: u32, 
@@ -193,16 +175,7 @@ impl std::hash::Hash for ValidatorDescr {
 }
 
 impl ValidatorDescr {
-    pub fn new() -> Self {
-        ValidatorDescr {
-            public_key: SigPubKey::default(),
-            weight: 0,
-            adnl_addr: None,
-            prev_weight_sum: 0,
-            mc_seq_no_since: 0,
-            bls_public_key: None
-        }
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub const fn with_params(
         public_key: SigPubKey,
@@ -221,18 +194,11 @@ impl ValidatorDescr {
     }
 
     pub fn compute_node_id_short(&self) -> UInt256 {
-        let mut hasher = Sha256::new();
-        let magic = [0xc6, 0xb4, 0x13, 0x48]; // magic 0x4813b4c6 from original node's code 1209251014 for KEY_ED25519
-        hasher.update(magic);
-        hasher.update(self.public_key.as_slice());
-        From::<[u8; 32]>::from(hasher.finalize().into())
+        self.public_key.pub_key().id().data().into()
     }
 
     pub fn verify_signature(&self, data: &[u8], signature: &CryptoSignature) -> bool {
-        match SigPubKey::from_bytes(self.public_key.as_slice()) {
-            Ok(pub_key) => pub_key.verify_signature(data, signature),
-            _ => false
-        }
+        self.public_key.verify_signature(data, signature)
     }
 
 }
@@ -389,17 +355,6 @@ impl Ord for IncludedValidatorWeight {
 }
 
 impl ValidatorSet {
-    pub const fn default() -> Self {
-        Self {
-            utime_since: 0,
-            utime_until: 0, 
-            total: Number16::default(), 
-            main: Number16::default(),
-            total_weight: 0,
-            cc_seqno: 0,
-            list: Vec::new(),
-        }
-    }
     pub fn new(
         utime_since: u32,
         utime_until: u32,
@@ -611,7 +566,7 @@ impl ValidatorSet {
     const HASH_SHORT_MAGIC: u32 = 0x901660ED;
 
     pub fn calc_subset_hash_short(subset: &[ValidatorDescr], cc_seqno: u32) -> Result<u32> {
-        let mut hasher = CASTAGNOLI.digest();
+        let mut hasher = Crc32::new();
         hasher.update(&Self::HASH_SHORT_MAGIC.to_le_bytes());
         hasher.update(&cc_seqno.to_le_bytes());
         hasher.update(&(subset.len() as u32).to_le_bytes());
@@ -730,7 +685,7 @@ impl ValidatorSetPRNG {
 
     fn reset(&mut self) -> u64 {
         // calc hash
-        let mut hash = Cursor::new(Sha512::digest(self.context));
+        let mut hash = Cursor::new(sha512_digest(self.context));
 
         // increment seed
         for i in (0..32).rev() {

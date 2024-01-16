@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -13,7 +13,7 @@
 
 use super::*;
 use crate::{
-    transactions::tests::generate_test_shard_account_block, write_read_and_assert, Block,
+    write_read_and_assert, Block,
     BlockExtra, Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit,
     BASE_WORKCHAIN_ID,
 };
@@ -190,7 +190,7 @@ fn test_mc_block_extra() {
     let extra = write_read_and_assert(extra);
 
     let mut block_extra = BlockExtra::default();
-    block_extra.write_account_blocks(&generate_test_shard_account_block()).unwrap();
+    block_extra.write_account_blocks(&crate::generate_test_shard_account_block()).unwrap();
     block_extra.write_custom(Some(&extra)).unwrap();
 
     write_read_and_assert(block_extra);

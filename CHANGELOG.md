@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.121
+
+- Removed extra crates base64, ed25519, sha2
+- Minor refactoring
+
 ## Version 1.9.120
 
 - Add new capability for disabling split of out queues during shard split

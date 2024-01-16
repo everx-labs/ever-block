@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -589,15 +589,6 @@ pub struct KeyMaxLt {
     pub max_end_lt: u64
 }
 
-impl KeyMaxLt {
-    pub const fn new() -> KeyMaxLt {
-        KeyMaxLt {
-            key: false,
-            max_end_lt: 0
-        }
-    }
-}
-
 impl Deserializable for KeyMaxLt {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         self.key.read_from(slice)?;
@@ -815,12 +806,6 @@ pub struct ShardFeeCreated {
 }
 
 impl ShardFeeCreated {
-    pub const fn new() -> ShardFeeCreated {
-        ShardFeeCreated {
-            fees: CurrencyCollection::new(),
-            create: CurrencyCollection::new(),
-        }
-    }
     pub fn with_fee(fees: CurrencyCollection) -> Self {
         Self {
             fees,
@@ -1098,18 +1083,6 @@ pub struct McStateExtra {
 const MC_STATE_EXTRA_TAG: u16 = 0xcc26;
 
 impl McStateExtra {
-    // pub const fn new() -> McStateExtra {
-    //     McStateExtra {
-    //         shards: ShardHashes::new(),
-    //         config: ConfigParams::new(),
-    //         validator_info: ValidatorInfo::new(),
-    //         prev_blocks: OldMcBlocksInfo::new(),
-    //         after_key_block: false,
-    //         last_key_block: None,
-    //         block_create_stats: None,
-    //         global_balance: CurrencyCollection::new(),
-    //     }
-    // }
     pub fn tag() -> u16 {
         0xcc26
     }

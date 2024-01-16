@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -122,8 +122,7 @@ fn test_merkle_update_with_hasmaps() {
 
         let old_cell = acc.serialize().unwrap();
         
-        let mut f = CurrencyCollection::new();
-        f.grams = Grams::new(a as u128).unwrap();
+        let f = CurrencyCollection::with_grams(a as u64);
         acc.add_funds(&f).unwrap();
 
         let data = SliceData::new(vec![(a & 0xff) as u8, 0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11111111,0b11110100]);

@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -69,9 +69,7 @@ pub struct EnqueuedMsg {
 
 impl EnqueuedMsg {
     /// New default instance EnqueuedMsg structure
-    pub fn new() -> Self {
-        Default::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// New instance EnqueuedMsg structure
     pub fn with_param(enqueued_lt: u64, env: &MsgEnvelope) -> Result<Self> {
@@ -301,9 +299,7 @@ pub struct ProofForWc {
 }
 
 impl OutMsgQueueInfo {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn with_params(
         out_queue: OutMsgQueue,
@@ -756,7 +752,7 @@ impl OutMsg {
 
 impl Augmentation<CurrencyCollection> for OutMsg {
     fn aug(&self) -> Result<CurrencyCollection> {
-        let mut exported = CurrencyCollection::new();
+        let mut exported = CurrencyCollection::default();
         match self {
             OutMsg::New(ref x) => {
                 let env = x.read_out_message()?;

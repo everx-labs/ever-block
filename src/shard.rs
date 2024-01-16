@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -60,12 +60,6 @@ impl Default for AccountIdPrefixFull {
 }
 
 impl AccountIdPrefixFull {
-    pub const fn default() -> Self {
-        Self {
-            workchain_id: INVALID_WORKCHAIN_ID,
-            prefix: 0,
-        }
-    }
     /// Tests address for validity (workchain_id != 0x80000000)
     pub fn is_valid(&self) -> bool {
         self.workchain_id != INVALID_WORKCHAIN_ID
@@ -759,9 +753,7 @@ pub struct ShardStateSplit {
 }
 
 impl ShardStateSplit {
-    pub fn new() -> Self {
-        ShardStateSplit::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn with_left_right(left: Cell, right: Cell) -> Self {
         ShardStateSplit { left, right }
