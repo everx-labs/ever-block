@@ -17,7 +17,6 @@ use crate::{
     write_read_and_assert_with_opts, Block,
     BlockExtra, Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit,
     BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY, CommonMessage, Transaction,
-    ProcessedInfoKey, ProcessedUpto,
 };
 use std::collections::{HashMap, HashSet};
 use ton_types::read_single_root_boc;
@@ -126,17 +125,8 @@ fn test_shard_descr_fast_finality() {
 }
 
 fn build_mesh_queue_descr() -> ConnectedNwOutDescr {
-    let mut proc_info = ProcessedInfo::default();
-    let pik = ProcessedInfoKey::with_params(1, 1111);
-    let put = ProcessedUpto::with_params(
-        111111, 
-        UInt256::from([1;32]), 
-        None
-    );
-    proc_info.set(&pik, &put).unwrap();
     ConnectedNwOutDescr {
-        out_queue_hash: UInt256::rand(),
-        proc_info,
+        out_queue_update: HashUpdate::with_hashes(UInt256::rand(), UInt256::rand()),
         exported: 1234567890.into(),
     }
 }
@@ -293,8 +283,11 @@ fn test_mc_block_extra_2() {
 
 #[test]
 fn test_mc_block_extra_3() {
+
+    std::env::set_var("RUST_BACKTRACE", "full");
+
     let mut extra = build_mc_block_extra(SERDE_OPTS_COMMON_MESSAGE);
-    extra.mesh_msg_queues_mut().set(&12345678, &build_mesh_descr()).unwrap();
+    extra.mesh_descr_mut().set(&12345678, &build_mesh_descr()).unwrap();
     write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE).unwrap();
 }
 

@@ -14,7 +14,7 @@
 use std::fs::{read, read_dir};
 use std::path::Path;
 
-use ton_types::{AccountId, Cell, read_boc};
+use ton_types::{AccountId, Cell, read_boc, UsageTree};
 use ton_types::read_single_root_boc;
 
 use crate::{Transaction, MsgEnvelope};
@@ -835,4 +835,43 @@ fn test_block_queue_updates_serde() {
     let cell = block.serialize_with_opts(SERDE_OPTS_COMMON_MESSAGE).unwrap();
     let block2 = Block::construct_from_cell_with_opts(cell, SERDE_OPTS_COMMON_MESSAGE).unwrap();
     assert_eq!(block2.out_msg_queue_updates, None);
+}
+
+
+fn create_block_proof() -> MerkleProof {
+    let block_root = read_single_root_boc(std::fs::read("src/tests/data/key_block.boc").unwrap()).unwrap();
+    let usage_tree = UsageTree::with_root(block_root.clone());
+    let block = Block::construct_from_cell(usage_tree.root_cell()).unwrap();
+    block.read_info().unwrap();
+    block.read_state_update().unwrap();
+    MerkleProof::create_by_usage_tree(&block_root, usage_tree).unwrap()
+}
+
+#[test]
+fn test_mesh_kit_serde() {
+    let mut mesh_kit = MeshKit::default();
+    mesh_kit.mc_block_part = create_block_proof();
+    mesh_kit.queues = MeshMsgQueuesKit::default();
+    mesh_kit.queues.add_queue(&ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), OutMsgQueueInfo::default()).unwrap();
+    mesh_kit.queues.add_queue(&ShardIdent::with_tagged_prefix(0, 0xc000_0000_0000_0000_u64).unwrap(), OutMsgQueueInfo::default()).unwrap();
+
+    let cell = mesh_kit.serialize().unwrap();
+    let mesh_kit2 = MeshKit::construct_from_cell(cell).unwrap();
+    assert_eq!(mesh_kit, mesh_kit2);
+}
+
+#[test]
+fn test_mesh_update_serde() {
+    let mut mesh_update = MeshUpdate::default();
+    mesh_update.mc_block_part = create_block_proof();
+    mesh_update.queue_updates = MeshMsgQueueUpdates::default();
+    mesh_update.queue_updates.add_queue_update(&ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), MerkleUpdate::default()).unwrap();
+    mesh_update.queue_updates.add_queue_update(&ShardIdent::with_tagged_prefix(0, 0xc000_0000_0000_0000_u64).unwrap(), MerkleUpdate::default()).unwrap();
+
+    mesh_update.queue_updates.get_queue_update(&ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap()).unwrap().unwrap();
+    mesh_update.queue_updates.get_queue_update(&ShardIdent::with_tagged_prefix(0, 0xc000_0000_0000_0000_u64).unwrap()).unwrap().unwrap();
+
+    let cell = mesh_update.serialize().unwrap();
+    let mesh_update2 = MeshUpdate::construct_from_cell(cell).unwrap();
+    assert_eq!(mesh_update, mesh_update2);
 }

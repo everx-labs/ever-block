@@ -24,7 +24,7 @@ use crate::{
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
     Serializable, Deserializable, ShardStateUnsplit, MerkleProof, MerkleUpdate, OutQueueUpdate,
-    SERDE_OPTS_EMPTY, SERDE_OPTS_COMMON_MESSAGE,
+    SERDE_OPTS_EMPTY, SERDE_OPTS_COMMON_MESSAGE, InRefValue,
 };
 use std::{fmt, collections::HashSet};
 use ton_types::{
@@ -273,7 +273,7 @@ impl fmt::LowerHex for OutMsgQueueKey {
     }
 }
 
-define_HashmapE!(MeshMsgQueuesInfo, 32, OutMsgQueueInfo);
+define_HashmapE!(MeshMsgQueuesInfo, 32, InRefValue<OutMsgQueueInfo>);
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub(crate) struct OutMsgQueuesInfo {

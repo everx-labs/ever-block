@@ -12,7 +12,7 @@
 */
 #![allow(clippy::inconsistent_digit_grouping, clippy::unusual_byte_groupings)]
 use ton_types::{read_single_root_boc, SliceData};
-use crate::{AccountIdPrefixFull, BlockIdExt};
+use crate::{AccountIdPrefixFull, BlockIdExt, InRefValue};
 use super::*;
 
 use std::{collections::HashSet, str::FromStr};
@@ -170,7 +170,7 @@ fn test_shard_state_unsplit_serialize_mesh() {
 
             let local = ss.read_out_msg_queue_info().unwrap();
             let mut mesh = MeshMsgQueuesInfo::default();
-            mesh.set(&123, &local.clone()).unwrap();
+            mesh.set(&123, &InRefValue(local.clone())).unwrap();
 
             ss.write_out_msg_queues_info(local, mesh).unwrap();
 

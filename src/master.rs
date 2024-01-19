@@ -24,7 +24,7 @@ use crate::{
     types::{ChildCell, CurrencyCollection, InRefValue},
     validators::ValidatorInfo,
     CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15,
-    Augmentation, SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, ProcessedInfo, VarUInteger32,
+    Augmentation, SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, VarUInteger32, HashUpdate,
 };
 use std::{collections::HashMap, fmt};
 use ton_types::{
@@ -527,10 +527,10 @@ impl McBlockExtra {
         Ok(())
     }
 
-    pub fn mesh_msg_queues(&self) -> &MeshHashesExt {
+    pub fn mesh_descr(&self) -> &MeshHashesExt {
         &self.mesh
     }
-    pub fn mesh_msg_queues_mut(&mut self) -> &mut MeshHashesExt {
+    pub fn mesh_descr_mut(&mut self) -> &mut MeshHashesExt {
         &mut self.mesh
     }
 }
@@ -1635,6 +1635,7 @@ const CONNECTED_NW_DESCR_EXT_TAG: u8 = 1; // 4 bits
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ConnectedNwDescrExt {
+    // Info about out queue from masterchain to connected network
     pub queue_descr: ConnectedNwOutDescr,
     pub descr: ConnectedNwDescr
 }
@@ -1671,8 +1672,7 @@ const CONNECTED_NW_QUEUE_DESCR_TAG: u8 = 1; // 4 bits
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ConnectedNwOutDescr {
-    pub out_queue_hash: UInt256,
-    pub proc_info: ProcessedInfo,
+    pub out_queue_update: HashUpdate,
     pub exported: VarUInteger32,
 }
 
@@ -1687,8 +1687,8 @@ impl Deserializable for ConnectedNwOutDescr {
                 }
             )
         }
-        self.out_queue_hash.read_from(slice)?;
-        self.proc_info.read_from(slice)?;
+        self.exported.read_from(slice)?;
+        self.out_queue_update.read_from_cell(slice.checked_drain_reference()?)?;
         Ok(())
     }
 }
@@ -1696,8 +1696,8 @@ impl Deserializable for ConnectedNwOutDescr {
 impl Serializable for ConnectedNwOutDescr {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_raw(&[CONNECTED_NW_QUEUE_DESCR_TAG], 4)?;
-        self.out_queue_hash.write_to(builder)?;
-        self.proc_info.write_to(builder)?;
+        self.exported.write_to(builder)?;
+        builder.checked_append_reference(self.out_queue_update.write_to_new_cell()?.into_cell()?)?;
         Ok(())
     }
 }

@@ -1849,7 +1849,7 @@ impl AccountBlock {
         Ok(())
     }
 
-    pub fn add_mesh_transaction(&mut self, nw_id: u32, transaction: &Transaction) -> Result<()> {
+    pub fn add_mesh_transaction(&mut self, nw_id: i32, transaction: &Transaction) -> Result<()> {
         self.add_serialized_mesh_transaction(
             nw_id,
             transaction,
@@ -1858,7 +1858,7 @@ impl AccountBlock {
     }
     pub fn add_serialized_mesh_transaction(
         &mut self,
-        nw_id: u32,
+        nw_id: i32,
         transaction: &Transaction,
         transaction_cell: &Cell
     ) -> Result<()> {
@@ -1909,13 +1909,13 @@ impl AccountBlock {
     }
 
     /// get sum of all acoount's transactions for connected network with given id
-    pub fn total_mesh_fee(&self, nw_id: u32) -> CurrencyCollection {
+    pub fn total_mesh_fee(&self, nw_id: i32) -> CurrencyCollection {
         self.mesh_transactions.get(&nw_id)
             .ok().flatten()
             .map(|trs| trs.root_extra().clone()).unwrap_or_default()
     }
 
-    pub fn transaction_count_mesh(&self, nw_id: u32) -> usize {
+    pub fn transaction_count_mesh(&self, nw_id: i32) -> usize {
         self.mesh_transactions.get(&nw_id)
             .ok().flatten()
             .map(|trs| trs.len().unwrap_or_default())

@@ -347,6 +347,14 @@ impl ConfigParams {
         }
     }
     // TODO 39 validator signed temp keys
+    // ConfigParam58(MeshConfig),
+    pub fn mesh_config(&self) -> Result<Option<MeshConfig>> {
+        match self.config(58)? {
+            Some(ConfigParamEnum::ConfigParam58(mc)) => Ok(Some(mc)),
+            None => Ok(None),
+            _ =>  fail!("wrong config 58 (mesh config)")
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

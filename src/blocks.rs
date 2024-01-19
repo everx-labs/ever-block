@@ -25,7 +25,7 @@ use crate::{
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32, AddSub},
     validators::ValidatorSet,
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, VarUInteger32,
-    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY,
+    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, MerkleProof, OutMsgQueueInfo,
 };
 use crate::RefShardBlocks;
 use std::borrow::Cow;
@@ -652,6 +652,112 @@ impl Serializable for OutQueueUpdate {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         self.is_empty.write_to(builder)?;
         builder.checked_append_reference(self.update.serialize()?)?;
+        Ok(())
+    }
+}
+
+// key is wc + shard
+define_HashmapE!(MeshMsgQueuesKit, 96, OutMsgQueueInfo);
+
+impl MeshMsgQueuesKit {
+    pub fn get_queue(&self, shard: &ShardIdent) -> Result<Option<OutMsgQueueInfo>> {
+        self.get_raw(shard.full_key()?)?
+            .map(|mut s| OutMsgQueueInfo::construct_from(&mut s))
+            .transpose()
+    }
+    pub fn add_queue(&mut self, shard: &ShardIdent, queue: OutMsgQueueInfo) -> Result<()> {
+        self.0.set_builder(
+            shard.full_key()?,
+            &queue.write_to_new_cell()?
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct MeshKit {
+    pub mc_block_part: MerkleProof,
+    // Contains full OutMsgQueueInfo from masterchain and all shardes to some connected network.
+    pub queues: MeshMsgQueuesKit,
+    pub signatures: BlockSignatures,
+}
+
+const MESH_KIT_TAG: u32 = 0x3FF11737;
+
+impl Deserializable for MeshKit {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let tag = slice.get_next_u32()?;
+        if tag != MESH_KIT_TAG {
+            fail!(BlockError::InvalidConstructorTag {
+                t: tag,
+                s: std::any::type_name::<Self>().to_string()
+            })
+        }
+        let mc_block_part = MerkleProof::construct_from_cell(slice.checked_drain_reference()?)?;
+        let queue_updates = MeshMsgQueuesKit::construct_from(slice)?;
+        let signatures = BlockSignatures::construct_from(slice)?;
+        Ok(MeshKit {mc_block_part, queues: queue_updates, signatures})
+    }
+}
+
+impl Serializable for MeshKit {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_u32(MESH_KIT_TAG)?;
+        builder.checked_append_reference(self.mc_block_part.serialize()?)?;
+        self.queues.write_to(builder)?;
+        self.signatures.write_to(builder)?;
+        Ok(())
+    }
+}
+
+define_HashmapE!(MeshMsgQueueUpdates, 96, InRefValue<MerkleUpdate>); // key - wc + shard
+
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct MeshUpdate {
+    pub mc_block_part: MerkleProof,
+    pub queue_updates: MeshMsgQueueUpdates,
+    pub signatures: BlockSignatures,
+}
+
+impl MeshMsgQueueUpdates {
+    pub fn get_queue_update(&self, shard: &ShardIdent) -> Result<Option<MerkleUpdate>> {
+        self.0.get(shard.full_key()?)?
+            .map(|mut s| InRefValue::<MerkleUpdate>::construct_from(&mut s).map(|r| r.inner()))
+            .transpose()
+    }
+    pub fn add_queue_update(&mut self, shard: &ShardIdent, update: MerkleUpdate) -> Result<()> {
+        self.0.set_builder(
+            shard.full_key()?,
+            &InRefValue::new(update).write_to_new_cell()?
+        )?;
+        Ok(())
+    }
+}
+
+const MESH_UPDATE_TAG: u32 = 0x2AF72591;
+
+impl Deserializable for MeshUpdate {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let tag = slice.get_next_u32()?;
+        if tag != MESH_UPDATE_TAG {
+            fail!(BlockError::InvalidConstructorTag {
+                t: tag,
+                s: std::any::type_name::<Self>().to_string()
+            })
+        }
+        let mc_block_part = MerkleProof::construct_from_cell(slice.checked_drain_reference()?)?;
+        let queue_updates = MeshMsgQueueUpdates::construct_from(slice)?;
+        let signatures = BlockSignatures::construct_from(slice)?;
+        Ok(MeshUpdate {mc_block_part, queue_updates, signatures})
+    }
+}
+
+impl Serializable for MeshUpdate {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_u32(MESH_UPDATE_TAG)?;
+        builder.checked_append_reference(self.mc_block_part.serialize()?)?;
+        self.queue_updates.write_to(builder)?;
+        self.signatures.write_to(builder)?;
         Ok(())
     }
 }
