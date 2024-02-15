@@ -11,6 +11,7 @@ mod tests;
 const TAG_STD: usize = 0;
 const TAG_MESH: usize = 1;
 
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum CommonMessage {
     Std(Message),
@@ -71,7 +72,7 @@ impl std::fmt::Display for CommonMessage {
 
 impl Serializable for CommonMessage {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-        Self::write_with_opts(&self, builder, SERDE_OPTS_EMPTY)
+        Self::write_with_opts(self, builder, SERDE_OPTS_EMPTY)
     }
     fn write_with_opts(&self, builder: &mut BuilderData, opts: u8) -> Result<()> {
         if opts == SERDE_OPTS_EMPTY {

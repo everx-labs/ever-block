@@ -1568,10 +1568,8 @@ fn serialize_block(
         builder2.checked_append_reference(block.state_update.cell())?;
         if let Some(qu) = &block.out_msg_queue_updates {
             qu.write_to(&mut builder2)?;
-        } else {
-            if tag == BLOCK_TAG_3 {
-                builder2.append_bit_zero()?;
-            }
+        } else if tag == BLOCK_TAG_3 {
+            builder2.append_bit_zero()?;
         }
         builder.checked_append_reference(builder2.into_cell()?)?;
     }

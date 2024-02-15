@@ -11,7 +11,7 @@
 * limitations under the License.
 */
 
-use crate::GetRepresentationHash;
+use crate::{GetRepresentationHash, SERDE_OPTS_EMPTY};
 use crate::{
     blocks::Block,
     define_HashmapE,
@@ -827,6 +827,7 @@ impl fmt::Display for CommonMsgInfo {
         }
     }
 }
+
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CommonMsgInfo{
@@ -1722,7 +1723,7 @@ impl StateInit {
     pub fn set_library(&mut self, val: Cell) {
         self.library = StateInitLib::with_hashmap(
             Some(val), 
-            crate::SERDE_OPTS_EMPTY
+            SERDE_OPTS_EMPTY
         );
     }
 

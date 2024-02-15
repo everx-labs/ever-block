@@ -164,7 +164,7 @@ pub struct ValidatorDescr {
     pub prev_weight_sum: u64,
 }
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for ValidatorDescr {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.public_key.as_slice().hash(state);
@@ -535,7 +535,7 @@ impl ValidatorSet {
                     next_validator.public_key.clone(),
                     1, // NB: shardchain validator lists have all weights = 1
                     next_validator.adnl_addr.clone(),
-                    next_validator.bls_public_key.clone(),
+                    next_validator.bls_public_key,
                 ));
                 debug_assert!(weight_remainder >= next_validator.weight);
                 weight_remainder -= next_validator.weight;
@@ -567,12 +567,12 @@ impl ValidatorSet {
 
     pub fn calc_subset_hash_short(subset: &[ValidatorDescr], cc_seqno: u32) -> Result<u32> {
         let mut hasher = Crc32::new();
-        hasher.update(&Self::HASH_SHORT_MAGIC.to_le_bytes());
-        hasher.update(&cc_seqno.to_le_bytes());
-        hasher.update(&(subset.len() as u32).to_le_bytes());
+        hasher.update(Self::HASH_SHORT_MAGIC.to_le_bytes());
+        hasher.update(cc_seqno.to_le_bytes());
+        hasher.update((subset.len() as u32).to_le_bytes());
         for vd in subset.iter() {
             hasher.update(vd.public_key.as_slice());
-            hasher.update(&vd.weight.to_le_bytes());
+            hasher.update(vd.weight.to_le_bytes());
             if let Some(addr) = vd.adnl_addr.as_ref() {
                 hasher.update(addr.as_slice());
             } else {

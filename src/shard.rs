@@ -1211,21 +1211,16 @@ impl Deserializable for ShardStateUnsplit {
         self.libraries.read_from(cell1)?;
         self.master_ref = BlkMasterInfo::read_maybe_from(cell1)?;
 
-        if tag == SHARD_STATE_UNSPLIT_PFX {
+        if tag == SHARD_STATE_UNSPLIT_PFX || self.shard_id.is_masterchain() {
             self.custom = ChildCell::construct_maybe_from_reference(cell)?;
             self.ref_shard_blocks = None;
         } else {
-            if self.shard_id.is_masterchain() {
-                self.custom = ChildCell::construct_maybe_from_reference(cell)?;
-                self.ref_shard_blocks = None;
+            self.custom = None;
+            self.ref_shard_blocks = if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+                Some(RefShardBlocks::construct_from(cell)?)
             } else {
-                self.custom = None;
-                self.ref_shard_blocks = if tag == SHARD_STATE_UNSPLIT_PFX_2 {
-                    Some(RefShardBlocks::construct_from(cell)?)
-                } else {
-                    RefShardBlocks::read_maybe_from(cell)?
-                };
-            }
+                RefShardBlocks::read_maybe_from(cell)?
+            };
         }
 
         Ok(())
