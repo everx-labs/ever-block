@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -30,7 +30,6 @@ use crate::{
     error::BlockError,
     hashmapaug::Augmentable,
     Serializable, Deserializable,
-    SERDE_OPTS_EMPTY,
 };
 
 #[cfg(test)]
@@ -137,7 +136,7 @@ macro_rules! define_VarIntegerN {
         }
 
         impl FromStr for $varname {
-            type Err = failure::Error;
+            type Err = ton_types::Error;
 
             fn from_str(string: &str) -> Result<Self> {
                 let result = if let Some(stripped) = string.strip_prefix("0x") {
@@ -230,7 +229,6 @@ macro_rules! define_VarIntegerN {
         pub struct $varname($tt);
 
         impl $varname {
-            pub const fn default() -> Self { $varname(0) }
             pub fn new(value: $tt) -> Result<Self> {
                 Self::check_overflow(&value)?;
                 Ok(Self(value))
@@ -313,7 +311,7 @@ macro_rules! define_VarIntegerN {
 
         #[cfg(not(test))]
         impl std::convert::TryFrom<$tt> for $varname {
-            type Error = failure::Error;
+            type Error = ton_types::Error;
             fn try_from(value: $tt) -> Result<Self> {
                 Self::check_overflow(&value)?;
                 Ok(Self(value))
@@ -550,7 +548,7 @@ impl Grams {
 }
 
 impl FromStr for Grams {
-    type Err = failure::Error;
+    type Err = ton_types::Error;
 
     fn from_str(string: &str) -> Result<Self> {
         if let Some(stripped) = string.strip_prefix("0x") {
@@ -573,9 +571,6 @@ macro_rules! define_NumberN_up32bit {
 
         #[allow(dead_code)]
         impl $varname {
-            pub const fn default() -> Self {
-                Self(0)
-            }
             pub fn new_checked(value: u32, max_value: u32) -> Result<Self> {
                 if value > max_value {
                     fail!(BlockError::InvalidArg(
@@ -663,7 +658,7 @@ define_HashmapE!{ExtraCurrencyCollection, 32, VarUInteger32}
 
 impl From<HashmapE> for ExtraCurrencyCollection {
     fn from(other: HashmapE) -> Self {
-        Self(other, SERDE_OPTS_EMPTY)
+        Self(other, crate::SERDE_OPTS_EMPTY)
     }
 }
 
@@ -704,42 +699,42 @@ impl From<u32> for Number32 {
 }
 
 impl std::convert::TryFrom<u32> for Number5 {
-    type Error = failure::Error;
+    type Error = ton_types::Error;
     fn try_from(value: u32) -> ton_types::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number8 {
-    type Error = failure::Error;
+    type Error = ton_types::Error;
     fn try_from(value: u32) -> ton_types::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number9 {
-    type Error = failure::Error;
+    type Error = ton_types::Error;
     fn try_from(value: u32) -> ton_types::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number12 {
-    type Error = failure::Error;
+    type Error = ton_types::Error;
     fn try_from(value: u32) -> ton_types::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number13 {
-    type Error = failure::Error;
+    type Error = ton_types::Error;
     fn try_from(value: u32) -> ton_types::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number16 {
-    type Error = failure::Error;
+    type Error = ton_types::Error;
     fn try_from(value: u32) -> ton_types::Result<Self> {
         Self::new(value)
     }
@@ -768,11 +763,6 @@ impl Augmentable for CurrencyCollection {
 }
 
 impl CurrencyCollection {
-    pub const fn default() -> Self { Self::new() }
-    pub const fn new() -> Self {
-        Self::from_grams(Grams::zero())
-    }
-
     pub fn get_other(&self, key: u32) -> Result<Option<VarUInteger32>> {
         self.other.get(&key)
     }
@@ -795,7 +785,7 @@ impl CurrencyCollection {
         Self::from_grams(Grams::from(grams))
     }
 
-    pub const fn from_grams(grams: Grams) -> Self {
+    pub fn from_grams(grams: Grams) -> Self {
         CurrencyCollection {
             grams,
             other: ExtraCurrencyCollection::default()
@@ -1088,6 +1078,12 @@ macro_rules! define_HashmapE {
             pub const fn with_hashmap(data: Option<Cell>, opts: u8) -> Self {
                 Self(HashmapE::with_hashmap($bit_len, data), opts)
             }
+            /// constructor with single element
+            pub fn with_key_and_value<K: Serializable>(key: &K, value: &$x_type) -> Result<Self> {
+                let mut hashmap = Self::default();
+                hashmap.set(key, value)?;
+                Ok(hashmap)
+            }
             pub fn root(&self) -> Option<&Cell> {
                 self.0.data()
             }
@@ -1311,7 +1307,6 @@ macro_rules! define_HashmapE {
 pub struct UnixTime32(u32);
 
 impl UnixTime32 {
-    pub const fn default() -> Self { Self(0) }
     pub const fn new(value: u32) -> Self {
         Self(value)
     }
@@ -1368,7 +1363,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         }
     }
     pub fn with_cell(cell: Cell) -> Self {
-        Self::with_cell_and_opts(cell, SERDE_OPTS_EMPTY)
+        Self::with_cell_and_opts(cell, crate::SERDE_OPTS_EMPTY)
     }
     pub fn with_cell_and_opts(cell: Cell, opts: u8) -> Self {
         Self {
@@ -1378,7 +1373,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         }
     }
     pub fn with_struct(s: &T) -> Result<Self> {
-        Ok(Self::with_cell_and_opts(s.serialize()?, SERDE_OPTS_EMPTY))
+        Ok(Self::with_cell_and_opts(s.serialize()?, crate::SERDE_OPTS_EMPTY))
     }
 
     pub fn with_struct_and_opts(s: &T, opts: u8) -> Result<Self> {

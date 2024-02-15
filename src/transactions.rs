@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -31,9 +31,11 @@ use ton_types::{
     SliceData, UInt256, UsageTree,
 };
 
+
+
 #[cfg(test)]
 #[path = "tests/test_transactions.rs"]
-pub mod tests;
+pub(crate) mod tests;
 
 /*
 acst_unchanged$0 = AccStatusChange;  // x -> x
@@ -77,7 +79,6 @@ impl Deserializable for AccStatusChange {
 cskip_no_state$00 = ComputeSkipReason;
 cskip_bad_state$01 = ComputeSkipReason;
 cskip_no_gas$10 = ComputeSkipReason;
-cskip_suspended$110 = ComputeSkipReason;
 */
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum ComputeSkipReason {
@@ -378,9 +379,6 @@ pub enum TrBouncePhase {
 }
 
 impl TrBouncePhase {
-    pub const fn default() -> Self {
-        TrBouncePhase::Negfunds
-    }
     pub const fn ok(msg_size: StorageUsedShort, msg_fees: Grams, fwd_fees: Grams) -> Self {
         TrBouncePhase::Ok(TrBouncePhaseOk::with_params(msg_size, msg_fees, fwd_fees))
     }
@@ -462,29 +460,17 @@ tr_phase_credit$_
     credit:CurrencyCollection
 = TrCreditPhase;
 */
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TrCreditPhase {
     pub due_fees_collected: Option<Grams>,
     pub credit: CurrencyCollection,
 }
 
 impl TrCreditPhase {
-    pub const fn default() -> Self {
-        TrCreditPhase::with_params(None, CurrencyCollection::default())
-    }
     pub const fn with_params(due_fees_collected: Option<Grams>, credit: CurrencyCollection) -> Self {
         TrCreditPhase {
             due_fees_collected,
             credit,
-        }
-    }
-}
-
-impl Default for TrCreditPhase {
-    fn default() -> Self {
-        TrCreditPhase {
-            due_fees_collected: None,
-            credit: CurrencyCollection::default(),
         }
     }
 }
@@ -510,7 +496,7 @@ tick$0 = TickTock;
 tock$1 = TickTock;
 There are two kinds of TickTock: in transaction and in messages.
 */
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Default, PartialEq, Eq, Clone, Debug)]
 pub enum TransactionTickTock {
     #[default]
     Tick,
@@ -1461,7 +1447,7 @@ impl Transaction {
     pub fn read_in_msg(&self) -> Result<Option<CommonMessage>> {
         match self.in_msg.empty() {
             true => Ok(None),
-            false => self.in_msg.read_struct().map(|x| Some(x))
+            false => self.in_msg.read_struct().map(Some),
         }
     }
 
@@ -2098,7 +2084,7 @@ impl ShardAccountBlocks {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone, Copy)]
 pub enum TransactionProcessingStatus {
     #[default]
     Unknown = 0,

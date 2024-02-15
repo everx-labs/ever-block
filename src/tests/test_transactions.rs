@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -13,8 +13,6 @@
 
 use crate::{write_read_and_assert, write_read_and_assert_with_opts, MsgAddressInt, MsgAddressExt, Message, CommonMessage};
 use super::*;
-#[allow(unused_imports)] // TBD when types fixed
-use std::str::FromStr;
 use std::sync::Arc;
 
 pub struct TestTransactionSet {
@@ -63,35 +61,6 @@ pub fn create_test_transaction_set() -> TestTransactionSet {
         in_msg,
         out_msgs: vec![int_msg, ext_msg, CommonMessage::Std(crate::messages::generate_big_msg())],
     }
-}
-
-pub fn generate_tranzaction(address : AccountId) -> Transaction {
-    generate_transaction_with_opts(address, SERDE_OPTS_EMPTY)
-}
-
-pub fn generate_transaction_with_opts(address : AccountId, opts: u8) -> Transaction {
-    let s_status_update = HashUpdate::default();
-    let s_tr_desc = TransactionDescr::default();
-
-    let data = create_test_transaction_set();
-    let mut tr = if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
-        Transaction::with_common_msg_support(address)
-    } else {
-        Transaction::with_address_and_status(
-            address,
-            data.orig_status.clone(),
-        )
-    };
-    tr.write_in_msg(Some(&data.in_msg)).unwrap();
-    for ref msg in data.out_msgs {
-        tr.add_out_message(msg).unwrap();
-    }
-    tr.set_logical_time(data.lt);
-    tr.set_end_status(AccountStatus::AccStateFrozen);
-    tr.set_total_fees(CurrencyCollection::with_grams(653));
-    tr.write_state_update(&s_status_update).unwrap();
-    tr.write_description(&s_tr_desc).unwrap();
-    tr
 }
 
 #[test]
@@ -157,32 +126,6 @@ fn test_account_block_serde_mesh() {
     assert!(matches!(write_read_and_assert_with_opts(account_block, SERDE_OPTS_EMPTY), Err(_)));
 }
 
-
-fn generate_account_block(address: AccountId, tr_count: usize, opts: u8) -> Result<AccountBlock> {
-
-    let s_status_update = HashUpdate::default();
-    let mut acc_block = AccountBlock::with_address_and_opts(address.clone(), opts);
-
-    for _ in 0..tr_count {
-        let transaction = generate_transaction_with_opts(address.clone(), opts);
-        acc_block.add_transaction(&transaction)?;
-    }
-    acc_block.write_state_update(&s_status_update).unwrap();
-
-    Ok(acc_block)
-}
-
-pub fn generate_test_shard_account_block(opts: u8) -> ShardAccountBlocks {
-    let mut shard_block = ShardAccountBlocks::with_serde_opts(opts);
-    
-    for n in 0..10 {
-        let address = AccountId::from([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,n as u8]);
-        let account_block = generate_account_block(address.clone(), n + 1, opts).unwrap();
-        shard_block.insert(&account_block).unwrap();
-    }
-    shard_block
-}
-
 #[test]
 fn test_shard_account_blocks_serde_empty() {
     let shard_block = generate_test_shard_account_block(SERDE_OPTS_EMPTY);
@@ -232,8 +175,8 @@ fn test_compute_phase() {
         exit_code: -65432,
         exit_arg: Some(-294579),
         vm_steps: 0xffffffff,
-        vm_init_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000001").unwrap(),
-        vm_final_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+        vm_init_state_hash: "1000000000000000000000000000000000000000000000000000000000000001".parse().unwrap(),
+        vm_final_state_hash: "1000000000000000000000000000000000000000000000000000000000000003".parse().unwrap(),
     }));
 
     write_read_and_assert(TrComputePhase::Vm(TrComputePhaseVm {
@@ -248,8 +191,8 @@ fn test_compute_phase() {
         exit_code: -65432,
         exit_arg: None,
         vm_steps: 0xffffffff,
-        vm_init_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000001").unwrap(),
-        vm_final_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+        vm_init_state_hash: "1000000000000000000000000000000000000000000000000000000000000001".parse().unwrap(),
+        vm_final_state_hash: "1000000000000000000000000000000000000000000000000000000000000003".parse().unwrap(),
     }));    
 }
 
@@ -348,7 +291,7 @@ fn test_tr_action_phase(){
         spec_actions: 5435,
         skipped_actions: 1,
         msgs_created: 12,
-        action_list_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+        action_list_hash: "1000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
         tot_msg_size: StorageUsedShort::with_values_checked(1,2).unwrap(),
     });
 
@@ -365,7 +308,7 @@ fn test_tr_action_phase(){
         spec_actions: 4,
         skipped_actions: 1,
         msgs_created: 12,
-        action_list_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+        action_list_hash: "1000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
         tot_msg_size: StorageUsedShort::with_values_checked(1,2).unwrap(),
     });
 }
@@ -375,8 +318,8 @@ fn test_split_merge_info() {
     write_read_and_assert(SplitMergeInfo {
         cur_shard_pfx_len: 0b00101111,
         acc_split_depth:  0,
-        this_addr: UInt256::from_str("6000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
-        sibling_addr: UInt256::from_str("3000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+        this_addr: "6000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
+        sibling_addr: "3000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
     });
 }
 
@@ -386,8 +329,8 @@ fn test_split_merge_info2() {
     write_read_and_assert(SplitMergeInfo {
         cur_shard_pfx_len: 0b01001111,
         acc_split_depth:  0,
-        this_addr: UInt256::from_str("6000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
-        sibling_addr: UInt256::from_str("3000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+        this_addr: "6000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
+        sibling_addr: "3000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
     });
 }
 
@@ -441,8 +384,8 @@ fn test_tr_descr_order() {
         exit_code: -65432,
         exit_arg: None,
         vm_steps: 0xffffffff,
-        vm_init_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000001").unwrap(),
-        vm_final_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+        vm_init_state_hash: "1000000000000000000000000000000000000000000000000000000000000001".parse().unwrap(),
+        vm_final_state_hash: "1000000000000000000000000000000000000000000000000000000000000003".parse().unwrap(),
     });
 
     // TrActionPhase //
@@ -459,7 +402,7 @@ fn test_tr_descr_order() {
         spec_actions: 5435,
         skipped_actions: 1,
         msgs_created: 12,
-        action_list_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+        action_list_hash: "1000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
         tot_msg_size: StorageUsedShort::with_values_checked(1,2).unwrap(),
     };
 
@@ -518,8 +461,8 @@ fn test_tr_descr_tick_tock() {
             exit_code: -65432,
             exit_arg: None,
             vm_steps: 0xffffffff,
-            vm_init_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000001").unwrap(),
-            vm_final_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+            vm_init_state_hash: "1000000000000000000000000000000000000000000000000000000000000001".parse().unwrap(),
+            vm_final_state_hash: "1000000000000000000000000000000000000000000000000000000000000003".parse().unwrap(),
         }),
         action: Some(TrActionPhase {
             success: true,
@@ -534,7 +477,7 @@ fn test_tr_descr_tick_tock() {
             spec_actions: 5435,
             skipped_actions: 1,
             msgs_created: 12,
-            action_list_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+            action_list_hash: "1000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
             tot_msg_size: StorageUsedShort::with_values_checked(1,2).unwrap(),
         }),
         aborted: false,
@@ -548,8 +491,8 @@ fn test_tr_descr_split_prepare() {
         split_info: SplitMergeInfo {
             cur_shard_pfx_len: 0b00101111,
             acc_split_depth:  0,
-            this_addr: UInt256::from_str("6000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
-            sibling_addr: UInt256::from_str("3000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+            this_addr: "6000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
+            sibling_addr: "3000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
         },
         compute_ph: TrComputePhase::Skipped(TrComputePhaseSkipped {
             reason: ComputeSkipReason::BadState,
@@ -567,7 +510,7 @@ fn test_tr_descr_split_prepare() {
             spec_actions: 5435,
             skipped_actions: 1,
             msgs_created: 12,
-            action_list_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+            action_list_hash: "1000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
             tot_msg_size: StorageUsedShort::with_values_checked(1,2).unwrap(),
         }),
         aborted: false,
@@ -578,8 +521,8 @@ fn test_tr_descr_split_prepare() {
         split_info: SplitMergeInfo {
             cur_shard_pfx_len: 0b00101111,
             acc_split_depth:  0,
-            this_addr: UInt256::from_str("6000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
-            sibling_addr: UInt256::from_str("3000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+            this_addr: "6000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
+            sibling_addr: "3000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
         },
         compute_ph: TrComputePhase::Vm(TrComputePhaseVm {
             success: true,
@@ -593,8 +536,8 @@ fn test_tr_descr_split_prepare() {
             exit_code: -65432,
             exit_arg: None,
             vm_steps: 0xffffffff,
-            vm_init_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000001").unwrap(),
-            vm_final_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+            vm_init_state_hash: "1000000000000000000000000000000000000000000000000000000000000001".parse().unwrap(),
+            vm_final_state_hash: "1000000000000000000000000000000000000000000000000000000000000003".parse().unwrap(),
         }),
         action: None,
         aborted: false,
@@ -608,8 +551,8 @@ fn test_tr_descr_split_install() {
         split_info: SplitMergeInfo {
             cur_shard_pfx_len: 0b00101111,
             acc_split_depth:  0,
-            this_addr: UInt256::from_str("6000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
-            sibling_addr: UInt256::from_str("3000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+            this_addr: "6000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
+            sibling_addr: "3000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
         },
         prepare_transaction: Arc::new(generate_tranzaction(AccountId::from([1; 32]))),
         installed: true,
@@ -622,8 +565,8 @@ fn test_tr_descr_mege_prepare() {
         split_info: SplitMergeInfo {
             cur_shard_pfx_len: 0b00101111,
             acc_split_depth:  0,
-            this_addr: UInt256::from_str("6000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
-            sibling_addr: UInt256::from_str("3000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+            this_addr: "6000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
+            sibling_addr: "3000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
         },
         storage_ph: TrStoragePhase {
             storage_fees_collected: 653.into(),
@@ -669,8 +612,8 @@ fn test_tr_descr_mege_install() {
         split_info: SplitMergeInfo {
             cur_shard_pfx_len: 0b00101111,
             acc_split_depth:  0,
-            this_addr: UInt256::from_str("6000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
-            sibling_addr: UInt256::from_str("3000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+            this_addr: "6000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
+            sibling_addr: "3000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
         },
         prepare_transaction: Arc::new(generate_tranzaction(AccountId::from([1; 32]))),
         credit_ph: Some(credit_phase),
@@ -686,8 +629,8 @@ fn test_tr_descr_mege_install() {
             exit_code: -65432,
             exit_arg: None,
             vm_steps: 0xffffffff,
-            vm_init_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000001").unwrap(),
-            vm_final_state_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+            vm_init_state_hash: "1000000000000000000000000000000000000000000000000000000000000001".parse().unwrap(),
+            vm_final_state_hash: "1000000000000000000000000000000000000000000000000000000000000003".parse().unwrap(),
         }),
         action: Some(TrActionPhase {
             success: true,
@@ -702,7 +645,7 @@ fn test_tr_descr_mege_install() {
             spec_actions: 5435,
             skipped_actions: 1,
             msgs_created: 12,
-            action_list_hash: UInt256::from_str("1000000000000000000000000000000000000000000000000000000000000055").unwrap(), 
+            action_list_hash: "1000000000000000000000000000000000000000000000000000000000000055".parse().unwrap(), 
             tot_msg_size: StorageUsedShort::with_values_checked(1,2).unwrap(),
         }),
         aborted: false,
@@ -714,8 +657,8 @@ fn test_tr_descr_mege_install() {
 fn test_hash_update_serialization()
 {
     let hu = HashUpdate::with_hashes(
-        UInt256::from_str("1000000000000000000000012300000000000000000000000000000000000001").unwrap(),
-        UInt256::from_str("1000000000000000000000000000004560000000000000000000000000000001").unwrap());
+        "1000000000000000000000012300000000000000000000000000000000000001".parse().unwrap(),
+        "1000000000000000000000000000004560000000000000000000000000000001".parse().unwrap());
     
     write_read_and_assert(hu);
 }
@@ -758,4 +701,60 @@ fn test_transaction_with_common_message() {
 fn test_shard_account_block() {
     let address = AccountId::from([0x11; 32]);
     generate_account_block(address, 32, SERDE_OPTS_EMPTY).unwrap();
+}
+
+
+#[allow(dead_code)]
+pub fn generate_tranzaction(address : AccountId) -> Transaction {
+    generate_transaction_with_opts(address, SERDE_OPTS_EMPTY)
+}
+
+pub fn generate_transaction_with_opts(address : AccountId, opts: u8) -> Transaction {
+    let s_status_update = HashUpdate::default();
+    let s_tr_desc = TransactionDescr::default();
+
+    let data = create_test_transaction_set();
+    let mut tr = if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+        Transaction::with_common_msg_support(address)
+    } else {
+        Transaction::with_address_and_status(
+            address,
+            data.orig_status.clone(),
+        )
+    };
+    tr.write_in_msg(Some(&data.in_msg)).unwrap();
+    for ref msg in data.out_msgs {
+        tr.add_out_message(msg).unwrap();
+    }
+    tr.set_logical_time(data.lt);
+    tr.set_end_status(AccountStatus::AccStateFrozen);
+    tr.set_total_fees(CurrencyCollection::with_grams(653));
+    tr.write_state_update(&s_status_update).unwrap();
+    tr.write_description(&s_tr_desc).unwrap();
+    tr
+}
+
+fn generate_account_block(address: AccountId, tr_count: usize, opts: u8) -> Result<AccountBlock> {
+
+    let s_status_update = HashUpdate::default();
+    let mut acc_block = AccountBlock::with_address_and_opts(address.clone(), opts);
+
+    for _ in 0..tr_count {
+        let transaction = generate_transaction_with_opts(address.clone(), opts);
+        acc_block.add_transaction(&transaction)?;
+    }
+    acc_block.write_state_update(&s_status_update).unwrap();
+
+    Ok(acc_block)
+}
+
+pub fn generate_test_shard_account_block(opts: u8) -> ShardAccountBlocks {
+    let mut shard_block = ShardAccountBlocks::with_serde_opts(opts);
+    
+    for n in 0..10 {
+        let address = AccountId::from([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,n as u8]);
+        let account_block = generate_account_block(address.clone(), n + 1, opts).unwrap();
+        shard_block.insert(&account_block).unwrap();
+    }
+    shard_block
 }

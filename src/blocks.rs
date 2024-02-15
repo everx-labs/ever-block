@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -132,7 +132,7 @@ impl Display for BlockIdExt {
 }
 
 impl FromStr for BlockIdExt {
-    type Err = failure::Error;
+    type Err = ton_types::Error;
 
     fn from_str(s: &str) -> Result<Self> {
         // (0:1800000000000000, 1203696, rh 59b6e56610aa5df5e8ee4cc5f1081cd5d08473f10e0899f7763d580b2a635f90, fh 1b4d177339538562d10166d87823783b7e747ee80d85d033459928fd0605a126)
@@ -290,9 +290,7 @@ impl Default for BlockInfo {
 
 impl BlockInfo {
 
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn version(&self) -> u32 { self.version }
     pub fn set_version(&mut self, version: u32) { self.version = version; }
@@ -970,17 +968,7 @@ pub struct BlockExtra {
 }
 
 impl BlockExtra {
-    pub fn new() -> BlockExtra {
-        BlockExtra {
-            in_msg_descr: ChildCell::default(),
-            out_msg_descr: ChildCell::default(),
-            account_blocks: ChildCell::default(),
-            rand_seed: UInt256::rand(),
-            created_by: UInt256::default(), // TODO: Need to fill?
-            custom: None,
-            ref_shard_blocks: RefShardBlocks::default(),
-        }
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn with_common_msg_support() -> BlockExtra {
         let opts = SERDE_OPTS_COMMON_MESSAGE;

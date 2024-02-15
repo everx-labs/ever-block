@@ -7,6 +7,19 @@ All notable changes to this project will be documented in this file.
 - New CommonMessage structure as a container of old `Message` and new types of messages.
 - New serialization option for ser/de operations with other structs.
 
+## Version 1.9.121
+
+- Removed extra crates base64, ed25519, sha2
+- Minor refactoring
+
+## Version 1.9.120
+
+- Add new capability for disabling split of out queues during shard split
+
+## Version 1.9.119
+
+- HashMapAug and OutMsgQueue insertion API extended
+
 ## Version 1.9.118
 
 - SMFT capability added

@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -18,7 +18,7 @@ use super::*;
 
 #[test]
 fn test_validator_info_new_default() {
-    let vi = ValidatorInfo::new();
+    let vi = ValidatorInfo::default();
     let vi2 = ValidatorInfo::default();
 
     assert_eq!(vi, vi2);
@@ -63,22 +63,20 @@ fn test_validator_desc_new_default() {
 
 #[test]
 fn test_validator_desc_info_new_with() {
-    let keypair = ed25519_dalek::Keypair::generate(&mut rand::thread_rng());
-    let spk = SigPubKey::from_bytes(&keypair.public.to_bytes()).unwrap();
-    let vd = ValidatorDescr::with_params(spk.clone(), 2121212121, None, None);
+    let keypair = ton_types::Ed25519KeyOption::generate().unwrap();
+    let key = SigPubKey::from_bytes(keypair.pub_key().unwrap()).unwrap();
+    let vd = ValidatorDescr::with_params(key.clone(), 2121212121, None, None);
 
-    assert_ne!(vd, ValidatorDescr::with_params(spk, 2, None, None));
+    assert_ne!(vd, ValidatorDescr::with_params(key, 2, None, None));
     write_read_and_assert(vd);
 }
 
 #[test]
 fn test_validator_set_serialize(){
-
-    let mut rng = rand::thread_rng();
     let mut list = vec!();
     for n in 0..20 {
-        let keypair = ed25519_dalek::Keypair::generate(&mut rng);
-        let key = SigPubKey::from_bytes(&keypair.public.to_bytes()).unwrap();
+        let keypair = ton_types::Ed25519KeyOption::generate().unwrap();
+        let key = SigPubKey::from_bytes(keypair.pub_key().unwrap()).unwrap();
         let vd = ValidatorDescr::with_params(key, n, None, None);
         list.push(vd);
     }

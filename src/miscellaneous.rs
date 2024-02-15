@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -142,9 +142,7 @@ pub struct IhrPendingSince {
 
 impl IhrPendingSince {
     /// New default instance IhrPendingSince structure
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     // New instance IhrPendingSince structure
     pub fn with_import_lt(import_lt: u64) -> Self {

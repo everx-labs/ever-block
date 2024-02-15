@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2022 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -81,8 +81,8 @@ pub use self::config_params::*;
 
 use std::{collections::HashMap, hash::Hash};
 use ton_types::{
-    error, fail, Result, AccountId, UInt256, BuilderData, Cell, IBitstring, SliceData, HashmapE, 
-    HashmapType, read_single_root_boc, write_boc,
+    fail, Result, AccountId, UInt256, BuilderData, Cell, IBitstring, SliceData, HashmapE, 
+    HashmapType, read_single_root_boc, write_boc, base64_decode,
 };
 
 include!("../common/src/info.rs");
@@ -154,8 +154,10 @@ pub trait Serializable {
 
     fn write_to_file(&self, file_name: impl AsRef<std::path::Path>) -> Result<()> {
         let bytes = self.write_to_bytes()?;
-        std::fs::write(file_name.as_ref(), bytes)?;
-        Ok(())
+        match std::fs::write(file_name.as_ref(), bytes) {
+            Ok(_) => Ok(()),
+            Err(err) => fail!("failed to write to file {}: {}", file_name.as_ref().display(), err)
+        }
     }
 
     fn serialize(&self) -> Result<Cell> {
@@ -196,6 +198,14 @@ pub trait Deserializable: Default {
             false => Ok(None)
         }
     }
+    fn construct_from_full_cell(cell: Cell) -> Result<Self> {
+        let mut slice = SliceData::load_cell(cell)?;
+        let obj = Self::construct_from(&mut slice)?;
+        if slice.remaining_bits() != 0 || slice.remaining_references() != 0 {
+            fail!("cell is not empty after deserializing {}", std::any::type_name::<Self>().to_string())
+        }
+        Ok(obj)
+    }
     fn construct_from_cell(cell: Cell) -> Result<Self> {
         Self::construct_from(&mut SliceData::load_cell(cell)?)
     }
@@ -211,12 +221,14 @@ pub trait Deserializable: Default {
     }
     /// adapter for tests
     fn construct_from_file(file_name: impl AsRef<std::path::Path>) -> Result<Self> {
-        let bytes = std::fs::read(file_name.as_ref())?;
-        Self::construct_from_bytes(&bytes)
+        match std::fs::read(file_name.as_ref()) {
+            Ok(bytes) => Self::construct_from_bytes(&bytes),
+            Err(err) => fail!("failed to read from file {}: {}", file_name.as_ref().display(), err)
+        }
     }
     /// adapter for tests
     fn construct_from_base64(string: &str) -> Result<Self> {
-        let bytes = base64::decode(string)?;
+        let bytes = base64_decode(string)?;
         Self::construct_from_bytes(&bytes)
     }
     // Override it to implement skipping
@@ -237,9 +249,9 @@ pub trait Deserializable: Default {
     fn read_from_reference(&mut self, slice: &mut SliceData) -> Result<()> {
         self.read_from_cell(slice.checked_drain_reference()?)
     }
-    fn invalid_tag(t: u32) -> failure::Error {
+    fn invalid_tag(t: u32) -> BlockError {
         let s = std::any::type_name::<Self>().to_string();
-        error!(BlockError::InvalidConstructorTag { t, s })
+        BlockError::InvalidConstructorTag { t, s }
     }
 }
 
@@ -355,14 +367,6 @@ impl Serializable for () {
     fn write_to(&self, _cell: &mut BuilderData) -> Result<()> {
         Ok(())
     }
-}
-
-pub fn id_from_key(key: &ed25519_dalek::PublicKey) -> u64 {
-    let bytes = key.to_bytes();
-    u64::from_be_bytes([ 
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5], bytes[6], bytes[7],
-    ])
 }
 
 #[cfg(test)]

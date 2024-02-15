@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -74,14 +74,7 @@ macro_rules! define_HashmapAugE {
                 self.opts
             }
             /// Constructs new HashmapAugE for bit_len keys
-            pub fn new() -> Self {
-                Self {
-                    extra: <$y_type>::default(),
-                    bit_len: $bit_len,
-                    data: None,
-                    opts: crate::SERDE_OPTS_EMPTY,
-                }
-            }
+            pub fn new() -> Self { Self::default() }
             pub fn with_serde_opts(opts: u8) -> Self {
                 Self {
                     extra: <$y_type>::default(),
@@ -404,13 +397,15 @@ pub trait HashmapAugType<
             None => Ok(None)
         }
     }
+    /// sets item to hashmapaug returning prev value if exists by key
+    fn set_return_prev(&mut self, key: &K, value: &X, aug: &Y) -> Result<Option<SliceData>> {
+        let key = SliceData::load_builder(key.write_to_new_cell_with_opts(self.serde_opts())?)?;
+        let value = value.write_to_new_cell_with_opts(self.serde_opts())?;
+        self.set_builder_serialized(key, &value, aug)
+    }
     /// sets item to hashmapaug
     fn set(&mut self, key: &K, value: &X, aug: &Y) -> Result<()> {
-        let key = SliceData::load_builder(
-            key.write_to_new_cell_with_opts(self.serde_opts())?
-        )?;
-        let value = value.write_to_new_cell_with_opts(self.serde_opts())?;
-        self.set_builder_serialized(key, &value, aug)?;
+        self.set_return_prev(key, value, aug)?;
         Ok(())
     }
     /// sets item to hashmapaug

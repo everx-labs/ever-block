@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -17,6 +17,7 @@ use std::path::Path;
 use ton_types::{AccountId, Cell, read_boc, UsageTree};
 use ton_types::read_single_root_boc;
 
+use crate::tests::create_test_transaction_set;
 use crate::{Transaction, MsgEnvelope};
 use crate::{
     hashmapaug::HashmapAugType,
@@ -24,7 +25,6 @@ use crate::{
     bintree::BinTreeType, transactions::tests::generate_test_shard_account_block,
     types::{AddSub, Grams}, OutMsg, CommonMessage
 };
-use crate::tests::create_test_transaction_set;
 use super::*;
 
 #[test]
@@ -49,14 +49,14 @@ fn test_blockinfo(block_info: BlockInfo) {
 
     let value_flow = ValueFlow {
         from_prev_blk: collection,
-        to_next_blk: CurrencyCollection::new(),
-        imported: CurrencyCollection::new(),
-        exported: CurrencyCollection::new(),
-        fees_collected: CurrencyCollection::new(),
-        fees_imported: CurrencyCollection::new(),
-        recovered: CurrencyCollection::new(),
-        created: CurrencyCollection::new(),
-        minted: CurrencyCollection::new(),
+        to_next_blk: CurrencyCollection::default(),
+        imported: CurrencyCollection::default(),
+        exported: CurrencyCollection::default(),
+        fees_collected: CurrencyCollection::default(),
+        fees_imported: CurrencyCollection::default(),
+        recovered: CurrencyCollection::default(),
+        created: CurrencyCollection::default(),
+        minted: CurrencyCollection::default(),
         copyleft_rewards: CopyleftRewards::new(),
         mesh_exported: MeshExported::new(),
     };
