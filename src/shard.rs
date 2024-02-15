@@ -963,6 +963,7 @@ impl ShardStateUnsplit {
         local: OutMsgQueueInfo,
         mesh: MeshMsgQueuesInfo
     ) -> Result<()> {
+        self.out_msg_queues_info.set_options(SERDE_OPTS_COMMON_MESSAGE);
         self.out_msg_queues_info.write_struct(&OutMsgQueuesInfo::with_params(local, mesh))
     }
 
@@ -1196,7 +1197,7 @@ impl Deserializable for ShardStateUnsplit {
         self.seq_no.read_from(cell)?;
         self.vert_seq_no.read_from(cell)?;
         self.gen_time.read_from(cell)?;
-        if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+        if tag == SHARD_STATE_UNSPLIT_PFX_2 || tag == SHARD_STATE_UNSPLIT_PFX_3 {
             self.gen_time_tail_ms.read_from(cell)?;
         }
         self.gen_lt.read_from(cell)?;
@@ -1221,13 +1222,17 @@ impl Deserializable for ShardStateUnsplit {
         if tag == SHARD_STATE_UNSPLIT_PFX {
             self.custom = ChildCell::construct_maybe_from_reference(cell)?;
             self.ref_shard_blocks = None;
-        } else if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+        } else {
             if self.shard_id.is_masterchain() {
                 self.custom = ChildCell::construct_maybe_from_reference(cell)?;
                 self.ref_shard_blocks = None;
             } else {
                 self.custom = None;
-                self.ref_shard_blocks = Some(RefShardBlocks::construct_from(cell)?);
+                self.ref_shard_blocks = if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+                    Some(RefShardBlocks::construct_from(cell)?)
+                } else {
+                    RefShardBlocks::read_maybe_from(cell)?
+                };
             }
         }
 
@@ -1237,10 +1242,10 @@ impl Deserializable for ShardStateUnsplit {
 
 impl Serializable for ShardStateUnsplit {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-        let tag = if self.ref_shard_blocks.is_some() || self.gen_time_tail_ms != 0 {
-            SHARD_STATE_UNSPLIT_PFX_2
-        } else if self.out_msg_queues_info.serde_opts() & SERDE_OPTS_COMMON_MESSAGE != 0 {
+        let tag = if self.out_msg_queues_info.serde_opts() & SERDE_OPTS_COMMON_MESSAGE != 0 {
             SHARD_STATE_UNSPLIT_PFX_3
+        } else if self.ref_shard_blocks.is_some() || self.gen_time_tail_ms != 0 {
+            SHARD_STATE_UNSPLIT_PFX_2
         } else {
             SHARD_STATE_UNSPLIT_PFX
         };
@@ -1275,13 +1280,16 @@ impl Serializable for ShardStateUnsplit {
             if self.custom.is_some() && self.ref_shard_blocks.is_some() {
                 fail!("'custom' and 'ref_shard_blocks' fields must not be present simultaneously");
             }
-            if let Some(rsb) = &self.ref_shard_blocks {
-                rsb.write_to(builder)?;
-            } else {
+            if self.shard_id.is_masterchain() {
                 ChildCell::write_maybe_to(builder, self.custom.as_ref())?;
+            } else if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+                if let Some(rsb) = &self.ref_shard_blocks {
+                    rsb.write_to(builder)?;
+                }
+            } else {
+                self.ref_shard_blocks.write_maybe_to(builder)?;
             }
         }
-
         Ok(())
     }
 }

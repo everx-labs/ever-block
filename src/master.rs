@@ -533,6 +533,9 @@ impl McBlockExtra {
     pub fn mesh_descr_mut(&mut self) -> &mut MeshHashesExt {
         &mut self.mesh
     }
+    pub fn serde_opts(&self) -> u8 {
+        self.serde_opts
+    }
 }
 
 const MC_BLOCK_EXTRA_TAG : u16 = 0xCCA5;   // Original struct.
@@ -590,6 +593,9 @@ impl Serializable for McBlockExtra {
         let common_message = opts & SERDE_OPTS_COMMON_MESSAGE != 0;
         if copyleft && common_message {
             fail!("copyleft and common messages is not supported together");
+        }
+        if !self.mesh.is_empty() && !common_message {
+            fail!("mesh is not empty but common messages option is not set");
         }
         let tag = if copyleft {
             MC_BLOCK_EXTRA_TAG_2
@@ -1267,10 +1273,10 @@ impl Deserializable for McStateExtra {
         let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         let mut flags = 0u16;
         flags.read_from(cell1)?; // 16 + 0
-        if flags > 4 {
+        if flags > 7 {
             fail!(
                 BlockError::InvalidData(
-                    format!("Invalid flags value ({}). Must be <= 4.", flags)
+                    format!("Invalid flags value ({}). Must be <= 7.", flags)
                 )
             )
         }
@@ -1637,7 +1643,7 @@ const CONNECTED_NW_DESCR_EXT_TAG: u8 = 1; // 4 bits
 pub struct ConnectedNwDescrExt {
     // Info about out queue from masterchain to connected network
     pub queue_descr: ConnectedNwOutDescr,
-    pub descr: ConnectedNwDescr
+    pub descr: Option<ConnectedNwDescr>
 }
 
 impl Deserializable for ConnectedNwDescrExt {
@@ -1652,16 +1658,16 @@ impl Deserializable for ConnectedNwDescrExt {
             )
         }
         self.queue_descr.read_from(slice)?;
-        self.descr.read_from(slice)?;
+        self.descr = ConnectedNwDescr::read_maybe_from(slice)?;
         Ok(())
     }
 }
 
 impl Serializable for ConnectedNwDescrExt {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-        builder.append_raw(&[CONNECTED_NW_DESCR_EXT_TAG], 4)?;
+        builder.append_bits(CONNECTED_NW_DESCR_EXT_TAG as usize, 4)?;
         self.queue_descr.write_to(builder)?;
-        self.descr.write_to(builder)?;
+        self.descr.write_maybe_to(builder)?;
         Ok(())
     }
 }
@@ -1695,7 +1701,7 @@ impl Deserializable for ConnectedNwOutDescr {
 
 impl Serializable for ConnectedNwOutDescr {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-        builder.append_raw(&[CONNECTED_NW_QUEUE_DESCR_TAG], 4)?;
+        builder.append_bits(CONNECTED_NW_QUEUE_DESCR_TAG as usize, 4)?;
         self.exported.write_to(builder)?;
         builder.checked_append_reference(self.out_queue_update.write_to_new_cell()?.into_cell()?)?;
         Ok(())

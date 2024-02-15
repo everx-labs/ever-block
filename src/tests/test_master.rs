@@ -13,10 +13,7 @@
 
 use super::*;
 use crate::{
-    transactions::tests::generate_test_shard_account_block, write_read_and_assert, 
-    write_read_and_assert_with_opts, Block,
-    BlockExtra, Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit,
-    BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY, CommonMessage, Transaction,
+    transactions::tests::generate_test_shard_account_block, write_read_and_assert, write_read_and_assert_with_opts, Block, BlockExtra, BlockInfo, CommonMessage, Deserializable, ExtBlkRef, HashmapAugType, MerkleUpdate, MsgAddressInt, ShardStateUnsplit, Transaction, ValueFlow, BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY
 };
 use std::collections::{HashMap, HashSet};
 use ton_types::read_single_root_boc;
@@ -134,13 +131,13 @@ fn build_mesh_queue_descr() -> ConnectedNwOutDescr {
 fn build_mesh_descr() -> ConnectedNwDescrExt {
     let mut descr = ConnectedNwDescrExt::default();
     descr.queue_descr = build_mesh_queue_descr();
-    descr.descr = ConnectedNwDescr {
+    descr.descr = Some(ConnectedNwDescr {
         seq_no: 34,
         root_hash: UInt256::rand(),
         file_hash: UInt256::rand(),
         imported: 1234567890.into(),
         gen_utime: 1234567890,
-    };
+    });
     descr
 }
 
@@ -275,6 +272,30 @@ fn test_common_msg_mcblockextra() {
 }
 
 #[test]
+fn test_mcblockextra_mesh() {
+
+    let mut mc_extra = build_mc_block_extra(SERDE_OPTS_COMMON_MESSAGE);
+    mc_extra.mesh_descr_mut().set(&7, &build_mesh_descr()).unwrap();
+    mc_extra.mesh_descr().get(&7).unwrap().unwrap();
+    let mc_extra2 = write_read_and_assert_with_opts(mc_extra.clone(), SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    mc_extra2.mesh_descr().get(&7).unwrap().unwrap();
+
+    let mut extra = BlockExtra::with_common_msg_support();
+    extra.write_custom(Some(&mc_extra)).unwrap();
+    let extra2 = write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    let mc_extra3 = extra2.read_custom().unwrap().unwrap();
+    mc_extra3.mesh_descr().get(&7).unwrap();
+
+    let block = Block::with_common_msg_support(
+        34, &BlockInfo::default(), &ValueFlow::default(), &MerkleUpdate::default(), None, &extra2
+    ).unwrap();
+    let block2 = write_read_and_assert_with_opts(block, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+
+    let mc_extra4 = block2.read_extra().unwrap().read_custom().unwrap().expect("need mc block extra");
+    mc_extra4.mesh_descr().get(&7).unwrap();
+}
+
+#[test]
 fn test_mc_block_extra_2() {
     let mut extra = build_mc_block_extra(0);
     extra.write_copyleft_msgs(&[InMsg::default(), InMsg::default()]).unwrap();
@@ -283,9 +304,6 @@ fn test_mc_block_extra_2() {
 
 #[test]
 fn test_mc_block_extra_3() {
-
-    std::env::set_var("RUST_BACKTRACE", "full");
-
     let mut extra = build_mc_block_extra(SERDE_OPTS_COMMON_MESSAGE);
     extra.mesh_descr_mut().set(&12345678, &build_mesh_descr()).unwrap();
     write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE).unwrap();

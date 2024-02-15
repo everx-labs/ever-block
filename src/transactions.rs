@@ -1988,7 +1988,7 @@ impl Serializable for AccountBlock {
             fail!("Account block with mesh transactions must be serialized with SERDE_OPTS_COMMON_MESSAGE");
         }
 
-        cell.append_bits(ACCOUNT_BLOCK_TAG, 4)?;
+        cell.append_bits(tag, 4)?;
         self.account_addr.write_to(cell)?;
         self.transactions.write_hashmap_root(cell)?;
         cell.checked_append_reference(self.state_update.cell())?;
@@ -2023,7 +2023,8 @@ impl Deserializable for AccountBlock {
 
         if tag == ACCOUNT_BLOCK_TAG_2 {
             let mut mtrs = MeshTransactions::with_serde_opts(SERDE_OPTS_COMMON_MESSAGE);
-            mtrs.read_from(slice)?;
+            mtrs.read_hashmap_root(slice)?;
+            self.mesh_transactions = mtrs;
         }
 
         Ok(())

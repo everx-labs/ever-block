@@ -378,11 +378,14 @@ pub fn write_read_and_assert_with_opts<T>(s: T, opts: u8) -> Result<T>
 where 
     T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq,
 {
-    let cell = s.write_to_new_cell_with_opts(opts)?;
-    let mut slice = SliceData::load_builder(cell)?;
+    let cell = s.write_to_new_cell_with_opts(opts)?.into_cell()?;
+    let mut slice = SliceData::load_cell_ref(&cell)?;
     println!("slice: {}", slice);
     let s2: T = T::construct_from_with_opts(&mut slice, opts)?;
-    s2.serialize_with_opts(opts)?;
+    let cell2 = s2.write_to_new_cell_with_opts(opts)?.into_cell()?;
     pretty_assertions::assert_eq!(s, s2);
+    if cell != cell2 {
+        panic!("write_read_and_assert_with_opts: cells are not equal\nleft: {:#.5}\nright: {:#.5}", cell, cell2)
+    }
     Ok(s2)
 }

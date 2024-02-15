@@ -661,13 +661,13 @@ define_HashmapE!(MeshMsgQueuesKit, 96, OutMsgQueueInfo);
 
 impl MeshMsgQueuesKit {
     pub fn get_queue(&self, shard: &ShardIdent) -> Result<Option<OutMsgQueueInfo>> {
-        self.get_raw(shard.full_key()?)?
+        self.get_raw(shard.full_key_with_tag()?)?
             .map(|mut s| OutMsgQueueInfo::construct_from(&mut s))
             .transpose()
     }
     pub fn add_queue(&mut self, shard: &ShardIdent, queue: OutMsgQueueInfo) -> Result<()> {
         self.0.set_builder(
-            shard.full_key()?,
+            shard.full_key_with_tag()?,
             &queue.write_to_new_cell()?
         )?;
         Ok(())
@@ -1052,7 +1052,7 @@ impl BlockExtra {
     }
 
     pub fn write_custom(&mut self, value: Option<&McBlockExtra>) -> Result<()> {
-        self.custom = value.map(ChildCell::with_struct).transpose()?;
+        self.custom = value.map(|s| ChildCell::with_struct_and_opts(s, s.serde_opts())).transpose()?;
         Ok(())
     }
 

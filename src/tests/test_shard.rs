@@ -12,7 +12,7 @@
 */
 #![allow(clippy::inconsistent_digit_grouping, clippy::unusual_byte_groupings)]
 use ton_types::{read_single_root_boc, SliceData};
-use crate::{AccountIdPrefixFull, BlockIdExt, InRefValue};
+use crate::{write_read_and_assert_with_opts, AccountIdPrefixFull, BlockIdExt, InRefValue};
 use super::*;
 
 use std::{collections::HashSet, str::FromStr};
@@ -154,9 +154,6 @@ fn test_shard_state_unsplit_serialize_fast_finality() {
 
 #[test]
 fn test_shard_state_unsplit_serialize_mesh() {
-    use crate::write_read_and_assert;
-
-    
     let in_path = "src/tests/data/shard_state.boc";
     let bytes = std::fs::read(in_path).unwrap();
     let root_cell = read_single_root_boc(&bytes).unwrap();
@@ -171,10 +168,15 @@ fn test_shard_state_unsplit_serialize_mesh() {
             let local = ss.read_out_msg_queue_info().unwrap();
             let mut mesh = MeshMsgQueuesInfo::default();
             mesh.set(&123, &InRefValue(local.clone())).unwrap();
+            ss.set_gen_lt(100500);
 
             ss.write_out_msg_queues_info(local, mesh).unwrap();
 
-            write_read_and_assert(ss);
+            let ss2 = write_read_and_assert_with_opts(ss, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+
+            assert_eq!(ss2.gen_lt(), 100500);
+
+            assert!(ss2.read_out_msg_queues_info().unwrap().1.len().unwrap() > 0);
         },
         ShardState::SplitState(_) => {
             unreachable!()
