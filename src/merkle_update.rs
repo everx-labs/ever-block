@@ -15,9 +15,9 @@ use crate::{
     error::BlockError,
     Serializable, Deserializable, MerkleProof,
 };
-use std::{collections::{HashMap, HashSet}, time::Duration};
+use std::{collections::{HashMap, HashSet}, sync::Arc, time::Duration};
 use ton_types::{
-    error, fail, Result, UInt256, BuilderData, Cell, CellType, IBitstring, LevelMask, SliceData,
+    error, fail, BuilderData, Cell, CellType, IBitstring, LevelMask, Result, SliceData, UInt256
 };
 
 #[cfg(test)]
@@ -28,6 +28,18 @@ mod tests;
 pub struct MerkleUdateApplyMetrics {
     pub loaded_old_cells: usize,
     pub loaded_old_cells_time: Duration,
+}
+
+
+pub trait CellsFactory : Send + Sync {
+    fn create_cell(self: Arc<Self>, builder: BuilderData) -> Result<Cell>;
+}
+
+pub struct DefaultCellsFactory;
+impl CellsFactory for DefaultCellsFactory {
+    fn create_cell(self: Arc<Self>, builder: BuilderData) -> Result<Cell> {
+        builder.into_cell()
+    }
 }
 
 /*
@@ -281,7 +293,10 @@ impl MerkleUpdate {
         if self.new_hash == self.old_hash {
             Ok(old_root.clone())
         } else {
-            let new_root = self.traverse_on_apply(&self.new, &old_cells, &mut HashMap::new(), 0)?;
+            let new_root = self.traverse_on_apply(
+                &self.new, &old_cells, &mut HashMap::new(), 0, 
+                &(Arc::new(DefaultCellsFactory) as Arc<dyn CellsFactory>)
+            )?;
 
             // constructed tree's hash have to coinside with self.new_hash
             if new_root.repr_hash() != self.new_hash {
@@ -293,6 +308,15 @@ impl MerkleUpdate {
     }
 
     pub fn apply_for_with_metrics(&self, old_root: &Cell) -> Result<(Cell, MerkleUdateApplyMetrics)> {
+        self.apply_for_with_cells_factory(old_root, 
+            &(Arc::new(DefaultCellsFactory) as Arc<dyn CellsFactory>))
+    }
+
+    pub fn apply_for_with_cells_factory(
+        &self, 
+        old_root: &Cell, 
+        factory: &Arc<dyn CellsFactory>,
+    ) -> Result<(Cell, MerkleUdateApplyMetrics)> {
 
         let mut metrics = MerkleUdateApplyMetrics::default();
 
@@ -302,7 +326,8 @@ impl MerkleUpdate {
         if self.new_hash == self.old_hash {
             Ok((old_root.clone(), MerkleUdateApplyMetrics::default()))
         } else {
-            let new_root = self.traverse_on_apply(&self.new, &old_cells, &mut HashMap::new(), 0)?;
+            let new_root = self.traverse_on_apply(
+                &self.new, &old_cells, &mut HashMap::new(), 0, factory)?;
 
             // constructed tree's hash have to coinside with self.new_hash
             if new_root.repr_hash() != self.new_hash {
@@ -355,7 +380,8 @@ impl MerkleUpdate {
         update_cell: &Cell,
         old_cells: &HashMap<UInt256, Cell>,
         new_cells: &mut HashMap<UInt256, Cell>,
-        merkle_depth: u8
+        merkle_depth: u8,
+        cells_factory: &Arc<dyn CellsFactory>,
     ) -> Result<Cell> {
 
         // We will recursively construct new skeleton for new cells 
@@ -379,7 +405,8 @@ impl MerkleUpdate {
                     if let Some(c) = new_cells.get(&new_child_hash) {
                         c.clone()
                     } else {
-                        let c = self.traverse_on_apply(update_child, old_cells, new_cells, child_merkle_depth)?;
+                        let c = self.traverse_on_apply(update_child, old_cells, new_cells, 
+                                        child_merkle_depth, cells_factory)?;
                         new_cells.insert(new_child_hash, c.clone());
                         c
                     }
@@ -395,7 +422,9 @@ impl MerkleUpdate {
                             .clone()
                     } else {
                         // else - just copy this cell (like an ordinary)
-                        update_child.clone()
+                        cells_factory.clone().create_cell(
+                            BuilderData::from_cell(update_child)?
+                        )?
                     }
                 },
                 _ => fail!("Unknown cell type while applying merkle update!")
@@ -407,7 +436,7 @@ impl MerkleUpdate {
         // Copy data from update to constructed cell
         new_cell.append_bytestring(&SliceData::load_cell_ref(update_cell)?)?;
 
-        new_cell.into_cell()
+        cells_factory.clone().create_cell(new_cell)
     }
 
     fn traverse_new_on_create(
