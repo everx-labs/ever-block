@@ -15,7 +15,7 @@ use crate::{
     error::BlockError,
     Serializable, Deserializable, MerkleProof,
 };
-use std::{collections::{HashMap, HashSet}, sync::Arc, time::Duration};
+use std::{collections::{HashMap, HashSet}, fmt::{Formatter, Display}, sync::Arc, time::Duration};
 use ton_types::{
     error, fail, BuilderData, Cell, CellType, IBitstring, LevelMask, Result, SliceData, UInt256
 };
@@ -68,6 +68,19 @@ impl Default for MerkleUpdate {
             old,
             new,
         }
+    }
+}
+
+impl Display for MerkleUpdate {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "MerkleUpdate (\
+            old_hash: {:x},\
+            new_hash: {:x},\
+            old_depth: {},\
+            new_depth: {},\
+            old: {:#.2},\
+            new: {:#.2}\
+        )", self.old_hash, self.new_hash, self.old_depth, self.new_depth, self.old, self.new)
     }
 }
 
