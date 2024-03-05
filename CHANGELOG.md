@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.125
+
+- added MerkleUpdate::apply_for_with_cells_factory
+
 ## Version 1.9.121
 
 - Removed extra crates base64, ed25519, sha2
