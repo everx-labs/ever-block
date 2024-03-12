@@ -7,6 +7,10 @@ All notable changes to this project will be documented in this file.
 - New CommonMessage structure as a container of old `Message` and new types of messages.
 - New serialization option for ser/de operations with other structs.
 
+## Version 1.9.125
+
+- added MerkleUpdate::apply_for_with_cells_factory
+
 ## Version 1.9.121
 
 - Removed extra crates base64, ed25519, sha2
