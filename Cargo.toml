@@ -2,7 +2,7 @@
 build = 'common/build/build.rs'
 edition = '2021'
 name = 'ton_block'
-version = '1.9.135'
+version = '1.9.136'
 
 [dependencies]
 failure = '0.1'
@@ -11,7 +11,7 @@ log = '0.4'
 num = '0.4'
 num-traits = '0.2'
 sha2 = '0.10'
-ton_types = { git = 'https://github.com/tonlabs/ever-types.git', tag = '2.0.36' }
+ton_types = { git = 'https://github.com/tonlabs/ever-types.git', tag = '2.0.37' }
 
 [dev-dependencies]
 pretty_assertions = '1.3'
