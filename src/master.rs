@@ -411,7 +411,8 @@ impl ShardFees {
             prefix: shard.shard_prefix_with_tag(),
         };
         let fee = ShardFeeCreated{fees, create: created};
-        self.set(&id, &fee, &fee)
+        self.set(&id, &fee, &fee)?;
+        Ok(())
     }
 }
 

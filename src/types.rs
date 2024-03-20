@@ -1126,18 +1126,18 @@ macro_rules! define_HashmapE {
                 self.0.iterate_slices(|key, slice| p(key, slice))
             }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 let value = value.write_to_new_cell()?;
                 self.0.set_builder(key, &value)?;
                 Ok(())
             }
             pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 self.0.setref(key, value)?;
                 Ok(())
             }
             pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 let value = BuilderData::default();
                 self.0.set_builder(key, &value)?;
                 Ok(())
@@ -1147,19 +1147,19 @@ macro_rules! define_HashmapE {
                     .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             }
             pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 self.get_raw(key)
             }
             pub fn get_raw(&self, key: SliceData) -> Result<Option<SliceData>> {
                 self.0.get(key)
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 let leaf = self.0.remove(key)?;
                 Ok(leaf.is_some())
             }
             pub fn check_key<K: Serializable>(&self, key: &K) -> Result<bool> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 self.0.get(key).map(|value| value.is_some())
             }
             pub fn export_vector(&self) -> Result<Vec<$x_type>> {
@@ -1218,7 +1218,7 @@ macro_rules! define_HashmapE {
                 eq: bool,
                 signed_int: bool,
             ) -> Result<Option<(K, $x_type)>> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 if let Some((k, mut v)) = self.0.find_leaf(key, next, eq, signed_int, &mut 0)? {
                     // BuilderData, SliceData
                     let key = K::construct_from_cell(k.into_cell()?)?;

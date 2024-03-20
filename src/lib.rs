@@ -93,7 +93,7 @@ where
         let bit_len = K::default().write_to_new_cell()?.length_in_bits();
         let mut dictionary = HashmapE::with_bit_len(bit_len);
         for (key, value) in self.iter() {
-            let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+            let key = key.write_to_bitstring()?;
             dictionary.set_builder(key, &value.write_to_new_cell()?)?;
         }
         dictionary.write_to(cell)
@@ -139,6 +139,12 @@ pub trait Serializable {
         let mut cell = BuilderData::new();
         self.write_to(&mut cell)?;
         Ok(cell)
+    }
+
+    fn write_to_bitstring(&self) -> Result<SliceData> {
+        let mut cell = BuilderData::new();
+        self.write_to(&mut cell)?;
+        SliceData::load_bitstring(cell)
     }
 
     fn write_to_bytes(&self) -> Result<Vec<u8>> {
