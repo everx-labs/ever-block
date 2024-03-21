@@ -308,7 +308,7 @@ pub trait HashmapAugType<
     }
     /// gets aug and item in combined slice
     fn get_raw(&self, key: &K) -> Leaf {
-        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+        let key = key.write_to_bitstring()?;
         self.get_serialized_raw(key)
     }
     /// get item as slice
@@ -351,7 +351,12 @@ pub trait HashmapAugType<
     }
     /// sets item to hashmapaug returning prev value if exists by key
     fn set_return_prev(&mut self, key: &K, value: &X, aug: &Y) -> Result<Option<SliceData>> {
-        let key = SliceData::load_builder(key.write_to_new_cell()?)?;
+        let (value, _) = self.set_with_prev_and_depth(key, &value, aug)?;
+        Ok(value)
+    }
+    /// sets item to hashmapaug returning prev value if exists by key and depth of tree
+    fn set_with_prev_and_depth(&mut self, key: &K, value: &X, aug: &Y) -> Result<(Option<SliceData>, usize)> {
+        let key = key.write_to_bitstring()?;
         let value = value.write_to_new_cell()?;
         self.set_builder_serialized(key, &value, aug)
     }
@@ -360,9 +365,9 @@ pub trait HashmapAugType<
         self.set_return_prev(key, value, aug)?;
         Ok(())
     }
-    /// sets item to hashmapaug
+    /// sets item to hashmapaug, aug automatically calculates by value
     fn set_augmentable(&mut self, key: &K, value: &X) -> Result<()> {
-        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+        let key = key.write_to_bitstring()?;
         let aug = value.aug()?;
         let value = value.write_to_new_cell()?;
         self.set_builder_serialized(key, &value, &aug)?;
@@ -370,7 +375,7 @@ pub trait HashmapAugType<
     }
     /// sets item to hashmapaug as ref
     fn setref(&mut self, key: &K, value: &Cell, aug: &Y) -> Result<()> {
-        let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+        let key = key.write_to_bitstring()?;
         let value = value.write_to_new_cell()?;
         self.set_builder_serialized(key, &value, aug)?;
         Ok(())
@@ -528,7 +533,8 @@ pub trait HashmapAugType<
     #[cfg(test)]
     /// Puts element to the tree
     fn set_serialized(&mut self, key: SliceData, leaf: &SliceData, extra: &Y) -> Result<Option<SliceData>> {
-        self.set_builder_serialized(key, &leaf.as_builder(), extra)
+        let (value, _) = self.set_builder_serialized(key, &leaf.as_builder(), extra)?;
+        Ok(value)
     }
     /// Puts element to the tree
     fn set_builder_serialized(
@@ -536,24 +542,24 @@ pub trait HashmapAugType<
         key: SliceData, 
         leaf: &BuilderData, 
         extra: &Y
-    ) -> Result<Option<SliceData>> {
+    ) -> Result<(Option<SliceData>, usize)> {
         let bit_len = self.bit_len();
         Self::check_key_fail(bit_len, &key)?;
         // ahme_empty$0 {n:#} {X:Type} {Y:Type} extra:Y = HashmapAugE n X Y;
         // ahme_root$1 {n:#} {X:Type} {Y:Type} root:^(HashmapAug n X Y) extra:Y = HashmapAugE n X Y;
-        let result = if let Some(mut root) = self.data().cloned() {
-            let (result, extra) = Self::put_to_node(&mut root, bit_len, key, leaf, extra)?;
+        if let Some(mut root) = self.data().cloned() {
+            let mut depth = 0;
+            let (result, extra) = Self::put_to_node(&mut root, bit_len, key, leaf, extra, &mut depth)?;
             self.set_root_extra(extra);
             *self.data_mut() = Some(root);
-            result
+            Ok((result, depth))
         } else {
             self.set_root_extra(extra.clone());
             *self.data_mut() = Some(Self::make_cell_with_label_and_builder(
                 key, bit_len, true, &Self::combine(extra, leaf)?
             )?.into_cell()?);
-            None
-        };
-        Ok(result)
+            Ok((None, 0))
+        }
     }
     // Puts element to required branch by first bit
     fn put_to_fork(
@@ -561,7 +567,8 @@ pub trait HashmapAugType<
         bit_len: usize,
         mut key: SliceData,
         leaf: &BuilderData,
-        extra: &Y
+        extra: &Y,
+        depth: &mut usize,
     ) -> AugResult<Y> {
         let next_index = key.get_next_bit_int()?;
         // ahmn_fork#_ {n:#} {X:Type} {Y:Type} left:^(HashmapAug n X Y) right:^(HashmapAug n X Y) extra:Y
@@ -574,7 +581,7 @@ pub trait HashmapAugType<
         let mut references = slice.shrink_references(2..); // left and right, drop extra
         assert_eq!(references.len(), 2);
         let mut fork_extra = Self::find_extra(&mut SliceData::load_cell_ref(&references[1 - next_index])?, bit_len - 1)?;
-        let (result, extra) = Self::put_to_node(&mut references[next_index], bit_len - 1, key, leaf, extra)?;
+        let (result, extra) = Self::put_to_node(&mut references[next_index], bit_len - 1, key, leaf, extra, depth)?;
         fork_extra.calc(&extra)?;
         let mut builder = BuilderData::new();
         for reference in references.drain(..) {
@@ -582,6 +589,7 @@ pub trait HashmapAugType<
         }
         fork_extra.write_to(&mut builder)?;
         *slice = SliceData::load_builder(builder)?;
+        *depth += 1;
         Ok((result, fork_extra))
     }
     // Continues or finishes search of place
@@ -590,7 +598,8 @@ pub trait HashmapAugType<
         bit_len: usize,
         key: SliceData,
         leaf: &BuilderData,
-        extra: &Y
+        extra: &Y,
+        depth: &mut usize,
     ) -> AugResult<Y> {
         let result;
         let mut slice = SliceData::load_cell_ref(cell)?;
@@ -605,24 +614,27 @@ pub trait HashmapAugType<
             )?
         } else if label.is_empty() {
             // 1-bit edge just recalc extra
-            result = Self::put_to_fork(&mut slice, bit_len, key, leaf, extra);
+            result = Self::put_to_fork(&mut slice, bit_len, key, leaf, extra, depth);
             Self::make_cell_with_label_and_data(label, bit_len, false, &slice)?
         } else {
             match SliceData::common_prefix(&label, &key) {
                 (label_prefix, Some(label_remainder), Some(key_remainder)) => {
                     // new leaf insert 
-                    let extra = Self::slice_edge(
-                        &mut slice, bit_len,
-                        label_prefix.unwrap_or_default(), label_remainder, key_remainder,
+                    let (extra, builder) = Self::slice_edge(
+                        slice, label_remainder,
+                        label_prefix.unwrap_or_default(), bit_len,
+                        key_remainder,
                         leaf, extra,
                     )?;
-                    *cell = slice.into_cell();
+                    // makes one pruned branch
+                    *cell = builder.into_cell()?;
+                    *depth = 1;
                     return Ok((None, extra))
                 }
                 (Some(prefix), None, Some(key_remainder)) => {
                     // next iteration
                     result = Self::put_to_fork(
-                        &mut slice, bit_len - prefix.remaining_bits(), key_remainder, leaf, extra
+                        &mut slice, bit_len - prefix.remaining_bits(), key_remainder, leaf, extra, depth
                     );
                     Self::make_cell_with_label_and_data(label, bit_len, false, &slice)?
                 }
@@ -642,22 +654,22 @@ pub trait HashmapAugType<
     }
     // Slices the edge and put new leaf
     fn slice_edge(
-        slice: &mut SliceData, // slice without label
-        bit_len: usize,
-        prefix: SliceData,
-        mut label: SliceData,
+        mut slice: SliceData, // leftover data after label reading - we don't know if it is lead or fork
+        mut label: SliceData, // label of the leftover
+        prefix: SliceData,    // label for new fork
+        bit_len: usize,       // total length of key on this level
         mut key: SliceData,
         leaf: &BuilderData,
         extra: &Y
-    ) -> Result<Y> {
+    ) -> Result<(Y, BuilderData)> {
         key.shrink_data(1..);
-        let label_bit = label.get_next_bit()?;
-        let length = bit_len - 1 - prefix.remaining_bits();
+        let label_bit = label.get_next_bit()?; // we must know if it left or right
+        let length = bit_len - 1 - prefix.remaining_bits(); // 
         let is_leaf = length == label.remaining_bits();
         // Common prefix
         let mut builder = Self::make_cell_with_label(prefix, bit_len)?;
         // Remainder of tree
-        let existing_cell = Self::make_cell_with_label_and_data(label, length, is_leaf, slice)?;
+        let existing_cell = Self::make_cell_with_label_and_data(label, length, is_leaf, &slice)?;
         // AugResult<Y> for fork
         if !is_leaf {
             if slice.remaining_references() < 2 {
@@ -665,7 +677,7 @@ pub trait HashmapAugType<
             }
             slice.shrink_references(2..); // drain left, right
         }
-        let mut fork_extra = Y::construct_from(slice)?;
+        let mut fork_extra = Y::construct_from(&mut slice)?;
         fork_extra.calc(extra)?;
         // Leaf for fork
         let another_cell = Self::make_cell_with_label_and_builder(key, length, true, &Self::combine(extra, leaf)?)?;
@@ -677,8 +689,7 @@ pub trait HashmapAugType<
             builder.checked_append_reference(existing_cell.into_cell()?)?;
         };
         fork_extra.write_to(&mut builder)?;
-        *slice = SliceData::load_builder(builder)?;
-        Ok(fork_extra)
+        Ok((fork_extra, builder))
     }
     // Combines extra with leaf
     fn combine(extra: &Y, leaf: &BuilderData) -> Result<BuilderData> {
@@ -792,7 +803,7 @@ pub trait HashmapAugRemover<
         })
     }
     fn del(&mut self, key: &Y) -> Result<()> {
-        self.remove(SliceData::load_bitstring(key.write_to_new_cell()?)?)?;
+        self.remove(key.write_to_bitstring()?)?;
         Ok(())
     }
 }

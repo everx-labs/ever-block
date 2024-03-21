@@ -159,8 +159,10 @@ impl OutMsgDescr {
         msg_slice: &SliceData, 
         exported: &CurrencyCollection
     ) -> Result<Option<SliceData>> {
-        self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), exported)
-            .map_err(|_| error!(BlockError::Other("Error insert serialized message".to_string())))
+        match self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), exported) {
+            Ok((result, _)) => Ok(result),
+            Err(err) => fail!(BlockError::Other(format!("Error insert serialized message: {}", err)))
+        }
     }
     pub fn insert_serialized(
         &mut self, 

@@ -107,7 +107,7 @@ impl MerkleProof {
             )
         }
         let mut done_cells = HashMap::new();
-        let proof = Self::create_raw(root, &is_include, &|_| false, 0, &mut None, &mut done_cells)?;
+        let proof = MerkleProof::create_raw(root, &is_include, &|_| false, 0, &mut None, &mut done_cells)?;
 
         Ok(MerkleProof {
             hash: root.repr_hash(),
@@ -136,7 +136,7 @@ impl MerkleProof {
             )
         }
         let mut done_cells = HashMap::new();
-        let proof = Self::create_raw(root, &is_include, &is_include_subtree, 0, &mut None, &mut done_cells)?;
+        let proof = MerkleProof::create_raw(root, &is_include, &is_include_subtree, 0, &mut None, &mut done_cells)?;
 
         Ok(MerkleProof {
             hash: root_hash,
@@ -151,7 +151,7 @@ impl MerkleProof {
         is_include_subtree: &impl Fn(&UInt256) -> bool,
         merkle_depth: u8,
         pruned_branches: &mut Option<HashSet<UInt256>>,
-        done_cells: &mut HashMap<UInt256, Cell>,
+        done_cells: &mut HashMap<UInt256, Cell>, // map with pruned cells
     ) -> Result<Cell> {
 
         let child_merkle_depth = if cell.is_merkle() { 
@@ -161,7 +161,6 @@ impl MerkleProof {
         };
 
         let mut proof_cell = BuilderData::from_cell(cell)?;
-        let mut child_mask = cell.level_mask();
         let n = cell.references_count();
         for i in 0..n {
             let child = cell.reference(i)?;
@@ -169,10 +168,12 @@ impl MerkleProof {
             let proof_child = if let Some(c) = done_cells.get(&child_repr_hash) {
                 c.clone()
             } else if is_include_subtree(&child_repr_hash) {
-                child.clone()
-            } else if child.references_count() == 0 || is_include(&child.repr_hash()) {
-                Self::create_raw(&child, is_include, is_include_subtree, child_merkle_depth, 
-                    pruned_branches, done_cells)?
+                child
+            } else if child.references_count() == 0 {
+                done_cells.insert(child_repr_hash, child.clone());
+                child
+            } else if is_include(&child_repr_hash) {
+                MerkleProof::create_raw(&child, is_include, is_include_subtree, child_merkle_depth, pruned_branches, done_cells)?
             } else {
                 let pbc = MerkleUpdate::make_pruned_branch_cell(&child, child_merkle_depth)?;
                 if let Some(pruned_branches) = pruned_branches.as_mut() {
@@ -180,7 +181,6 @@ impl MerkleProof {
                 }
                 pbc.into_cell()?
             };
-            child_mask |= proof_child.level_mask();
             proof_cell.replace_reference_cell(i, proof_child);
         }
 

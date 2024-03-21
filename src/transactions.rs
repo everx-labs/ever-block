@@ -1883,7 +1883,8 @@ impl ShardAccountBlocks {
             account_block.account_addr.clone(),
             &account_block.write_to_new_cell()?,
             account_block.total_fee()
-        ).map(|_|())
+        )?;
+        Ok(())
     }
 
     /// adds transaction to account by id from transaction

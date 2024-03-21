@@ -78,17 +78,17 @@ fn test_merkle_proof1() {
     assert_eq!(proof, proof2);
 }
 
+fn create_cell(bytes: &[u8], refs: &[&Cell]) -> Cell {
+    let mut c = BuilderData::new();
+    c.append_raw(bytes, bytes.len() * 8).unwrap();
+    for child in refs {
+        c.checked_append_reference((*child).clone()).unwrap();
+    }
+    c.into_cell().unwrap()
+}
+
 #[test]
 fn test_merkle_proof_with_subtrees() {
-    fn create_cell(bytes: &[u8], refs: &[&Cell]) -> Cell {
-        let mut c = BuilderData::new();
-        c.append_raw(bytes, bytes.len() * 8).unwrap();
-        for child in refs {
-            c.checked_append_reference((*child).clone()).unwrap();
-        }
-        c.into_cell().unwrap()
-    }
-
     /*
           root
       c5        c6
@@ -555,4 +555,91 @@ fn test_check_wrong_account_proof() {
             })
             .unwrap();
     }
+}
+
+#[test]
+fn test_inner_merkle_proof() {
+    /*
+          root
+      c5        c6
+    c1  c2    c3  c4  
+              c1  c2
+    */
+    let mut hashes = HashSet::new();
+    let c1 = create_cell(&[1, 1, 1], &[]);
+    hashes.insert(c1.repr_hash());
+    let c2 = create_cell(&[2, 2, 2], &[]);
+    hashes.insert(c2.repr_hash());
+    let c3 = create_cell(&[3, 3, 3], &[&c1]);
+    hashes.insert(c3.repr_hash());
+    let c4 = create_cell(&[4, 4, 4], &[&c2]);
+    hashes.insert(c4.repr_hash());
+    let c5 = create_cell(&[5, 5, 5], &[&c1, &c2]);
+    let c6 = create_cell(&[6, 6, 6], &[&c3, &c4]);
+    hashes.insert(c6.repr_hash());
+    let tree = create_cell(&[1], &[&c5, &c6]);
+    hashes.insert(tree.repr_hash());
+
+
+    // proof for c1 and c2
+        /*
+          root
+    pruned      c6
+              c3  c4  
+              c1  c2
+    */
+
+    let proof1 = MerkleProof::create(
+        &tree,
+        |h| hashes.contains(h),
+    ).unwrap().serialize().unwrap();
+    // println!("proof 1\n{:#.100}", proof1);
+
+    // proof for c1 in proof
+        /*
+          root
+pruned_001      c6
+              c3  pruned_010
+              c1  
+    */
+    let mut hashes2 = HashSet::new();
+    hashes2.insert(proof1.repr_hash());
+    let c6 = proof1.reference(0).unwrap();
+    hashes2.insert(c6.repr_hash());
+    let c3 = c6.reference(1).unwrap();
+    hashes2.insert(c3.repr_hash());
+    let c1 = c3.reference(0).unwrap();
+    hashes2.insert(c1.repr_hash());
+
+    let proof2 = MerkleProof::create(
+        &proof1,
+        |h| hashes2.contains(h),
+    ).unwrap().serialize().unwrap();
+    let tree = format!("{:#.100}", proof2);
+    // println!("proof 2\n {}", tree);
+    assert_eq!(tree,
+"Merkle proof   l: 000   bits: 280   refs: 1   data: 03fc5004bc31fd26d8fe7c1bafc45490fa28d5ea7a0dc52e8079317fff57bbbba80004
+hashes: e558f9b117c1d121b684ea621d48ae8f76fc88180db64e31ab498df2ddc1f58b
+depths: 5
+ └─Merkle proof   l: 001   bits: 280   refs: 1   data: 036b663d94d562c0682bd6a8be41c639b6e52f87c20ef5776795e4ad7fdbcf04610003
+   hashes: fc5004bc31fd26d8fe7c1bafc45490fa28d5ea7a0dc52e8079317fff57bbbba8 97b1a3e2d4e46e5a34e1e911e00e2cd8ffc7af1a9feab866a348925cdec35d09
+   depths: 4 4
+   └─Ordinary   l: 011   bits: 8   refs: 2   data: 01
+     hashes: 6b663d94d562c0682bd6a8be41c639b6e52f87c20ef5776795e4ad7fdbcf0461 69b89defd3511d324ba0045d5e367328767d9e7879eefee2997eb6d324f7bb26 ffb998ab6a9e8071338e26504249d0b81059ed72a47398ccdf113a872a50f467
+     depths: 3 3 3
+     ├─Pruned branch   l: 001   bits: 288   refs: 0   data: 010148a9bccff3f4284647e46cef7422ab53f73e51f96ca1b61e56a7dbd70f57f91b0001
+     │ hashes: 48a9bccff3f4284647e46cef7422ab53f73e51f96ca1b61e56a7dbd70f57f91b 9cc5685a89369c2eab2d5d1ae7d5075539dda819dfa60559869d3b1eee53d400
+     │ depths: 1 0
+     └─Ordinary   l: 010   bits: 24   refs: 2   data: 060606
+       hashes: 874b71a722fcf50bed19d9635177d6ca5482b560cdd62bed6c6ff8f1e61efe68 d094944cc127ab3032393d74331f5ed0615e51914e056b850afae5f465e01f22
+       depths: 2 2
+       ├─Ordinary   l: 000   bits: 24   refs: 1   data: 030303
+       │ hashes: 093fed1748edf1bbb14e25dbbae22e8015c021831ccdc9e2427e145e24aac8c1
+       │ depths: 1
+       │ └─Ordinary   l: 000   bits: 24   refs: 0   data: 010101
+       │   hashes: 78b55d6113eba6bc4ae107b4442afa416b6bc9709b3146657e358e68fa994c34
+       │   depths: 0
+       └─Pruned branch   l: 010   bits: 288   refs: 0   data: 0102b82404f6e84b041b25e452b30da10f01437dfd34efbba8b5772e4bc427df01df0001
+         hashes: b82404f6e84b041b25e452b30da10f01437dfd34efbba8b5772e4bc427df01df 76e25eb9c2e42ba849c900812b41b31bd3fa9f7588468f75a7c3d8fa3b766dce
+         depths: 1 0");
 }

@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.139
+
+- HashmapAugE returns depth of tree on insert new item
+
 ## Version 1.9.125
 
 - added MerkleUpdate::apply_for_with_cells_factory
