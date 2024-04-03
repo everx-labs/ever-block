@@ -2,13 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.140
+
+- Capability to avoid deletion of frozen accounts
+
 ## Version 1.9.139
 
 - HashmapAugE returns depth of tree on insert new item
 
 ## Version 1.9.125
 
-- added MerkleUpdate::apply_for_with_cells_factory
+- Added MerkleUpdate::apply_for_with_cells_factory
 
 ## Version 1.9.121
 
