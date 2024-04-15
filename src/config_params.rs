@@ -392,6 +392,7 @@ pub enum GlobalCapabilities {
     CapSmft                   = 0x0004_0000_0000,
     CapNoSplitOutQueue        = 0x0008_0000_0000, // Don't split out queue on shard splitting
     CapUndeletableAccounts    = 0x0010_0000_0000, // Don't delete frozen accounts
+    CapTvmV20                 = 0x0020_0000_0000, // BLS instructions
 }
 
 impl ConfigParams {

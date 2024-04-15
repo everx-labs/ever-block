@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.9.143
+
+- Added GlobalCapabilities::CapTvmV20 which enables BLS instructions in TVM
+
 ## Version 1.9.140
 
 - Capability to avoid deletion of frozen accounts
