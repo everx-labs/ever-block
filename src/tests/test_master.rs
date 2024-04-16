@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -15,10 +15,9 @@ use super::*;
 use crate::{
     write_read_and_assert, Block,
     BlockExtra, Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit,
-    BASE_WORKCHAIN_ID,
+    BASE_WORKCHAIN_ID, read_single_root_boc,
 };
 use std::collections::{HashMap, HashSet};
-use ton_types::read_single_root_boc;
 use rand::Rng;
 
 #[test]
@@ -451,9 +450,9 @@ fn test_counters() {
 
 fn gen_collator() -> CollatorRange {
     let mut rng = rand::thread_rng();
-    let collator = rng.gen_range(0, 100);
-    let start = rng.gen_range(0, 100);
-    let finish = rng.gen_range(start, 100);
+    let collator = rng.gen_range(0..100);
+    let start = rng.gen_range(0..100);
+    let finish = rng.gen_range(start..100);
     CollatorRange {
         collator,
         start,

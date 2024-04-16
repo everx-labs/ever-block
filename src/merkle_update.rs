@@ -7,18 +7,16 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
     error::BlockError,
     Serializable, Deserializable, MerkleProof,
-};
-use std::{collections::{HashMap, HashSet}, fmt::{Formatter, Display}, sync::Arc, time::Duration};
-use ton_types::{
     error, fail, BuilderData, Cell, CellType, IBitstring, LevelMask, Result, SliceData, UInt256
 };
+use std::{collections::{HashMap, HashSet}, fmt::{Formatter, Display}, sync::Arc, time::Duration};
 
 #[cfg(test)]
 #[path = "tests/test_merkle_update.rs"]

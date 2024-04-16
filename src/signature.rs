@@ -7,20 +7,18 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
     blocks::BlockIdExt, define_HashmapE, error::BlockError, validators::ValidatorBaseInfo,
     validators::ValidatorDescr, Deserializable, Serializable,
-};
-use std::{collections::HashMap, str::FromStr, sync::Arc, convert::TryInto};
-use ton_types::{
     error, fail, BuilderData, Cell, Ed25519KeyOption, HashmapE, HashmapType, IBitstring, KeyOption,
     Result, SliceData, UInt256,
     ED25519_PUBLIC_KEY_LENGTH, ED25519_SIGNATURE_LENGTH
 };
+use std::{collections::HashMap, str::FromStr, sync::Arc, convert::TryInto};
 
 /*
 ed25519_signature#5 R:bits256 s:bits256 = CryptoSignature;
@@ -97,7 +95,7 @@ impl CryptoSignature {
 }
 
 impl FromStr for CryptoSignature {
-    type Err = ton_types::Error;
+    type Err = crate::Error;
     fn from_str(s: &str) -> Result<Self> {
         let mut signature = Self::default();
         hex::decode_to_slice(s, &mut signature.0)?;
@@ -215,7 +213,7 @@ impl PartialEq<UInt256> for SigPubKey {
 }
 
 impl FromStr for SigPubKey {
-    type Err = ton_types::Error;
+    type Err = crate::Error;
     fn from_str(s: &str) -> Result<Self> {
         let mut public_key = Self::default();
         hex::decode_to_slice(s, &mut public_key.0)?;
