@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2024 EverX. All Rights Reserved.
+* Copyright (C) 2019-2023 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,17 +7,34 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
-#![cfg_attr(feature = "ci_run", deny(warnings))]
+pub mod types;
+pub use self::types::*;
+
+pub mod cell;
+pub use self::cell::*;
+
+pub mod crypto;
+pub use self::crypto::*;
+
+pub mod dictionary;
+pub use self::dictionary::*;
+
+pub mod boc;
+pub use boc::*;
+use smallvec::SmallVec;
+
+pub mod wrappers;
+pub use self::wrappers::*;
+
+pub mod bls;
+pub use bls::*;
 
 pub mod error;
 pub use self::error::*;
-
-pub mod types;
-pub use self::types::*;
 
 pub mod hashmapaug;
 pub use self::hashmapaug::*;
@@ -77,12 +94,85 @@ pub mod config_params;
 pub use self::config_params::*;
 
 use std::{collections::HashMap, hash::Hash};
-use ton_types::{
-    fail, Result, AccountId, UInt256, BuilderData, Cell, IBitstring, SliceData, HashmapE, 
-    HashmapType, read_single_root_boc, write_boc, base64_decode,
-};
 
 include!("../common/src/info.rs");
+
+pub trait Mask {
+    fn bit(&self, bits: Self) -> bool;
+    fn mask(&self, mask: Self) -> Self;
+    fn any(&self, bits: Self) -> bool;
+    fn non(&self, bits: Self) -> bool;
+}
+
+impl Mask for u8 {
+    fn bit(&self, bits: Self) -> bool {
+        (self & bits) == bits
+    }
+    fn mask(&self, mask: Self) -> u8 {
+        self & mask
+    }
+    fn any(&self, bits: Self) -> bool {
+        (self & bits) != 0
+    }
+    fn non(&self, bits: Self) -> bool {
+        (self & bits) == 0
+    }
+}
+
+pub trait GasConsumer {
+    fn finalize_cell(&mut self, builder: BuilderData) -> Result<Cell>;
+    fn load_cell(&mut self, cell: Cell) -> Result<SliceData>;
+    fn finalize_cell_and_load(&mut self, builder: BuilderData) -> Result<SliceData>;
+}
+
+impl GasConsumer for u64 {
+    fn finalize_cell(&mut self, builder: BuilderData) -> Result<Cell> {
+        builder.into_cell()
+    }
+    fn load_cell(&mut self, cell: Cell) -> Result<SliceData> {
+        SliceData::load_cell(cell)
+    }
+    fn finalize_cell_and_load(&mut self, builder: BuilderData) -> Result<SliceData> {
+        SliceData::load_builder(builder)
+    }
+}
+
+pub fn parse_slice_base(slice: &str, mut bits: usize, base: u32) -> Option<SmallVec<[u8; 128]>> {
+    debug_assert!(bits < 8, "it is offset to get slice parsed");
+    let mut acc = 0u8;
+    let mut data = SmallVec::new();
+    let mut completion_tag = false;
+    for ch in slice.chars() {
+        if completion_tag {
+            return None
+        }
+        match ch.to_digit(base) {
+            Some(x) => if bits < 4 {
+                acc |= (x << (4 - bits)) as u8;
+                bits += 4;
+            } else {
+                data.push(acc | (x as u8 >> (bits - 4)));
+                acc = (x << (12 - bits)) as u8;
+                bits -= 4;
+            }
+            None => match ch {
+                '_' => completion_tag = true,
+                _ => return None
+            }
+        }
+    }
+    if bits != 0 {
+        if !completion_tag {
+            acc |= 1 << (7 - bits);
+        }
+        if acc != 0 || data.is_empty() {
+            data.push(acc);
+        }
+    } else if !completion_tag {
+        data.push(0x80);
+    }
+    Some(data)
+}
 
 impl<K, V> Serializable for HashMap<K, V>
 where
@@ -353,3 +443,16 @@ where T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq {
     pretty_assertions::assert_eq!(s, s2);
     s2
 }
+
+
+
+
+
+
+
+
+
+
+
+
+

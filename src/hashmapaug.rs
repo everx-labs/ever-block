@@ -7,15 +7,13 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
     error::BlockError,
-    Serializable, Deserializable
-};
-use ton_types::{
+    Serializable, Deserializable,
     error, fail, Result, IBitstring, BuilderData, Cell, SliceData,
     ExceptionCode, HashmapType, Leaf, HashmapFilterResult, HashmapRemover,
 };
@@ -183,7 +181,7 @@ macro_rules! define_HashmapAugE {
             }
         }
 
-        impl ton_types::HashmapRemover for $varname {
+        impl crate::HashmapRemover for $varname {
             fn after_remove(&mut self) -> Result<()> {
                 let aug = match self.data() {
                     Some(root) => Self::find_extra(&mut SliceData::load_cell_ref(root)?, self.bit_len())?,
@@ -391,7 +389,7 @@ pub trait HashmapAugType<
                     (false, true) => (1, 0),
                     (false, false) => (1, 1),
                 };
-                let result = ton_types::get_min_max::<Self>(
+                let result = crate::get_min_max::<Self>(
                     root.clone(), &mut path, self.bit_len(), next_index, index, &mut 0
                 )?;
                 match result {
@@ -455,7 +453,7 @@ pub trait HashmapAugType<
     /// deserialize not empty root
     fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
         let mut root = slice.clone(); // copy to get as data
-        let label = ton_types::LabelReader::read_label(slice, self.bit_len())?;
+        let label = crate::LabelReader::read_label(slice, self.bit_len())?;
         if label.remaining_bits() != self.bit_len() { // fork
             slice.shrink_references(2..); // left, right
             self.set_root_extra(Y::construct_from(slice)?);
@@ -473,7 +471,7 @@ pub trait HashmapAugType<
     fn single(&self) -> Result<Option<SliceData>> {
         if let Some(root) = self.data() {
             let mut slice = SliceData::load_cell_ref(root)?;
-            let label = ton_types::LabelReader::read_label_raw(&mut slice, &mut self.bit_len(), Default::default())?;
+            let label = crate::LabelReader::read_label_raw(&mut slice, &mut self.bit_len(), Default::default())?;
             if label.length_in_bits() == self.bit_len() {
                 Y::skip(&mut slice)?;
                 return Ok(Some(slice))

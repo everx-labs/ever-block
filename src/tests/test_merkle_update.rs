@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -16,7 +16,6 @@ use std::{
     path::Path,
     time::Instant
 };
-use ton_types::{UsageTree, AccountId, ExceptionCode, write_boc, BocWriter, read_single_root_boc};
 
 use crate::{
     define_HashmapE, generate_test_account_by_init_code_hash, ShardStateUnsplit, MsgEnvelope,
@@ -24,6 +23,7 @@ use crate::{
     CurrencyCollection, Grams, Block, MerkleProof, OutQueueUpdates, OutMsgQueueInfo,
     hashmapaug::HashmapAugType, Message, InternalMessageHeader, MsgAddressInt, StateInit, Number5, 
     TickTock, OutMsgQueueKey, ShardIdent, ShardStateSplit, OutQueueUpdate,
+    UsageTree, AccountId, ExceptionCode, write_boc, BocWriter, read_single_root_boc,
 };
 use super::*;
 

@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -26,13 +26,11 @@ use crate::{
     validators::ValidatorSet,
     CopyleftRewards, Deserializable, IntermediateAddress, MaybeDeserialize, MaybeSerialize,
     Serializable, Account,
-};
-use crate::RefShardBlocks;
-use std::fmt::{self, Display, Formatter};
-use ton_types::{
     error, fail, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
     SliceData, UInt256,
 };
+use crate::RefShardBlocks;
+use std::fmt::{self, Display, Formatter};
 
 #[cfg(test)]
 #[path = "tests/test_shard.rs"]

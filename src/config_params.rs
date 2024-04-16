@@ -7,15 +7,9 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
-
-use ton_types::{
-    BuilderData, Cell, error,
-    fail,
-    HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256, HashmapIterator,
-};
 
 use crate::{
     define_HashmapE,
@@ -27,6 +21,8 @@ use crate::{
     types::{ChildCell, ExtraCurrencyCollection, Grams, Number8, Number12, Number16, Number13, Number32},
     validators::{ValidatorDescr, ValidatorSet},
     Serializable, Deserializable,
+    BuilderData, Cell, error, fail,
+    HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256, HashmapIterator,
 };
 
 #[cfg(test)]

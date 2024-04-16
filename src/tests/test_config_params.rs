@@ -7,15 +7,17 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 #![allow(clippy::inconsistent_digit_grouping, clippy::unusual_byte_groupings)]
 
 use super::*;
 use rand::Rng;
-use ton_types::{read_single_root_boc, Ed25519KeyOption};
-use crate::{ValidatorDescr, write_read_and_assert, VarUInteger32, Serializable};
+use crate::{
+    ValidatorDescr, write_read_and_assert, VarUInteger32, Serializable, read_single_root_boc, 
+    Ed25519KeyOption
+};
 
 fn get_config_param0() -> ConfigParam0 {
     ConfigParam0 {

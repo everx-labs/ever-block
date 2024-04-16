@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 use crate::{
@@ -63,7 +63,7 @@ fn test_validator_desc_new_default() {
 
 #[test]
 fn test_validator_desc_info_new_with() {
-    let keypair = ton_types::Ed25519KeyOption::generate().unwrap();
+    let keypair = crate::Ed25519KeyOption::generate().unwrap();
     let key = SigPubKey::from_bytes(keypair.pub_key().unwrap()).unwrap();
     let vd = ValidatorDescr::with_params(key.clone(), 2121212121, None, None);
 
@@ -75,7 +75,7 @@ fn test_validator_desc_info_new_with() {
 fn test_validator_set_serialize(){
     let mut list = vec!();
     for n in 0..20 {
-        let keypair = ton_types::Ed25519KeyOption::generate().unwrap();
+        let keypair = crate::Ed25519KeyOption::generate().unwrap();
         let key = SigPubKey::from_bytes(keypair.pub_key().unwrap()).unwrap();
         let vd = ValidatorDescr::with_params(key, n, None, None);
         list.push(vd);
