@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -17,15 +17,16 @@ use crate::{
     hashmapaug::{Augmentable, HashmapAugType},
     types::{CurrencyCollection, Number5},
     Serializable, Deserializable, Augmentation,
-};
-use std::fmt;
-use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, IBitstring,
     HashmapType, SliceData, hm_label, HashmapSubtree,
 };
+use std::fmt;
 
+#[cfg(test)]
+#[path = "tests/test_shard_accounts.rs"]
+mod tests;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // 4.1.9. The combined state of all accounts in a shard. The split part
@@ -40,7 +41,7 @@ impl ShardAccounts {
             Some(acc_id) => {
                 let depth_balance_info = DepthBalanceInfo::new(split_depth, account.get_balance().unwrap())?;
                 let sh_account = ShardAccount::with_params(account, last_trans_hash, last_trans_lt)?;
-                self.set_builder_serialized(acc_id.clone(), &sh_account.write_to_new_cell()?, &depth_balance_info).unwrap();
+                self.set_builder_serialized(acc_id.clone(), &sh_account.write_to_new_cell()?, &depth_balance_info)?;
                 Ok(Some(acc_id))
             }
             _ => Ok(None)

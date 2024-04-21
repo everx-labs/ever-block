@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2023 EverX. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,15 +7,9 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
-
-use ton_types::{
-    BuilderData, Cell, error,
-    fail,
-    HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256, HashmapIterator,
-};
 
 use crate::{
     define_HashmapE,
@@ -27,7 +21,13 @@ use crate::{
     types::{ChildCell, ExtraCurrencyCollection, Grams, Number8, Number12, Number16, Number13, Number32},
     validators::{ValidatorDescr, ValidatorSet},
     Serializable, Deserializable,
+    BuilderData, Cell, error, fail,
+    HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256, HashmapIterator,
 };
+
+#[cfg(test)]
+#[path = "tests/test_config_params.rs"]
+mod tests;
 
 /*
 1.6.3. Quick access through the header of masterchain blocks
@@ -42,19 +42,19 @@ pub struct ConfigParams {
 
 impl Default for ConfigParams {
     fn default() -> ConfigParams {
-        Self::new()
-    }
-}
-
-impl ConfigParams {
-    /// create new instance ConfigParams
-    pub const fn new() -> Self {
         Self {
             config_addr: UInt256::default(),
             config_params: HashmapE::with_bit_len(32)
         }
     }
+}
 
+impl ConfigParams {
+    /// create new instance ConfigParams
+    pub fn new() -> Self { Self::default() }
+}
+
+impl ConfigParams {
     pub const fn with_root(data: Cell) -> Self {
         Self {
             config_addr: UInt256::ZERO,
@@ -78,7 +78,7 @@ impl ConfigParams {
 
     /// get config by index
     pub fn config(&self, index: u32) -> Result<Option<ConfigParamEnum>> {
-        let key = SliceData::load_builder(index.write_to_new_cell()?)?;
+        let key = SliceData::load_bitstring(index.write_to_new_cell()?)?;
         if let Some(slice) = self.config_params.get(key)? {
             if let Some(cell) = slice.reference_opt(0) {
                 return Ok(Some(ConfigParamEnum::construct_from_slice_and_number(&mut SliceData::load_cell(cell)?, index)?));
@@ -89,7 +89,7 @@ impl ConfigParams {
 
     /// get config by index
     pub fn config_present(&self, index: u32) -> Result<bool> {
-        let key = SliceData::load_builder(index.write_to_new_cell()?)?;
+        let key = SliceData::load_bitstring(index.write_to_new_cell()?)?;
         if let Some(slice) = self.config_params.get(key)? {
             if slice.remaining_references() != 0 {
                 return Ok(true)
@@ -103,7 +103,7 @@ impl ConfigParams {
 
         let mut value = BuilderData::new();
         let index = config.write_to_cell(&mut value)?;
-        let key = SliceData::load_builder(index.write_to_new_cell()?)?;
+        let key = SliceData::load_bitstring(index.write_to_new_cell()?)?;
         self.config_params.set_builder(key, &value)?;
         Ok(())
     }
@@ -335,6 +335,13 @@ impl ConfigParams {
             _ => fail!("no config 42 (copyleft)")
         }
     }
+    pub fn suspended_addresses(&self) -> Result<Option<SuspendedAddresses>> {
+        match self.config(44)? {
+            Some(ConfigParamEnum::ConfigParam44(sa)) => Ok(Some(sa)),
+            None => Ok(None),
+            _ =>  fail!("wrong config 44 (suspended addresses)")
+        }
+    }
     // TODO 39 validator signed temp keys
 }
 
@@ -342,43 +349,54 @@ impl ConfigParams {
 #[repr(u64)]
 pub enum GlobalCapabilities {
     CapNone                   = 0,
-    CapIhrEnabled             = 0x0000_0001,
-    CapCreateStatsEnabled     = 0x0000_0002,
-    CapBounceMsgBody          = 0x0000_0004,
-    CapReportVersion          = 0x0000_0008,
-    CapSplitMergeTransactions = 0x0000_0010,
-    CapShortDequeue           = 0x0000_0020,
-    CapMbppEnabled            = 0x0000_0040,
-    CapFastStorageStat        = 0x0000_0080,
-    CapInitCodeHash           = 0x0000_0100,
-    CapOffHypercube           = 0x0000_0200,
-    CapMycode                 = 0x0000_0400,
-    CapSetLibCode             = 0x0000_0800,
-    CapFixTupleIndexBug       = 0x0000_1000,
-    CapRemp                   = 0x0000_2000,
-    CapDelections             = 0x0000_4000,
-    CapFullBodyInBounced      = 0x0001_0000,
-    CapStorageFeeToTvm        = 0x0002_0000,
-    CapCopyleft               = 0x0004_0000,
-    CapIndexAccounts          = 0x0008_0000,
+    CapIhrEnabled             = 0x0000_0000_0001,
+    CapCreateStatsEnabled     = 0x0000_0000_0002,
+    CapBounceMsgBody          = 0x0000_0000_0004,
+    CapReportVersion          = 0x0000_0000_0008,
+    CapSplitMergeTransactions = 0x0000_0000_0010,
+    CapShortDequeue           = 0x0000_0000_0020,
+    CapMbppEnabled            = 0x0000_0000_0040,
+    CapFastStorageStat        = 0x0000_0000_0080,
+    CapInitCodeHash           = 0x0000_0000_0100,
+    CapOffHypercube           = 0x0000_0000_0200,
+    CapMycode                 = 0x0000_0000_0400,
+    CapSetLibCode             = 0x0000_0000_0800,
+    CapFixTupleIndexBug       = 0x0000_0000_1000,
+    CapRemp                   = 0x0000_0000_2000,
+    CapDelections             = 0x0000_0000_4000,
+    CapFullBodyInBounced      = 0x0000_0001_0000,
+    CapStorageFeeToTvm        = 0x0000_0002_0000,
+    CapCopyleft               = 0x0000_0004_0000,
+    CapIndexAccounts          = 0x0000_0008_0000,
     #[cfg(feature = "gosh")]
-    CapDiff                   = 0x0010_0000,
-    CapsTvmBugfixes2022       = 0x0020_0000, // popsave, exception handler, loops
-    CapWorkchains             = 0x0040_0000,
-    CapStcontNewFormat        = 0x0080_0000, // support old format continuation serialization
-    CapFastStorageStatBugfix  = 0x0100_0000, // calc cell datasize using fast storage stat
-    CapResolveMerkleCell      = 0x0200_0000,
+    CapDiff                   = 0x0000_0010_0000,
+    CapsTvmBugfixes2022       = 0x0000_0020_0000, // popsave, exception handler, loops
+    CapWorkchains             = 0x0000_0040_0000,
+    CapStcontNewFormat        = 0x0000_0080_0000, // support old format continuation serialization
+    CapFastStorageStatBugfix  = 0x0000_0100_0000, // calc cell datasize using fast storage stat
+    CapResolveMerkleCell      = 0x0000_0200_0000,
     #[cfg(feature = "signature_with_id")]
-    CapSignatureWithId        = 0x0400_0000, // use some predefined id during signature check
-    CapBounceAfterFailedAction= 0x0800_0000,
+    CapSignatureWithId        = 0x0000_0400_0000, // use some predefined id during signature check
+    CapBounceAfterFailedAction= 0x0000_0800_0000,
     #[cfg(feature = "groth")]
-    CapGroth16                = 0x1000_0000,
-    CapFeeInGasUnits          = 0x2000_0000, // all fees in config are in gas units
+    CapGroth16                = 0x0000_1000_0000,
+    CapFeeInGasUnits          = 0x0000_2000_0000, // all fees in config are in gas units
+    CapBigCells               = 0x0000_4000_0000,
+    CapSuspendedList          = 0x0000_8000_0000,
+    CapFastFinality           = 0x0001_0000_0000,
+    CapTvmV19                 = 0x0002_0000_0000, // TVM v1.9.x improvemements
+    CapSmft                   = 0x0004_0000_0000,
+    CapNoSplitOutQueue        = 0x0008_0000_0000, // Don't split out queue on shard splitting
+    CapUndeletableAccounts    = 0x0010_0000_0000, // Don't delete frozen accounts
+    CapTvmV20                 = 0x0020_0000_0000, // BLS instructions
 }
 
 impl ConfigParams {
     pub fn get_lt_align(&self) -> u64 {
         1_000_000
+    }
+    pub fn get_max_lt_growth_fast_finality(&self) -> u64 {
+        100 * self.get_lt_align() - 1
     }
     pub fn get_max_lt_growth(&self) -> u64 {
         10 * self.get_lt_align() - 1
@@ -542,6 +560,7 @@ pub enum ConfigParamEnum {
     ConfigParam39(ConfigParam39),
     ConfigParam40(ConfigParam40),
     ConfigParam42(ConfigCopyleft),
+    ConfigParam44(SuspendedAddresses),
     ConfigParamAny(u32, SliceData),
 }
 
@@ -601,6 +620,7 @@ impl ConfigParamEnum {
             39 => { read_config!(ConfigParam39, ConfigParam39, slice) },
             40 => { read_config!(ConfigParam40, ConfigParam40, slice) },
             42 => { read_config!(ConfigParam42, ConfigCopyleft, slice) },
+            44 => { read_config!(ConfigParam44, SuspendedAddresses, slice) },
             index => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
         }
     }
@@ -646,6 +666,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam39(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(39)},
             ConfigParamEnum::ConfigParam40(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(40)},
             ConfigParamEnum::ConfigParam42(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(42)},
+            ConfigParamEnum::ConfigParam44(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(44)},
             ConfigParamEnum::ConfigParamAny(index, slice) => { 
                 cell.checked_append_reference(slice.clone().into_cell())?; 
                 Ok(*index)
@@ -667,9 +688,7 @@ pub struct ConfigParam0 {
 }
 
 impl ConfigParam0 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam0 {
@@ -699,9 +718,7 @@ pub struct ConfigParam1 {
 }
 
 impl ConfigParam1 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam1 {
@@ -727,9 +744,7 @@ pub struct ConfigParam2 {
 }
 
 impl ConfigParam2 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam2 {
@@ -755,9 +770,7 @@ pub struct ConfigParam3 {
 }
 
 impl ConfigParam3 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam3 {
@@ -783,9 +796,7 @@ pub struct ConfigParam4 {
 }
 
 impl ConfigParam4 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam4 {
@@ -834,9 +845,7 @@ pub struct ConfigParam6 {
 }
 
 impl ConfigParam6 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam6 {
@@ -864,9 +873,7 @@ pub struct ConfigParam7 {
 }
 
 impl ConfigParam7 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam7 {
@@ -896,12 +903,7 @@ pub struct GlobalVersion {
 }
 
 impl GlobalVersion {
-    pub const fn new() -> Self {
-        GlobalVersion {
-            version: 0,
-            capabilities: 0
-        }
-    }
+    pub fn new() -> Self { Self::default() }
     pub fn has_capability(&self, capability: GlobalCapabilities) -> bool {
         (self.capabilities & (capability as u64)) != 0
     }
@@ -941,9 +943,7 @@ pub struct ConfigParam8 {
 }
 
 impl ConfigParam8 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam8 {
@@ -973,9 +973,7 @@ pub struct ConfigParam9 {
 }
 
 impl ConfigParam9 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam9 {
@@ -1001,9 +999,7 @@ pub struct ConfigParam10 {
 }
 
 impl ConfigParam10 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam10 {
@@ -1034,9 +1030,7 @@ pub struct BlockCreateFees {
 }
 
 impl BlockCreateFees {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 const BLOCK_CREATE_FEES: u8 = 0x6b;
@@ -1073,9 +1067,7 @@ pub struct ConfigParam14 {
 }
 
 impl ConfigParam14 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam14 {
@@ -1104,9 +1096,7 @@ pub struct ConfigParam15 {
 }
 
 impl ConfigParam15 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam15 {
@@ -1148,9 +1138,7 @@ pub struct ConfigParam16 {
 }
 
 impl ConfigParam16 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam16 {
@@ -1192,9 +1180,7 @@ pub struct ConfigParam17 {
 }
 
 impl ConfigParam17 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam17 {
@@ -1242,9 +1228,7 @@ pub struct StoragePrices {
 }
 
 impl StoragePrices {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 const STORAGE_PRICES_TAG: u8 = 0xCC;
@@ -1307,10 +1291,15 @@ impl ConfigParam18 {
         self.map.get(&index)?.ok_or_else(|| error!(BlockError::InvalidIndex(index as usize)))
     }
 
+    /// get all value as vector
+    pub fn prices(&self) -> Result<Vec<StoragePrices>> {
+        self.map.export_vector()
+    }
+
     /// insert value
     pub fn insert(&mut self, sp: &StoragePrices) -> Result<()> {
         let index = match self.map.0.get_max(false, &mut 0)? {
-            Some((key, _value)) => SliceData::load_builder(key)?.get_next_u32()? + 1,
+            Some((key, _value)) => SliceData::load_bitstring(key)?.get_next_u32()? + 1,
             None => 0
         };
         self.map.set(&index, sp)
@@ -1380,9 +1369,7 @@ pub struct GasLimitsPrices {
 }
 
 impl GasLimitsPrices {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Calculate gas fee by gas used value
     pub fn calc_gas_fee(&self, gas_used: u64) -> u128 {
@@ -1530,9 +1517,7 @@ pub struct MsgForwardPrices {
 }
 
 impl MsgForwardPrices {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 const MSG_FWD_PRICES_TAG: u8 = 0xEA;
@@ -1613,9 +1598,7 @@ pub struct CatchainConfig {
 }
 
 impl CatchainConfig {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 const CATCHAIN_CONFIG_TAG_1: u8 = 0xC1;
@@ -1710,9 +1693,7 @@ pub struct ConsensusConfig {
 }
 
 impl ConsensusConfig {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 const CONSENSUS_CONFIG_TAG_1: u8 = 0xD6;
@@ -1778,9 +1759,7 @@ pub struct ConfigParam29 {
 }
 
 impl ConfigParam29 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam29 {
@@ -1824,16 +1803,6 @@ pub struct DelectorParams {
     pub staker_init_code_hash: UInt256,
 }
 
-impl DelectorParams {
-    pub const fn new() -> Self {
-        Self {
-            delections_step: 0,
-            validator_init_code_hash: UInt256::new(),
-            staker_init_code_hash: UInt256::new(),
-        }
-    }
-}
-
 impl Deserializable for DelectorParams {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         let tag = slice.get_next_byte()?;
@@ -1875,11 +1844,7 @@ pub struct ConfigParam31 {
 }
 
 impl ConfigParam31 {
-    pub const fn new() -> Self {
-        Self {
-            fundamental_smc_addr: FundamentalSmcAddresses::new()
-        }
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn add_address(&mut self, address: UInt256) {
         self.fundamental_smc_addr.set(&address, &()).unwrap();
@@ -1912,9 +1877,7 @@ macro_rules! define_configparams {
 
         impl $cpname {
             /// create new instance of $cpname
-            pub fn new() -> Self {
-                $cpname::default()
-            }
+            pub fn new() -> Self { Self::default() }
         }
 
         impl Deserializable for $cpname {
@@ -2014,9 +1977,7 @@ impl WorkchainFormat1 {
     ///
     /// Create empty intance of WorkchainFormat1
     /// 
-    pub fn new() -> Self {
-        WorkchainFormat1::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     ///
     /// Create new instance of WorkchainFormat1
@@ -2068,15 +2029,6 @@ pub struct WorkchainFormat0 {
 
 impl Default for WorkchainFormat0 {
     fn default() -> Self {
-        WorkchainFormat0::new()
-    }
-}
-
-impl WorkchainFormat0 {
-    ///
-    /// Create empty new instance of WorkchainFormat0
-    /// 
-    pub fn new() -> Self {
         Self {
             min_addr_len: Number12::from(64),
             max_addr_len: Number12::from(64),
@@ -2084,6 +2036,13 @@ impl WorkchainFormat0 {
             workchain_type_id: Number32::from(1)
         }
     }
+}
+
+impl WorkchainFormat0 {
+    ///
+    /// Create empty new instance of WorkchainFormat0
+    /// 
+    pub fn new() -> Self { Self::default() }
 
     ///
     /// Create new instance of WorkchainFormat0
@@ -2291,9 +2250,7 @@ impl WorkchainDescr {
     ///
     /// Create empty instance of WorkchainDescr
     /// 
-    pub fn new() -> Self {
-        WorkchainDescr::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     ///
     /// Getter for min_split
@@ -2605,9 +2562,7 @@ pub struct ConfigParam12 {
 
 impl ConfigParam12 {
     /// new instance of ConfigParam12
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// get length
     pub fn len(&self) -> Result<usize> {
@@ -2686,9 +2641,7 @@ pub struct ValidatorTempKey {
 
 impl ValidatorTempKey {
     /// new instance of ValidatorTempKey
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn with_params(adnl_addr: UInt256, temp_public_key: SigPubKey, seqno: u32, valid_until: u32) 
         -> Self {
@@ -2831,9 +2784,7 @@ pub struct ConfigParam39 {
 define_HashmapE!(ValidatorKeys, 256, ValidatorSignedTempKey);
 
 impl ConfigParam39 {
-    pub fn new() -> Self {
-        Default::default()
-    }
+    pub fn new() -> Self { Self::default() }
     /// get length
     pub fn len(&self) -> Result<usize> {
         self.validator_keys.len()
@@ -2882,9 +2833,7 @@ pub struct ConfigParam40 {
 }
 
 impl ConfigParam40 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigParam40 {
@@ -2914,7 +2863,11 @@ pub struct SlashingConfig {
 }
 
 impl SlashingConfig {
-    pub fn new() -> Self {
+    pub fn new() -> Self { Self::default() }
+}
+
+impl Default for SlashingConfig {
+    fn default() -> SlashingConfig {
         Self {
             slashing_period_mc_blocks_count : 100,
             resend_mc_blocks_count : 4,
@@ -2925,12 +2878,6 @@ impl SlashingConfig {
             z_param_numerator : 2326, //98% confidence
             z_param_denominator : 1000,
         }
-    }
-}
-
-impl Default for SlashingConfig {
-    fn default() -> SlashingConfig {
-        Self::new()
     }
 }
 
@@ -3212,9 +3159,7 @@ pub struct ConfigCopyleft {
 define_HashmapE!(LicenseRates, 8, u8);
 
 impl ConfigCopyleft {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 }
 
 impl Deserializable for ConfigCopyleft {
@@ -3243,3 +3188,62 @@ impl Serializable for ConfigCopyleft {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct SuspendedAddressesKey {
+    pub workchain_id: i32,
+    pub address: UInt256,
+}
+impl SuspendedAddressesKey {
+    pub fn new(workchain_id: i32, address: UInt256) -> Self {
+        Self { workchain_id, address }
+    }
+}
+impl Serializable for SuspendedAddressesKey {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        cell.append_i32(self.workchain_id)?;
+        cell.append_raw(self.address.as_slice(), 256)?;
+        Ok(())
+    }
+}
+impl Deserializable for SuspendedAddressesKey {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        self.workchain_id = slice.get_next_i32()?;
+        self.address = UInt256::construct_from(slice)?;
+        Ok(())
+    }
+}
+define_HashmapE!{SuspendedAddresses, 288, ()}
+impl SuspendedAddresses {
+    pub fn is_suspended(&self, wc: i32, addr: UInt256) -> Result<bool> {
+        let key = SuspendedAddressesKey::new(wc, addr);
+        Ok(self.get(&key)?.is_some())
+    }
+    pub fn add_suspended_address(&mut self, wc: i32, addr: UInt256) -> Result<()> {
+        let key = SuspendedAddressesKey::new(wc, addr);
+        self.set(&key, &())
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn dump_config(params: &HashmapE) {
+    params.iterate_slices(|ref mut key, ref mut slice| -> Result<bool> {
+        let key = key.get_next_u32()?;
+        match ConfigParamEnum::construct_from_slice_and_number(&mut SliceData::load_cell(slice.reference(0)?)?, key)? {
+            ConfigParamEnum::ConfigParam31(ref mut cfg) => {
+                println!("\tConfigParam31.fundamental_smc_addr");
+                cfg.fundamental_smc_addr.iterate_keys(|addr: UInt256| -> Result<bool> {
+                    println!("\t\t{}", addr);
+                    Ok(true)
+                })?;
+            }
+            ConfigParamEnum::ConfigParam34(ref mut cfg) => {
+                println!("\tConfigParam34.cur_validators");
+                for validator in cfg.cur_validators.list() {
+                    println!("\t\t{:?}", validator);
+                };
+            }
+            x => println!("\t{:?}", x)
+        }
+        Ok(true)
+    }).unwrap();
+}

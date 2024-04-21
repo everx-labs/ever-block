@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,11 +7,10 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
-use crate::types::AddSub;
 use crate::{
     config_params::{CatchainConfig, GlobalVersion},
     define_HashmapE,
@@ -23,21 +22,24 @@ use crate::{
     shard::ShardIdent,
     signature::BlockSignatures,
     transactions::ShardAccountBlocks,
-    types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32},
+    types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32, AddSub},
     validators::ValidatorSet,
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
+    error, fail, AccountId, BuilderData, Cell, ExceptionCode, HashmapE, HashmapType, IBitstring,
+    Result, SliceData, UInt256,
 };
+use crate::RefShardBlocks;
+use std::borrow::Cow;
 use std::{
     cmp::Ordering,
     fmt::{self, Display, Formatter},
     io::{Cursor, Write},
     str::FromStr,
 };
-use ton_types::{
-    error, fail, AccountId, BuilderData, Cell, ExceptionCode, HashmapE, HashmapType, IBitstring,
-    Result, SliceData, UInt256,
-};
 
+#[cfg(test)]
+#[path = "tests/test_blocks.rs"]
+mod tests;
 
 /*
 block_id_ext$_
@@ -127,7 +129,7 @@ impl Display for BlockIdExt {
 }
 
 impl FromStr for BlockIdExt {
-    type Err = failure::Error;
+    type Err = crate::Error;
 
     fn from_str(s: &str) -> Result<Self> {
         // (0:1800000000000000, 1203696, rh 59b6e56610aa5df5e8ee4cc5f1081cd5d08473f10e0899f7763d580b2a635f90, fh 1b4d177339538562d10166d87823783b7e747ee80d85d033459928fd0605a126)
@@ -237,6 +239,8 @@ pub struct BlockInfo {
 
     shard: ShardIdent,
     gen_utime: UnixTime32,
+    gen_utime_ms_part: u16,
+
     start_lt: u64,
     end_lt: u64,
     gen_validator_list_hash_short: u32,
@@ -265,7 +269,8 @@ impl Default for BlockInfo {
             seq_no: 1,
             vert_seq_no: 0,
             shard: ShardIdent::default(),
-            gen_utime: UnixTime32::default(),
+            gen_utime: Default::default(),
+            gen_utime_ms_part: 0,
             start_lt: 0,
             end_lt: 0,
             gen_validator_list_hash_short: 0,
@@ -282,9 +287,7 @@ impl Default for BlockInfo {
 
 impl BlockInfo {
 
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn version(&self) -> u32 { self.version }
     pub fn set_version(&mut self, version: u32) { self.version = version; }
@@ -323,7 +326,16 @@ impl BlockInfo {
     pub fn set_shard(&mut self, shard: ShardIdent) { self.shard = shard }
 
     pub fn gen_utime(&self) -> UnixTime32 { self.gen_utime }
-    pub fn set_gen_utime(&mut self, gen_utime: UnixTime32) { self.gen_utime = gen_utime }
+    pub fn gen_utime_ms(&self) -> u64 { self.gen_utime_ms_part as u64 + self.gen_utime().as_u32() as u64 * 1000 }
+    pub fn gen_utime_ms_part(&self) -> u16 { self.gen_utime_ms_part }
+    pub fn set_gen_utime(&mut self, gen_utime: UnixTime32) { 
+        self.gen_utime = gen_utime;
+        self.gen_utime_ms_part = 0;
+    }
+    pub fn set_gen_utime_ms(&mut self, gen_utime_millis: u64) {
+        self.gen_utime = UnixTime32::new((gen_utime_millis / 1000) as u32);
+        self.gen_utime_ms_part = (gen_utime_millis % 1000) as u16;
+    }
 
     pub fn start_lt(&self) -> u64 { self.start_lt }
     pub fn set_start_lt(&mut self, start_lt: u64) { self.start_lt = start_lt }
@@ -411,8 +423,8 @@ impl BlockInfo {
         &mut self,
         vert_seqno_incr: u32,
         vert_seq_no: u32,
-        prev_vert_ref: Option<BlkPrevInfo>)
-    -> Result<()> {
+        prev_vert_ref: Option<BlkPrevInfo>
+    ) -> Result<()> {
         if vert_seq_no < vert_seqno_incr {
             fail!(BlockError::InvalidArg(
                 "`vert_seq_no` can't be less then `vert_seqno_incr`".to_string()))
@@ -427,6 +439,76 @@ impl BlockInfo {
         self.prev_vert_ref = prev_vert_ref.map(|v| ChildCell::with_struct(&v)).transpose()?;
         Ok(())
     }
+
+    pub fn read_from_ex(&mut self, slice: &mut SliceData, allow_v2: bool) -> Result<()> {
+        let tag = slice.get_next_u32()?;
+        if tag != BLOCK_INFO_TAG_1 && (!allow_v2 || tag != BLOCK_INFO_TAG_2) {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag,
+                    s: "BlockInfo".to_string()
+                }
+            )
+        }
+        self.version = slice.get_next_u32()?;
+
+        let next_byte = slice.get_next_byte()?;
+        let not_master = (next_byte >> 7) & 1 == 1;
+        let after_merge = (next_byte >> 6) & 1 == 1;
+        self.before_split = (next_byte >> 5) & 1 == 1;
+        self.after_split = (next_byte >> 4) & 1 == 1;
+        self.want_split = (next_byte >> 3) & 1 == 1;
+        self.want_merge = (next_byte >> 2) & 1 == 1;
+        self.key_block = (next_byte >> 1) & 1 == 1;
+        let vert_seqno_incr = ((next_byte) & 1) as u32;
+
+        self.flags = slice.get_next_byte()?;
+        let seq_no = slice.get_next_u32()?;
+        self.set_seq_no(seq_no)?;
+        let vert_seq_no = slice.get_next_u32()?;
+        self.shard.read_from(slice)?;
+        self.gen_utime = slice.get_next_u32()?.into();
+        if tag == BLOCK_INFO_TAG_2{
+            self.gen_utime_ms_part = slice.get_next_u16()?;
+        } else {
+            self.gen_utime_ms_part = 0;
+        }
+        self.start_lt = slice.get_next_u64()?;
+        self.end_lt = slice.get_next_u64()?;
+        self.gen_validator_list_hash_short = slice.get_next_u32()?;
+        self.gen_catchain_seqno = slice.get_next_u32()?;
+        self.min_ref_mc_seqno = slice.get_next_u32()?;
+        self.prev_key_block_seqno = slice.get_next_u32()?;
+
+        if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
+            self.gen_software = Some(GlobalVersion::construct_from(slice)?);
+        }
+
+        self.master_ref = if not_master {
+            let mut bli = BlkMasterInfo::default();
+            bli.read_from_reference(slice)?;
+            Some(ChildCell::with_struct(&bli)?)
+        } else {
+            None
+        };
+
+        let mut prev_ref = if after_merge {
+            BlkPrevInfo::default_blocks()
+        } else {
+            BlkPrevInfo::default_block()
+        };
+        prev_ref.read_from_reference(slice)?;
+        self.set_prev_stuff(after_merge, &prev_ref)?;
+
+        let prev_vert_ref = if vert_seqno_incr == 0 {
+            None
+        } else {
+            Some(BlkPrevInfo::construct_from_reference(slice)?)
+        };
+        self.set_vertical_stuff(vert_seqno_incr, vert_seq_no, prev_vert_ref)?;
+
+        Ok(())
+    }
 }
 
 /*
@@ -438,6 +520,7 @@ prev_blks_info$_
     prev1:^ExtBlkRef
     prev2:^ExtBlkRef
     = BlkPrevInfo 1;
+
 */
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BlkPrevInfo {
@@ -753,19 +836,11 @@ pub struct BlockExtra {
     pub rand_seed: UInt256,
     pub created_by: UInt256,
     custom: Option<ChildCell<McBlockExtra>>,
+    ref_shard_blocks: RefShardBlocks,
 }
 
 impl BlockExtra {
-    pub fn new() -> BlockExtra {
-        BlockExtra {
-            in_msg_descr: ChildCell::default(),
-            out_msg_descr: ChildCell::default(),
-            account_blocks: ChildCell::default(),
-            rand_seed: UInt256::rand(),
-            created_by: UInt256::default(), // TODO: Need to fill?
-            custom: None,
-        }
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn read_in_msg_descr(&self) -> Result<InMsgDescr> {
         self.in_msg_descr.read_struct()
@@ -820,24 +895,24 @@ impl BlockExtra {
     }
 
     pub fn read_custom(&self) -> Result<Option<McBlockExtra>> {
-        Ok(
-            match self.custom {
-                Some(ref custom) => Some(custom.read_struct()?),
-                None => None
-            }
-        )
+        self.custom.as_ref().map(|c| c.read_struct()).transpose()
     }
 
     pub fn write_custom(&mut self, value: Option<&McBlockExtra>) -> Result<()> {
-        self.custom = match value {
-                Some(v) => Some(ChildCell::with_struct(v)?),
-                None => None
-            };
+        self.custom = value.map(ChildCell::with_struct).transpose()?;
         Ok(())
     }
 
     pub fn custom_cell(&self) -> Option<Cell> {
         self.custom.as_ref().map(|c| c.cell())
+    }
+
+    pub fn ref_shard_blocks(&self) -> &RefShardBlocks {
+        &self.ref_shard_blocks
+    }
+
+    pub fn set_ref_shard_blocks(&mut self, value: RefShardBlocks) {
+        self.ref_shard_blocks = value;
     }
 
     pub fn is_key_block(&self) -> bool {
@@ -846,46 +921,58 @@ impl BlockExtra {
 }
 
 const BLOCK_EXTRA_TAG: u32 = 0x4a33f6fd;
+const BLOCK_EXTRA_TAG_2: u32 = 0x4a33f6fc;
 
 impl Deserializable for BlockExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        if tag != BLOCK_EXTRA_TAG {
-            fail!(
-                BlockError::InvalidConstructorTag {
+        if tag != BLOCK_EXTRA_TAG && tag != BLOCK_EXTRA_TAG_2 {
+            fail!(BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "BlockExtra".to_string()
-                }
-            )
+                })
         }
         self.in_msg_descr.read_from_reference(cell)?;
         self.out_msg_descr.read_from_reference(cell)?;
         self.account_blocks.read_from_reference(cell)?;
         self.rand_seed.read_from(cell)?;
         self.created_by.read_from(cell)?;
-        self.custom = if cell.get_next_bit()? {
-            Some(ChildCell::<McBlockExtra>::construct_from_reference(cell)?)
-        } else {
-            None
-        };
+        
+        if tag == BLOCK_EXTRA_TAG {
+            self.custom = ChildCell::construct_maybe_from_reference(cell)?;
+            self.ref_shard_blocks = RefShardBlocks::default();
+        }
+        if tag == BLOCK_EXTRA_TAG_2 {
+            let mut child = SliceData::load_cell(cell.checked_drain_reference()?)?;
+            self.custom = ChildCell::construct_maybe_from_reference(&mut child)?;
+            self.ref_shard_blocks.read_from(&mut child)?;
+        }
+
         Ok(())
     }
 }
 
 impl Serializable for BlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_u32(BLOCK_EXTRA_TAG)?;
+        let tag = if self.ref_shard_blocks.is_empty() {
+            BLOCK_EXTRA_TAG
+        } else {
+            BLOCK_EXTRA_TAG_2
+        };
+        cell.append_u32(tag)?;
         cell.checked_append_reference(self.in_msg_descr.cell())?;
         cell.checked_append_reference(self.out_msg_descr.cell())?;
         cell.checked_append_reference(self.account_blocks.cell())?;
-
         self.rand_seed.write_to(cell)?;
         self.created_by.write_to(cell)?;
-        if let Some(custrom) = &self.custom {
-            cell.append_bit_one()?;
-            cell.checked_append_reference(custrom.cell())?;
+
+        if tag == BLOCK_EXTRA_TAG {
+            ChildCell::write_maybe_to(cell, self.custom.as_ref())?;
         } else {
-            cell.append_bit_zero()?;
+            let mut child = BuilderData::new();
+            ChildCell::write_maybe_to(&mut child, self.custom.as_ref())?;
+            self.ref_shard_blocks.write_to(&mut child)?;
+            cell.checked_append_reference(child.into_cell()?)?;
         }
         Ok(())
     }
@@ -1066,7 +1153,8 @@ impl Serializable for ExtBlkRef {
 const BLOCK_TAG_1: u32 = 0x11ef55aa;
 const BLOCK_TAG_2: u32 = 0x11ef55bb;
 
-const BLOCK_INFO_TAG: u32 = 0x9bc7a987;
+const BLOCK_INFO_TAG_1: u32 = 0x9bc7a987;
+const BLOCK_INFO_TAG_2: u32 = 0x9bc7a988;
 
 impl Serializable for BlockInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -1097,7 +1185,13 @@ impl Serializable for BlockInfo {
             byte |= 1;
         }
 
-        cell.append_u32(BLOCK_INFO_TAG)?
+        let tag = if self.gen_utime_ms_part == 0 {
+            BLOCK_INFO_TAG_1
+        } else {
+            BLOCK_INFO_TAG_2
+        };
+
+        cell.append_u32(tag)?
             .append_u32(self.version)?
             .append_u8(byte)?
             .append_u8(self.flags)?
@@ -1106,13 +1200,21 @@ impl Serializable for BlockInfo {
 
         // shard:ShardIdent
         self.shard.write_to(cell)?;
-        cell.append_u32(self.gen_utime.as_u32())?
+
+        let builder = cell.append_u32(self.gen_utime.into())?;
+
+        if tag == BLOCK_INFO_TAG_2 {
+            builder.append_u16(self.gen_utime_ms_part)?;
+        }
+
+        builder
             .append_u64(self.start_lt)?
             .append_u64(self.end_lt)?
             .append_u32(self.gen_validator_list_hash_short)?
             .append_u32(self.gen_catchain_seqno)?
             .append_u32(self.min_ref_mc_seqno)?
             .append_u32(self.prev_key_block_seqno)?;
+
 
         if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
             if let Some(gen_software) = self.gen_software.as_ref() {
@@ -1204,68 +1306,8 @@ impl Deserializable for ValueFlow {
 }
 
 impl Deserializable for BlockInfo {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let tag = cell.get_next_u32()?;
-        if tag != BLOCK_INFO_TAG {
-            fail!(
-                BlockError::InvalidConstructorTag {
-                    t: tag,
-                    s: "BlockInfo".to_string()
-                }
-            )
-        }
-        self.version = cell.get_next_u32()?;
-
-        let next_byte = cell.get_next_byte()?;
-        let not_master = (next_byte >> 7) & 1 == 1;
-        let after_merge = (next_byte >> 6) & 1 == 1;
-        self.before_split = (next_byte >> 5) & 1 == 1;
-        self.after_split = (next_byte >> 4) & 1 == 1;
-        self.want_split = (next_byte >> 3) & 1 == 1;
-        self.want_merge = (next_byte >> 2) & 1 == 1;
-        self.key_block = (next_byte >> 1) & 1 == 1;
-        let vert_seqno_incr = ((next_byte) & 1) as u32;
-
-        self.flags = cell.get_next_byte()?;
-        let seq_no = cell.get_next_u32()?;
-        self.set_seq_no(seq_no)?;
-        let vert_seq_no = cell.get_next_u32()?;
-        self.shard.read_from(cell)?;
-        self.gen_utime = cell.get_next_u32()?.into();
-        self.start_lt = cell.get_next_u64()?;
-        self.end_lt = cell.get_next_u64()?;
-        self.gen_validator_list_hash_short = cell.get_next_u32()?;
-        self.gen_catchain_seqno = cell.get_next_u32()?;
-        self.min_ref_mc_seqno = cell.get_next_u32()?;
-        self.prev_key_block_seqno = cell.get_next_u32()?;
-
-        if self.flags & GEN_SOFTWARE_EXISTS_FLAG != 0 {
-            self.gen_software = Some(GlobalVersion::construct_from(cell)?);
-        }
-
-        self.master_ref = if not_master {
-            let mut bli = BlkMasterInfo::default();
-            bli.read_from_reference(cell)?;
-            Some(ChildCell::with_struct(&bli)?)
-        } else {
-            None
-        };
-
-        let mut prev_ref = if after_merge {
-            BlkPrevInfo::default_blocks()
-        } else {
-            BlkPrevInfo::default_block()
-        };
-        prev_ref.read_from_reference(cell)?;
-        self.set_prev_stuff(after_merge, &prev_ref)?;
-
-        let prev_vert_ref = if vert_seqno_incr == 0 {
-            None
-        } else {
-            Some(BlkPrevInfo::construct_from_reference(cell)?)
-        };
-        self.set_vertical_stuff(vert_seqno_incr, vert_seq_no, prev_vert_ref)?;
-
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        self.read_from_ex(slice, true)?;
         Ok(())
     }
 }
@@ -1322,18 +1364,13 @@ impl Serializable for Block {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Default, Eq, PartialEq, Clone, Copy)]
 pub enum BlockProcessingStatus {
+    #[default]
     Unknown = 0,
     Proposed,
     Finalized,
     Refused,
-}
-
-impl Default for BlockProcessingStatus {
-    fn default() -> Self {
-        BlockProcessingStatus::Unknown
-    }
 }
 
 /*
@@ -1345,6 +1382,9 @@ chain_link$_
 = ProofChain (n + 1);
 */
 pub type ProofChain = Vec<Cell>;
+
+// 32 is max len in fast finality. Anyway the length is additionaly checked in high level code
+const MAX_PROOF_CHAIN_LEN: usize = 32; 
 
 impl Serializable for ProofChain {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -1365,34 +1405,31 @@ impl Serializable for ProofChain {
 
 impl Deserializable for ProofChain {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
-        let len = slice.get_next_int(8)?;
-        if !(1..=8).contains(&len) {
+        let len = slice.get_next_int(8)? as usize;
+        if !(1..=MAX_PROOF_CHAIN_LEN).contains(&len) {
             fail!(
                 BlockError::InvalidData(
-                    "Failed check: `len >= 1 && len <= 8`".to_string()
+                    format!("Failed check: `{} >= 1 && {} <= {}`", len, len, MAX_PROOF_CHAIN_LEN)
                 )
             )
         }
-        {
-            let mut slice = slice.clone();
-            for i in (0..len).rev() {
+
+        let mut slice = Cow::Borrowed(slice);
+        for i in (0..len).rev() {
+            if slice.remaining_references() == 0 {
+                fail!(ExceptionCode::CellUnderflow)
+            }
+            self.push(slice.to_mut().checked_drain_reference()?);
+            if i != 0 {
                 if slice.remaining_references() == 0 {
                     fail!(ExceptionCode::CellUnderflow)
                 }
-                self.push(slice.checked_drain_reference()?);
-                if i != 0 {
-                    if slice.remaining_references() == 0 {
-                        fail!(ExceptionCode::CellUnderflow)
-                    }
-                    slice = SliceData::load_cell(slice.checked_drain_reference()?)?;
-                }
+                slice = Cow::Owned(SliceData::load_cell(slice.to_mut().checked_drain_reference()?)?);
             }
         }
         Ok(())
     }
 }
-
-
 
 /*
 top_block_descr#d5
