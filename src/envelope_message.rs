@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -17,13 +17,15 @@ use crate::{
     messages::Message,
     types::{AddSub, ChildCell, Grams},
     Serializable, Deserializable,
-};
-
-use std::cmp::Ordering;
-use ton_types::{
     error, fail, Result,
     BuilderData, Cell, IBitstring, SliceData, UInt256,
 };
+
+use std::cmp::Ordering;
+
+#[cfg(test)]
+#[path = "tests/test_envelope_message.rs"]
+mod tests;
 
 /*
 
@@ -50,9 +52,6 @@ pub enum IntermediateAddress {
 }
 
 impl IntermediateAddress {
-    pub const fn default() -> Self {
-        IntermediateAddress::Regular(IntermediateAddressRegular::default())
-    }
     pub fn use_src_bits(use_src_bits: u8) -> Result<Self> {
         let ia = IntermediateAddressRegular::with_use_src_bits(use_src_bits)?;
         Ok(IntermediateAddress::Regular(ia))
@@ -179,11 +178,6 @@ pub struct IntermediateAddressRegular {
 pub static FULL_BITS: u8 = 96;
 
 impl IntermediateAddressRegular {
-    pub const fn default() -> Self {
-        IntermediateAddressRegular {
-            use_dest_bits: 0
-        }
-    }
     pub fn with_use_src_bits(use_src_bits: u8) -> Result<Self> {
         if use_src_bits > FULL_BITS {
             fail!(BlockError::InvalidArg(format!("use_src_bits must be <= {}", FULL_BITS)))
@@ -250,13 +244,6 @@ pub struct IntermediateAddressSimple{
 }
 
 impl IntermediateAddressSimple {
-    pub const fn default() -> Self {
-        Self {
-            workchain_id: 0,
-            addr_pfx: 0
-        }
-    }
-
     pub const fn with_addr(workchain_id: i8, addr_pfx: u64) -> Self {
         Self {
             workchain_id,
@@ -310,13 +297,6 @@ pub struct IntermediateAddressExt{
 }
 
 impl IntermediateAddressExt {
-    pub const fn default() -> Self {
-        Self {
-            workchain_id: 0,
-            addr_pfx: 0
-        }
-    }
-
     pub const fn with_addr(workchain_id: i32, addr_pfx: u64) -> Self {
         Self {
             workchain_id,

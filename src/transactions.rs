@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -18,16 +18,18 @@ use crate::{
     error::BlockError,
     hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     merkle_proof::MerkleProof,
-    messages::{generate_big_msg, Message},
+    messages::Message,
     shard::ShardStateUnsplit,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
-};
-use std::{fmt, sync::Arc};
-use ton_types::{
     error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
     SliceData, UInt256, UsageTree,
 };
+use std::{fmt, sync::Arc};
+
+#[cfg(test)]
+#[path = "tests/test_transactions.rs"]
+mod tests;
 
 /*
 acst_unchanged$0 = AccStatusChange;  // x -> x
@@ -71,7 +73,6 @@ impl Deserializable for AccStatusChange {
 cskip_no_state$00 = ComputeSkipReason;
 cskip_bad_state$01 = ComputeSkipReason;
 cskip_no_gas$10 = ComputeSkipReason;
-cskip_suspended$110 = ComputeSkipReason;
 */
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum ComputeSkipReason {
@@ -372,9 +373,6 @@ pub enum TrBouncePhase {
 }
 
 impl TrBouncePhase {
-    pub const fn default() -> Self {
-        TrBouncePhase::Negfunds
-    }
     pub const fn ok(msg_size: StorageUsedShort, msg_fees: Grams, fwd_fees: Grams) -> Self {
         TrBouncePhase::Ok(TrBouncePhaseOk::with_params(msg_size, msg_fees, fwd_fees))
     }
@@ -456,29 +454,17 @@ tr_phase_credit$_
     credit:CurrencyCollection
 = TrCreditPhase;
 */
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TrCreditPhase {
     pub due_fees_collected: Option<Grams>,
     pub credit: CurrencyCollection,
 }
 
 impl TrCreditPhase {
-    pub const fn default() -> Self {
-        TrCreditPhase::with_params(None, CurrencyCollection::default())
-    }
     pub const fn with_params(due_fees_collected: Option<Grams>, credit: CurrencyCollection) -> Self {
         TrCreditPhase {
             due_fees_collected,
             credit,
-        }
-    }
-}
-
-impl Default for TrCreditPhase {
-    fn default() -> Self {
-        TrCreditPhase {
-            due_fees_collected: None,
-            credit: CurrencyCollection::default(),
         }
     }
 }
@@ -504,7 +490,7 @@ tick$0 = TickTock;
 tock$1 = TickTock;
 There are two kinds of TickTock: in transaction and in messages.
 */
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Default, PartialEq, Eq, Clone, Debug)]
 pub enum TransactionTickTock {
     #[default]
     Tick,
@@ -1895,7 +1881,8 @@ impl ShardAccountBlocks {
             account_block.account_addr.clone(),
             &account_block.write_to_new_cell()?,
             account_block.total_fee()
-        ).map(|_|())
+        )?;
+        Ok(())
     }
 
     /// adds transaction to account by id from transaction
@@ -1941,7 +1928,7 @@ impl ShardAccountBlocks {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq, Clone, Copy)]
 pub enum TransactionProcessingStatus {
     #[default]
     Unknown = 0,
@@ -1953,8 +1940,8 @@ pub enum TransactionProcessingStatus {
 
 #[allow(dead_code)]
 pub fn generate_tranzaction(address : AccountId) -> Transaction {
-    let s_in_msg = generate_big_msg();
-    let s_out_msg1 = generate_big_msg();
+    let s_in_msg = crate::generate_big_msg();
+    let s_out_msg1 = crate::generate_big_msg();
     let s_out_msg2 = Message::default();
     let s_out_msg3 = Message::default();
 
@@ -1972,4 +1959,31 @@ pub fn generate_tranzaction(address : AccountId) -> Transaction {
     tr.write_state_update(&s_status_update).unwrap();
     tr.write_description(&s_tr_desc).unwrap();
     tr
+}
+
+#[cfg(test)]
+pub(crate) fn generate_account_block(address: AccountId, tr_count: usize) -> Result<AccountBlock> {
+
+    let s_status_update = HashUpdate::default();
+    let mut acc_block = AccountBlock::with_address(address.clone());
+
+    for _ in 0..tr_count {
+        let transaction = generate_tranzaction(address.clone());
+        acc_block.add_transaction(&transaction)?;
+    }
+    acc_block.write_state_update(&s_status_update).unwrap();
+
+    Ok(acc_block)
+}
+
+#[cfg(test)]
+pub(crate) fn generate_test_shard_account_block() -> ShardAccountBlocks {
+    let mut shard_block = ShardAccountBlocks::default();
+    
+    for n in 0..10 {
+        let address = AccountId::from([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,n as u8]);
+        let account_block = generate_account_block(address.clone(), n + 1).unwrap();
+        shard_block.insert(&account_block).unwrap();
+    }
+    shard_block
 }

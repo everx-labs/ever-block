@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,18 +7,20 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
     define_HashmapE,
     Serializable, Deserializable,
-};
-use ton_types::{
     Result, BuilderData, Cell, SliceData, UInt256,
     HashmapE, HashmapType, HashmapSubtree, fail,
 };
+
+#[cfg(test)]
+#[path = "tests/test_miscellaneous.rs"]
+mod tests;
 
 /*
 // key is [ shard:uint64 mc_seqno:uint32 ]  
@@ -108,6 +110,7 @@ impl Deserializable for ProcessedUpto {
             64 => Some(cell.get_next_u64()?),
             // Compatibility with data serialized with old version of the library 
             // (with "fast_finality" feature)
+            1 => None,
             65 => Deserializable::construct_maybe_from(cell)?,
             _ => fail!("Invalid cell size"),
         };
@@ -137,9 +140,7 @@ pub struct IhrPendingSince {
 
 impl IhrPendingSince {
     /// New default instance IhrPendingSince structure
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     // New instance IhrPendingSince structure
     pub fn with_import_lt(import_lt: u64) -> Self {

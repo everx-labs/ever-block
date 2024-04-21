@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -24,12 +24,14 @@ use crate::{
     types::{ChildCell, CurrencyCollection, InRefValue},
     validators::ValidatorInfo,
     CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15, Augmentation,
-};
-use std::{collections::HashMap, fmt};
-use ton_types::{
     error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
     SliceData, UInt256,
 };
+use std::{collections::HashMap, fmt};
+
+#[cfg(test)]
+#[path = "tests/test_master.rs"]
+mod tests;
 
 /*
 _ (HashmapE 32 ^(BinTree ShardDescr)) = ShardHashes;
@@ -407,7 +409,8 @@ impl ShardFees {
             prefix: shard.shard_prefix_with_tag(),
         };
         let fee = ShardFeeCreated{fees, create: created};
-        self.set(&id, &fee, &fee)
+        self.set(&id, &fee, &fee)?;
+        Ok(())
     }
 }
 
@@ -583,15 +586,6 @@ impl Serializable for McBlockExtra {
 pub struct KeyMaxLt {
     pub key: bool,
     pub max_end_lt: u64
-}
-
-impl KeyMaxLt {
-    pub const fn new() -> KeyMaxLt {
-        KeyMaxLt {
-            key: false,
-            max_end_lt: 0
-        }
-    }
 }
 
 impl Deserializable for KeyMaxLt {
@@ -811,12 +805,6 @@ pub struct ShardFeeCreated {
 }
 
 impl ShardFeeCreated {
-    pub const fn new() -> ShardFeeCreated {
-        ShardFeeCreated {
-            fees: CurrencyCollection::new(),
-            create: CurrencyCollection::new(),
-        }
-    }
     pub fn with_fee(fees: CurrencyCollection) -> Self {
         Self {
             fees,
@@ -1094,18 +1082,6 @@ pub struct McStateExtra {
 const MC_STATE_EXTRA_TAG: u16 = 0xcc26;
 
 impl McStateExtra {
-    // pub const fn new() -> McStateExtra {
-    //     McStateExtra {
-    //         shards: ShardHashes::new(),
-    //         config: ConfigParams::new(),
-    //         validator_info: ValidatorInfo::new(),
-    //         prev_blocks: OldMcBlocksInfo::new(),
-    //         after_key_block: false,
-    //         last_key_block: None,
-    //         block_create_stats: None,
-    //         global_balance: CurrencyCollection::new(),
-    //     }
-    // }
     pub fn tag() -> u16 {
         0xcc26
     }

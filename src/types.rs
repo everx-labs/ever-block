@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2023 EverX Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,30 +7,485 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
-use std::convert::TryInto;
-use std::fmt::{self, Display, Formatter};
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use num::{BigInt, bigint::Sign, One, Zero};
-use ton_types::{
-    error, fail,
-    Result, BuilderData, Cell, CellType, IBitstring, HashmapE, HashmapType, SliceData, UInt256
-};
-
 use crate::{
+    base64_decode_to_slice,
+    sha256_digest,
     define_HashmapE,
     error::BlockError,
     hashmapaug::Augmentable,
     Serializable, Deserializable,
+    HashmapE, Cell, CellType, BuilderData, SliceData,
+    IBitstring,
+    dictionary::HashmapType,
 };
+
+use num::{BigInt, bigint::Sign, FromPrimitive, One, Zero};
+use std::{
+    cmp, convert::TryInto, fmt::{self, LowerHex, UpperHex, Display, Formatter},
+    str::{self, FromStr}, ops::Deref, marker::PhantomData,
+    sync::Arc, time::{SystemTime, UNIX_EPOCH},
+};
+use smallvec::SmallVec;
+
+pub type Error = failure::Error;
+pub type Result<T> = std::result::Result<T, Error>;
+pub type Failure = Option<Error>;
+pub type Status = Result<()>;
+
+#[macro_export]
+macro_rules! error {
+    ($error:literal) => {
+        failure::err_msg(format!("{} {}:{}", $error, file!(), line!()))
+    };
+    ($error:expr) => {
+        failure::Error::from($error)
+    };
+    ($fmt:expr, $($arg:tt)+) => {
+        failure::err_msg(format!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!()))
+    };
+}
+
+#[macro_export]
+macro_rules! fail {
+    ($error:literal) => {
+        return Err(failure::err_msg(format!("{} {}:{}", $error, file!(), line!())))
+    };
+    // uncomment to explicit panic for any ExceptionCode
+    // (ExceptionCode::CellUnderflow) => {
+    //     panic!("{}", error!(ExceptionCode::CellUnderflow))
+    // };
+    ($error:expr) => {
+        return Err(error!($error))
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        return Err(failure::err_msg(format!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!())))
+    };
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct UInt256([u8; 32]);
+
+impl PartialEq<SliceData> for UInt256 {
+    fn eq(&self, other: &SliceData) -> bool {
+        if other.remaining_bits() == 256 {
+            return self.0 == other.get_bytestring(0).as_slice()
+        }
+        false
+    }
+}
+
+impl PartialEq<SliceData> for &UInt256 {
+    fn eq(&self, other: &SliceData) -> bool {
+        if other.remaining_bits() == 256 {
+            return self.0 == other.get_bytestring(0).as_slice()
+        }
+        false
+    }
+}
+
+impl UInt256 {
+
+    pub const fn default() -> Self { Self::new() }
+    pub const fn new() -> Self {
+        Self::ZERO
+    }
+    pub const fn with_array(data: [u8; 32]) -> Self {
+        Self(data)
+    }
+
+    pub fn is_zero(&self) -> bool {
+        for b in &self.0 {
+            if b != &0 {
+                return false
+            }
+        }
+        true
+    }
+
+    pub const fn as_array(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    pub const fn as_slice(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    // Returns solid string like this: a80b23bfe4d301497f3ce11e753f23e8dec32368945ee279d044dbc1f91ace2a
+    pub fn as_hex_string(&self) -> String {
+        hex::encode(self.0)
+    }
+
+    // TODO: usage should be changed to as_hex_string
+    #[allow(clippy::wrong_self_convention)]
+    pub fn to_hex_string(&self) -> String { 
+        self.as_hex_string()
+    }
+
+    pub fn calc_file_hash(bytes: &[u8]) -> Self { 
+        Self::calc_sha256(bytes)
+    }
+
+    pub fn calc_sha256(bytes: &[u8]) -> Self {
+        Self(sha256_digest(bytes))
+    }
+
+    pub fn first_u64(&self) -> u64 {
+        u64::from_be_bytes(self.0[0..8].try_into().unwrap())
+    }
+
+    pub fn from_raw(data: Vec<u8>, length: usize) -> Self {
+        assert_eq!(length, 256);
+        let hash: [u8; 32] = data.try_into().unwrap();
+        Self(hash)
+    }
+
+    pub fn from_slice(value: &[u8]) -> Self {
+        match value.try_into() {
+            Ok(hash) => Self(hash),
+            Err(_) => Self::from_le_bytes(value)
+        }
+    }
+
+    pub fn from_be_bytes(value: &[u8]) -> Self {
+        let mut data = [0; 32];
+        let len = cmp::min(value.len(), 32);
+        let offset = 32 - len;
+        (0..len).for_each(|i| data[i + offset] = value[i]);
+        Self(data)
+    }
+
+    pub fn from_le_bytes(value: &[u8]) -> Self {
+        let mut data = [0; 32];
+        let len = cmp::min(value.len(), 32);
+        (0..len).for_each(|i| data[i] = value[i]);
+        Self(data)
+    }
+
+    pub const fn max() -> Self {
+        UInt256::MAX
+    }
+
+    pub fn rand() -> Self {
+        Self((0..32).map(|_| { rand::random::<u8>() }).collect::<Vec<u8>>().try_into().unwrap())
+    }
+
+    pub fn inner(self) -> [u8; 32] {
+        self.0
+    }
+
+    pub fn into_vec(self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+
+    pub const ZERO: UInt256 = UInt256([0; 32]);
+    pub const MIN: UInt256 = UInt256([0; 32]);
+    pub const MAX: UInt256 = UInt256([0xFF; 32]);
+    // hash of default cell 0x96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7;
+    pub const DEFAULT_CELL_HASH: UInt256 = UInt256([150, 162, 150, 210, 36, 242, 133, 198, 123, 238, 147,
+        195, 15, 138, 48, 145, 87, 240, 218, 163, 93, 197, 184, 126, 65, 11, 120, 99, 10, 9, 207, 199]);
+}
+
+impl From<[u8; 32]> for UInt256 {
+    fn from(data: [u8; 32]) -> Self {
+        UInt256(data)
+    }
+}
+
+impl From<&[u8; 32]> for UInt256 {
+    fn from(data: &[u8; 32]) -> Self {
+        UInt256(*data)
+    }
+}
+
+impl From<&[u8]> for UInt256 {
+    fn from(value: &[u8]) -> Self { Self::from_slice(value) }
+}
+
+impl From<Vec<u8>> for UInt256 {
+    fn from(value: Vec<u8>) -> Self {
+        match value.try_into() {
+            Ok(hash) => Self(hash),
+            Err(value) => UInt256::from_le_bytes(value.as_slice())
+        }
+    }
+}
+
+impl FromStr for UInt256 {
+    type Err = Error;
+    fn from_str(value: &str) -> Result<Self> {
+        let mut result = Self::default();
+        match value.len() {
+            64 => hex::decode_to_slice(value, &mut result.0)?,
+            66 => hex::decode_to_slice(&value[2..], &mut result.0)?,
+            44 => base64_decode_to_slice(value, &mut result.0)?,
+            _ => fail!("invalid account ID string (32 bytes expected), but got string {}", value)
+        }
+        Ok(result)
+    }
+}
+
+impl fmt::Debug for UInt256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        LowerHex::fmt(self, f)
+    }
+}
+
+impl fmt::Display for UInt256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "UInt256[{:X?}]", self.as_slice()
+        )
+    }    
+}
+
+impl LowerHex for UInt256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            write!(f, "0x{}", hex::encode(self.0))
+        } else {
+            write!(f, "{}", hex::encode(self.0))
+            // write!(f, "{}...{}", hex::encode(&self.0[..2]), hex::encode(&self.0[30..32]))
+        }
+    }
+}
+
+impl UpperHex for UInt256 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            write!(f, "0x")?;
+        }
+        write!(f, "{}", hex::encode_upper(self.0))
+    }
+}
+
+impl AsRef<[u8; 32]> for UInt256 {
+    fn as_ref(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl AsRef<[u8]> for UInt256 {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+pub type AccountId = SliceData;
+
+impl From<[u8; 32]> for AccountId {
+    fn from(data: [u8; 32]) -> AccountId {
+        SliceData::load_builder(BuilderData::with_raw(SmallVec::from_slice(&data), 256).unwrap()).unwrap()
+    }
+}
+
+impl From<UInt256> for AccountId {
+    fn from(data: UInt256) -> AccountId {
+        SliceData::load_builder(BuilderData::with_raw(SmallVec::from_slice(&data.0), 256).unwrap()).unwrap()
+    }
+}
+
+impl From<&UInt256> for AccountId {
+    fn from(data: &UInt256) -> AccountId {
+        SliceData::load_builder(BuilderData::with_raw(SmallVec::from_slice(&data.0), 256).unwrap()).unwrap()
+    }
+}
+
+impl FromStr for AccountId {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self> {
+        let uint: UInt256 = FromStr::from_str(s)?;
+        Ok(AccountId::from(uint.0))
+    }
+}
+
+// Exceptions *****************************************************************
+
+#[derive(Clone, Copy, Debug, num_derive::FromPrimitive, PartialEq, Eq, failure::Fail)]
+pub enum ExceptionCode {
+    #[fail(display = "normal termination")]
+    NormalTermination = 0,
+    #[fail(display = "alternative termination")]
+    AlternativeTermination = 1,
+    #[fail(display = "stack underflow")]
+    StackUnderflow = 2,
+    #[fail(display = "stack overflow")]
+    StackOverflow = 3,
+    #[fail(display = "integer overflow")]
+    IntegerOverflow = 4,
+    #[fail(display = "range check error")]
+    RangeCheckError = 5,
+    #[fail(display = "invalid opcode")]
+    InvalidOpcode = 6,
+    #[fail(display = "type check error")]
+    TypeCheckError = 7,
+    #[fail(display = "cell overflow")]
+    CellOverflow = 8,
+    #[fail(display = "cell underflow")]
+    CellUnderflow = 9,
+    #[fail(display = "dictionaty error")]
+    DictionaryError = 10,
+    #[fail(display = "unknown error")]
+    UnknownError = 11,
+    #[fail(display = "fatal error")]
+    FatalError = 12,
+    #[fail(display = "out of gas")]
+    OutOfGas = 13,
+    #[fail(display = "illegal instruction")]
+    IllegalInstruction = 14,
+    #[fail(display = "pruned cell")]
+    PrunedCellAccess = 15,
+    #[fail(display = "big cell")]
+    BigCellAccess = 16
+}
+
+/*
+impl fmt::Display for ExceptionCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.message())
+    }
+}
+*/
+
+#[rustfmt::skip]
+impl ExceptionCode {
+/*
+    pub fn message(&self) -> &'static str {
+        match self {
+            ExceptionCode::NormalTermination        => "normal termination",
+            ExceptionCode::AlternativeTermination   => "alternative termination",
+            ExceptionCode::StackUnderflow           => "stack underflow",
+            ExceptionCode::StackOverflow            => "stack overflow",
+            ExceptionCode::IntegerOverflow          => "integer overflow",
+            ExceptionCode::RangeCheckError          => "range check error",
+            ExceptionCode::InvalidOpcode            => "invalid opcode",
+            ExceptionCode::TypeCheckError           => "type check error",
+            ExceptionCode::CellOverflow             => "cell overflow",
+            ExceptionCode::CellUnderflow            => "cell underflow",
+            ExceptionCode::DictionaryError          => "dictionary error",
+            ExceptionCode::UnknownError             => "unknown error",
+            ExceptionCode::FatalError               => "fatal error",
+            ExceptionCode::OutOfGas                 => "out of gas error"
+        }
+    }
+*/
+    pub fn from_usize(number: usize) -> Option<ExceptionCode> {
+        FromPrimitive::from_usize(number)
+    }
+}
+
+pub trait ByteOrderRead {
+    fn read_be_uint(&mut self, bytes: usize) -> std::io::Result<u64>;
+    fn read_le_uint(&mut self, bytes: usize) -> std::io::Result<u64>;
+    fn read_byte(&mut self) -> std::io::Result<u8>;
+    fn read_be_u16(&mut self) -> std::io::Result<u16>;
+    fn read_be_u32(&mut self) -> std::io::Result<u32>;
+    fn read_be_u64(&mut self) -> std::io::Result<u64>;
+    fn read_le_u16(&mut self) -> std::io::Result<u16>;
+    fn read_le_u32(&mut self) -> std::io::Result<u32>;
+    fn read_le_u64(&mut self) -> std::io::Result<u64>;
+    fn read_u256(&mut self) -> std::io::Result<[u8; 32]>;
+}
+
+impl<T: std::io::Read> ByteOrderRead for T {
+    fn read_be_uint(&mut self, bytes: usize) -> std::io::Result<u64> {
+        read_uint(self, bytes, false)
+    }
+
+    fn read_le_uint(&mut self, bytes: usize) -> std::io::Result<u64> {
+        read_uint(self, bytes, true)
+    }
+
+    fn read_byte(&mut self) -> std::io::Result<u8> {
+        self.read_be_uint(1).map(|value| value as u8)
+    }
+
+    fn read_be_u16(&mut self) -> std::io::Result<u16> {
+        self.read_be_uint(2).map(|value| value as u16)
+    }
+
+    fn read_be_u32(&mut self) -> std::io::Result<u32> {
+        self.read_be_uint(4).map(|value| value as u32)
+    }
+
+    fn read_be_u64(&mut self) -> std::io::Result<u64> {
+        self.read_be_uint(8)
+    }
+
+    fn read_le_u16(&mut self) -> std::io::Result<u16> {
+        let mut buf = [0; 2];
+        self.read_exact(&mut buf)?;
+        Ok(u16::from_le_bytes(buf))
+    }
+
+    fn read_le_u32(&mut self) -> std::io::Result<u32> {
+        let mut buf = [0; 4];
+        self.read_exact(&mut buf)?;
+        Ok(u32::from_le_bytes(buf))
+    }
+
+    fn read_le_u64(&mut self) -> std::io::Result<u64> {
+        let mut buf = [0; 8];
+        self.read_exact(&mut buf)?;
+        Ok(u64::from_le_bytes(buf))
+    }
+
+    fn read_u256(&mut self) -> std::io::Result<[u8; 32]> {
+        let mut buf = [0; 32];
+        self.read_exact(&mut buf)?;
+        Ok(buf)
+    }
+}
+
+fn read_uint<T: std::io::Read>(src: &mut T, bytes: usize, le: bool) -> std::io::Result<u64> {
+    match bytes {
+        1 => {
+            let mut buf = [0];
+            src.read_exact(&mut buf)?;
+            Ok(buf[0] as u64)
+        }
+        2 => {
+            let mut buf = [0; 2];
+            src.read_exact(&mut buf)?;
+            if le {
+                Ok(u16::from_le_bytes(buf) as u64)
+            } else {
+                Ok(u16::from_be_bytes(buf) as u64)
+            }
+        }
+        3..=4 => {
+            let mut buf = [0; 4];
+            if le {
+                src.read_exact(&mut buf[0..bytes])?;
+                Ok(u32::from_le_bytes(buf) as u64)
+            } else {
+                src.read_exact(&mut buf[4 - bytes..])?;
+                Ok(u32::from_be_bytes(buf) as u64)
+            }
+        },
+        5..=8 => {
+            let mut buf = [0; 8];
+            if le {
+                src.read_exact(&mut buf[0..bytes])?;
+                Ok(u64::from_le_bytes(buf))
+            } else {
+                src.read_exact(&mut buf[8 - bytes..])?;
+                Ok(u64::from_be_bytes(buf))
+            }
+        },
+        n => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("too many bytes ({}) to read in u64", n),
+        )),
+    }
+}
+
+pub type Bitmask = u8;
+
 
 ///
 /// var_uint$_ {n:#} len:(#< n) value:(uint (len * 8)) = VarUInteger n;
@@ -132,7 +587,7 @@ macro_rules! define_VarIntegerN {
         }
 
         impl FromStr for $varname {
-            type Err = failure::Error;
+            type Err = crate::Error;
 
             fn from_str(string: &str) -> Result<Self> {
                 let result = if let Some(stripped) = string.strip_prefix("0x") {
@@ -225,7 +680,6 @@ macro_rules! define_VarIntegerN {
         pub struct $varname($tt);
 
         impl $varname {
-            pub const fn default() -> Self { $varname(0) }
             pub fn new(value: $tt) -> Result<Self> {
                 Self::check_overflow(&value)?;
                 Ok(Self(value))
@@ -306,8 +760,9 @@ macro_rules! define_VarIntegerN {
             }
         }
 
+        #[cfg(not(test))]
         impl std::convert::TryFrom<$tt> for $varname {
-            type Error = failure::Error;
+            type Error = crate::Error;
             fn try_from(value: $tt) -> Result<Self> {
                 Self::check_overflow(&value)?;
                 Ok(Self(value))
@@ -544,7 +999,7 @@ impl Grams {
 }
 
 impl FromStr for Grams {
-    type Err = failure::Error;
+    type Err = crate::Error;
 
     fn from_str(string: &str) -> Result<Self> {
         if let Some(stripped) = string.strip_prefix("0x") {
@@ -567,9 +1022,6 @@ macro_rules! define_NumberN_up32bit {
 
         #[allow(dead_code)]
         impl $varname {
-            pub const fn default() -> Self {
-                Self(0)
-            }
             pub fn new_checked(value: u32, max_value: u32) -> Result<Self> {
                 if value > max_value {
                     fail!(BlockError::InvalidArg(
@@ -698,43 +1150,43 @@ impl From<u32> for Number32 {
 }
 
 impl std::convert::TryFrom<u32> for Number5 {
-    type Error = failure::Error;
-    fn try_from(value: u32) -> ton_types::Result<Self> {
+    type Error = crate::Error;
+    fn try_from(value: u32) -> crate::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number8 {
-    type Error = failure::Error;
-    fn try_from(value: u32) -> ton_types::Result<Self> {
+    type Error = crate::Error;
+    fn try_from(value: u32) -> crate::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number9 {
-    type Error = failure::Error;
-    fn try_from(value: u32) -> ton_types::Result<Self> {
+    type Error = crate::Error;
+    fn try_from(value: u32) -> crate::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number12 {
-    type Error = failure::Error;
-    fn try_from(value: u32) -> ton_types::Result<Self> {
+    type Error = crate::Error;
+    fn try_from(value: u32) -> crate::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number13 {
-    type Error = failure::Error;
-    fn try_from(value: u32) -> ton_types::Result<Self> {
+    type Error = crate::Error;
+    fn try_from(value: u32) -> crate::Result<Self> {
         Self::new(value)
     }
 }
 
 impl std::convert::TryFrom<u32> for Number16 {
-    type Error = failure::Error;
-    fn try_from(value: u32) -> ton_types::Result<Self> {
+    type Error = crate::Error;
+    fn try_from(value: u32) -> crate::Result<Self> {
         Self::new(value)
     }
 }
@@ -762,11 +1214,6 @@ impl Augmentable for CurrencyCollection {
 }
 
 impl CurrencyCollection {
-    pub const fn default() -> Self { Self::new() }
-    pub const fn new() -> Self {
-        Self::from_grams(Grams::zero())
-    }
-
     pub fn get_other(&self, key: u32) -> Result<Option<VarUInteger32>> {
         self.other.get(&key)
     }
@@ -789,7 +1236,7 @@ impl CurrencyCollection {
         Self::from_grams(Grams::from(grams))
     }
 
-    pub const fn from_grams(grams: Grams) -> Self {
+    pub fn from_grams(grams: Grams) -> Self {
         CurrencyCollection {
             grams,
             other: ExtraCurrencyCollection::default()
@@ -1059,15 +1506,17 @@ macro_rules! define_HashmapE {
 
         #[allow(dead_code)]
         impl $varname {
-            /// default const constructor
-            pub const fn default() -> Self { Self::new() }
-            /// default const constructor
-            pub const fn new() -> Self {
-                Self(HashmapE::with_hashmap($bit_len, None))
-            }
+            /// default constructor
+            pub fn new() -> Self { Self::default() }
             /// constructor with HashmapE root
             pub const fn with_hashmap(data: Option<Cell>) -> Self {
                 Self(HashmapE::with_hashmap($bit_len, data))
+            }
+            /// constructor with single element
+            pub fn with_key_and_value<K: Serializable>(key: &K, value: &$x_type) -> Result<Self> {
+                let mut hashmap = Self::default();
+                hashmap.set(key, value)?;
+                Ok(hashmap)
             }
             pub fn root(&self) -> Option<&Cell> {
                 self.0.data()
@@ -1128,18 +1577,18 @@ macro_rules! define_HashmapE {
                 self.0.iterate_slices(|key, slice| p(key, slice))
             }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 let value = value.write_to_new_cell()?;
                 self.0.set_builder(key, &value)?;
                 Ok(())
             }
             pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 self.0.setref(key, value)?;
                 Ok(())
             }
             pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 let value = BuilderData::default();
                 self.0.set_builder(key, &value)?;
                 Ok(())
@@ -1149,19 +1598,19 @@ macro_rules! define_HashmapE {
                     .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
             }
             pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 self.get_raw(key)
             }
             pub fn get_raw(&self, key: SliceData) -> Result<Option<SliceData>> {
                 self.0.get(key)
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 let leaf = self.0.remove(key)?;
                 Ok(leaf.is_some())
             }
             pub fn check_key<K: Serializable>(&self, key: &K) -> Result<bool> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 self.0.get(key).map(|value| value.is_some())
             }
             pub fn export_vector(&self) -> Result<Vec<$x_type>> {
@@ -1220,7 +1669,7 @@ macro_rules! define_HashmapE {
                 eq: bool,
                 signed_int: bool,
             ) -> Result<Option<(K, $x_type)>> {
-                let key = SliceData::load_bitstring(key.write_to_new_cell()?)?;
+                let key = key.write_to_bitstring()?;
                 if let Some((k, mut v)) = self.0.find_leaf(key, next, eq, signed_int, &mut 0)? {
                     // BuilderData, SliceData
                     let key = K::construct_from_cell(k.into_cell()?)?;
@@ -1256,7 +1705,6 @@ macro_rules! define_HashmapE {
 pub struct UnixTime32(u32);
 
 impl UnixTime32 {
-    pub const fn default() -> Self { Self(0) }
     pub const fn new(value: u32) -> Self {
         Self(value)
     }
@@ -1394,7 +1842,7 @@ impl<T: Default + Serializable + Deserializable + Clone> ChildCell<T> {
         self.cell = Some(cell);
     }
 
-    pub fn hash(&self) -> UInt256 {
+    pub fn hash(&self) -> crate::UInt256 {
         match self.cell.as_ref() {
             Some(cell) => cell.repr_hash(),
             None => T::default().serialize().unwrap_or_default().repr_hash()
@@ -1415,3 +1863,8 @@ impl<T: Default + Serializable + Deserializable> PartialEq for ChildCell<T> {
         }
     }
 }
+
+
+#[cfg(test)]
+#[path = "tests/test_types.rs"]
+mod tests;

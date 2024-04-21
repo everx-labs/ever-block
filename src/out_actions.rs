@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,23 +7,25 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
     error::BlockError, messages::Message, types::CurrencyCollection, Deserializable, Serializable,
-};
-use std::collections::LinkedList;
-use ton_types::{
     error, fail, AccountId, BuilderData, Cell, IBitstring, Result, SliceData, UInt256,
 };
+use std::collections::LinkedList;
 
 pub const ACTION_SEND_MSG:   u32 = 0x0ec3c86d;
 pub const ACTION_SET_CODE:   u32 = 0xad4de08e;
 pub const ACTION_RESERVE:    u32 = 0x36e6b809;
 pub const ACTION_CHANGE_LIB: u32 = 0x26fa1dd4;
 pub const ACTION_COPYLEFT:   u32 = 0x24486f7a;
+
+#[cfg(test)]
+#[path = "tests/test_out_actions.rs"]
+mod tests;
 
 /*
 out_list_empty$_ = OutList 0;
