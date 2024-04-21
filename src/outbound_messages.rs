@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -23,15 +23,16 @@ use crate::{
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
     Serializable, Deserializable, ShardStateUnsplit, MerkleProof, MerkleUpdate, OutQueueUpdate,
-};
-use std::{fmt, collections::HashSet};
-use ton_types::{
     error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, SliceData, IBitstring,
     HashmapType, HashmapSubtree, hm_label, UsageTree,
 };
+use std::{fmt, collections::HashSet};
 
+#[cfg(test)]
+#[path = "tests/test_out_msgs.rs"]
+mod tests;
 
 /*
         3.3 Outbound message queue and descriptors
@@ -66,9 +67,7 @@ pub struct EnqueuedMsg {
 
 impl EnqueuedMsg {
     /// New default instance EnqueuedMsg structure
-    pub fn new() -> Self {
-        Default::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// New instance EnqueuedMsg structure
     pub fn with_param(enqueued_lt: u64, env: &MsgEnvelope) -> Result<Self> {
@@ -129,25 +128,48 @@ impl Deserializable for EnqueuedMsg {
 define_HashmapAugE!(OutMsgDescr, 256, UInt256, OutMsg, CurrencyCollection);
 
 impl OutMsgDescr {
+    /// insert new or replace existing (returning prev existing value), key - hash of Message
+    pub fn insert_with_key_return_prev(&mut self, key: UInt256, out_msg: &OutMsg) -> Result<Option<SliceData>> {
+        let aug = out_msg.aug()?;
+        self.set_return_prev(&key, out_msg, &aug)
+    }
     /// insert new or replace existing, key - hash of Message
     pub fn insert_with_key(&mut self, key: UInt256, out_msg: &OutMsg) -> Result<()> {
-        let aug = out_msg.aug()?;
-        self.set(&key, out_msg, &aug)
+        self.insert_with_key_return_prev(key, out_msg)?;
+        Ok(())
     }
 
-    /// insert new or replace existing
-    pub fn insert(&mut self, out_msg: &OutMsg) -> Result<()> {
+    /// insert new or replace existing (returning prev existing value)
+    pub fn insert_return_prev(&mut self, out_msg: &OutMsg) -> Result<()> {
         self.insert_with_key(out_msg.read_message_hash()?, out_msg)
     }
+    /// insert new or replace existing
+    pub fn insert(&mut self, out_msg: &OutMsg) -> Result<()> {
+        self.insert_return_prev(out_msg)?;
+        Ok(())
+    }
 
-    /// insert or replace existion record
+    /// insert or replace existion record (returning prev existing value)
     /// use to improve speed
-    pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, exported: &CurrencyCollection ) -> Result<()> {
-        if self.set_builder_serialized(key.clone(), &BuilderData::from_slice(msg_slice), exported).is_ok() {
-            Ok(())
-        } else {
-            fail!(BlockError::Other("Error insert serialized message".to_string()))
+    pub fn insert_serialized_return_prev(
+        &mut self, 
+        key: &SliceData, 
+        msg_slice: &SliceData, 
+        exported: &CurrencyCollection
+    ) -> Result<Option<SliceData>> {
+        match self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), exported) {
+            Ok((result, _)) => Ok(result),
+            Err(err) => fail!(BlockError::Other(format!("Error insert serialized message: {}", err)))
         }
+    }
+    pub fn insert_serialized(
+        &mut self, 
+        key: &SliceData, 
+        msg_slice: &SliceData, 
+        exported: &CurrencyCollection
+    ) -> Result<()> {
+        self.insert_serialized_return_prev(key, msg_slice, exported)?;
+        Ok(())
     }
 
     pub fn full_exported(&self) -> &CurrencyCollection {
@@ -269,17 +291,15 @@ pub struct OutMsgQueueInfo {
 }
 
 #[derive(Default)]
-struct ProofForWc {
-    proof: MerkleProof,
-    root_hashes: HashSet<UInt256>,
-    sub_queue_root_hash: UInt256,
-    sub_queue_root_hash_2: Option<UInt256>,
+pub struct ProofForWc {
+    pub proof: MerkleProof,
+    pub root_hashes: HashSet<UInt256>,
+    pub sub_queue_root_hash: UInt256,
+    pub sub_queue_root_hash_2: Option<UInt256>,
 }
 
 impl OutMsgQueueInfo {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn with_params(
         out_queue: OutMsgQueue,
@@ -339,7 +359,7 @@ impl OutMsgQueueInfo {
         shard_state_root: &Cell,
         workchain_id: i32
     ) -> Result<MerkleProof> {
-        let proof = Self::prepare_proof_for_wc_internal(shard_state_root, workchain_id)?;
+        let proof = Self::prepare_proof_for_wc_ex(shard_state_root, workchain_id)?;
         Ok(proof.proof)
     }
 
@@ -351,10 +371,10 @@ impl OutMsgQueueInfo {
         workchain_id: i32,
     ) -> Result<OutQueueUpdate> {
 
-        let old_proof = Self::prepare_proof_for_wc_internal(
+        let old_proof = Self::prepare_proof_for_wc_ex(
             old_shard_state_root, workchain_id)?;
 
-        let new_proof = Self::prepare_proof_for_wc_internal(
+        let new_proof = Self::prepare_proof_for_wc_ex(
             new_shard_state_root, workchain_id)?;
 
         // Prepare visited cells set of the needed part of queue
@@ -410,7 +430,7 @@ impl OutMsgQueueInfo {
         })
     }
 
-    fn prepare_proof_for_wc_internal(
+    pub fn prepare_proof_for_wc_ex(
         shard_state_root: &Cell,
         workchain_id: i32,
     ) -> Result<ProofForWc> {
@@ -424,7 +444,7 @@ impl OutMsgQueueInfo {
         ) -> Result<(UInt256, UInt256)> {
             let queue_info = state.read_out_msg_queue_info()?;
             let sub_queue_root_hash = queue_info.out_queue()
-                .subtree_root_cell(&SliceData::load_builder(workchain_id.write_to_new_cell()?)?)?
+                .subtree_root_cell(&SliceData::load_bitstring(workchain_id.write_to_new_cell()?)?)?
                 .map(|c| c.repr_hash()).unwrap_or_default();
             let proc_info_root_hash = queue_info.proc_info().root()
                 .map(|c| c.repr_hash()).unwrap_or_default();
@@ -487,8 +507,9 @@ impl Deserializable for OutMsgQueueInfo {
 /// OutMsg structure
 /// blockchain spec 3.3.3. Descriptor of an outbound message
 /// 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum OutMsg {
+    #[default]
     None,
     /// External outbound messages, or “messages to nowhere”
     /// msg_export_ext$000 msg:^(Message Any) transaction:^Transaction = OutMsg;
@@ -510,12 +531,6 @@ pub enum OutMsg {
     DequeueShort(OutMsgDequeueShort),
     /// msg_export_tr_req$111 out_msg:^MsgEnvelope imported:^InMsg = OutMsg;
     TransitRequeued(OutMsgTransitRequeued),
-}
-
-impl Default for OutMsg {
-    fn default() -> Self {
-        OutMsg::None
-    }
 }
 
 impl OutMsg {
@@ -737,7 +752,7 @@ impl OutMsg {
 
 impl Augmentation<CurrencyCollection> for OutMsg {
     fn aug(&self) -> Result<CurrencyCollection> {
-        let mut exported = CurrencyCollection::new();
+        let mut exported = CurrencyCollection::default();
         match self {
             OutMsg::New(ref x) => {
                 let env = x.read_out_message()?;

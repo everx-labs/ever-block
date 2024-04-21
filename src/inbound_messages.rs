@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2022 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -25,13 +25,14 @@ use crate::{
     transactions::Transaction,
     types::{AddSub, ChildCell, CurrencyCollection, Grams},
     Serializable, Deserializable,
-};
-use std::fmt;
-use ton_types::{
     error, fail, Result,
     BuilderData, Cell, IBitstring, SliceData, HashmapType, UInt256, hm_label,
 };
+use std::fmt;
 
+#[cfg(test)]
+#[path = "tests/test_in_msgs.rs"]
+mod tests;
 
 ///internal helper macros for reading InMsg variants
 macro_rules! read_msg_descr {
@@ -66,16 +67,10 @@ impl Augmentable for ImportFees {
 }
 
 impl ImportFees {
-    pub const fn new() -> ImportFees {
-        ImportFees {
-            fees_collected: Grams::zero(),
-            value_imported: CurrencyCollection::new(),
-        }
-    }
     pub fn with_grams(grams: u64) -> Self {
         Self {
             fees_collected: Grams::from(grams),
-            value_imported: CurrencyCollection::new()
+            value_imported: CurrencyCollection::default()
         }
     }
 }
@@ -109,8 +104,9 @@ const MSG_DISCARD_TR: u8 = 0b00000111;
 /// Inbound message
 /// blockchain spec 3.2.2. Descriptor of an inbound message.
 ///
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum InMsg {
+    #[default]
     None,
     /// Inbound external messages
     /// msg_import_ext$000 msg:^(Message Any) transaction:^Transaction = InMsg;
@@ -158,13 +154,6 @@ impl fmt::Display for InMsg {
         }
     }
 }
-
-impl Default for InMsg {
-    fn default() -> Self {
-        InMsg::None
-    }
-}
-
 
 impl InMsg {
     /// Create external
@@ -832,8 +821,13 @@ impl InMsgDescr {
 
     /// insert or replace existion record
     /// use to improve speed
-    pub fn insert_serialized(&mut self, key: &SliceData, msg_slice: &SliceData, fees: &ImportFees ) -> Result<()> {
-        if self.set_builder_serialized(key.clone(), &BuilderData::from_slice(msg_slice), fees).is_ok() {
+    pub fn insert_serialized(
+        &mut self, 
+        key: &SliceData, 
+        msg_slice: &SliceData, 
+        fees: &ImportFees
+    ) -> Result<()> {
+        if self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), fees).is_ok() {
             Ok(())
         } else {
             fail!(BlockError::Other("Error insert serialized message".to_string()))

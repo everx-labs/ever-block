@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -25,14 +25,16 @@ use crate::{
     types::{ChildCell, CurrencyCollection},
     validators::ValidatorSet,
     CopyleftRewards, Deserializable, IntermediateAddress, MaybeDeserialize, MaybeSerialize,
-    Serializable,
-};
-use std::fmt::{self, Display, Formatter};
-use ton_types::{
+    Serializable, Account,
     error, fail, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
     SliceData, UInt256,
 };
+use crate::RefShardBlocks;
+use std::fmt::{self, Display, Formatter};
 
+#[cfg(test)]
+#[path = "tests/test_shard.rs"]
+mod tests;
 
 pub const MAX_SPLIT_DEPTH: u8 = 60;
 pub const MASTERCHAIN_ID: i32 = -1;
@@ -56,12 +58,6 @@ impl Default for AccountIdPrefixFull {
 }
 
 impl AccountIdPrefixFull {
-    pub const fn default() -> Self {
-        Self {
-            workchain_id: INVALID_WORKCHAIN_ID,
-            prefix: 0,
-        }
-    }
     /// Tests address for validity (workchain_id != 0x80000000)
     pub fn is_valid(&self) -> bool {
         self.workchain_id != INVALID_WORKCHAIN_ID
@@ -348,7 +344,7 @@ impl ShardIdent {
             let prefix = self.shard_prefix_with_tag() >> (64 - prefix_len);
             cell.append_bits(prefix as usize, prefix_len as usize).unwrap();
         }
-        SliceData::load_builder(cell).unwrap()
+        SliceData::load_bitstring(cell).unwrap()
     }
 
     /// Get bitstring-key for BinTree operation for Shard
@@ -356,14 +352,14 @@ impl ShardIdent {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)?
             .append_u64(self.shard_prefix_without_tag())?;
-        SliceData::load_builder(cell)
+        SliceData::load_bitstring(cell)
     }
 
     pub fn full_key_with_tag(&self) -> Result<SliceData> {
         let mut cell = BuilderData::new();
         cell.append_i32(self.workchain_id)?
             .append_u64(self.shard_prefix_with_tag())?;
-        SliceData::load_builder(cell)
+        SliceData::load_bitstring(cell)
     }
 
     pub fn workchain_id(&self) -> i32 {
@@ -703,6 +699,11 @@ impl Deserializable for ShardState {
                 ss.read_from(cell)?;
                 ShardState::UnsplitState(ss)
             }
+            SHARD_STATE_UNSPLIT_PFX_2 => {
+                let mut ss = ShardStateUnsplit::default();
+                ss.read_from(cell)?;
+                ShardState::UnsplitState(ss)
+            }
             SHARD_STATE_SPLIT_PFX => {
                 let mut ss = ShardStateSplit::default();
                 ss.read_from(cell)?;
@@ -724,6 +725,7 @@ impl Deserializable for ShardState {
 
 const SHARD_STATE_SPLIT_PFX: u32 = 0x5f327da5;
 const SHARD_STATE_UNSPLIT_PFX: u32 = 0x9023afe2;
+const SHARD_STATE_UNSPLIT_PFX_2: u32 = 0x9023aeee;
 
 impl Serializable for ShardState {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -749,9 +751,7 @@ pub struct ShardStateSplit {
 }
 
 impl ShardStateSplit {
-    pub fn new() -> Self {
-        ShardStateSplit::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn with_left_right(left: Cell, right: Cell) -> Self {
         ShardStateSplit { left, right }
@@ -817,6 +817,7 @@ pub struct ShardStateUnsplit {
     seq_no: u32,
     vert_seq_no: u32,
     gen_time: u32,
+    gen_time_tail_ms: u16,
     gen_lt: u64,
     min_ref_mc_seqno: u32,
     out_msg_queue_info: ChildCell<OutMsgQueueInfo>,
@@ -830,8 +831,12 @@ pub struct ShardStateUnsplit {
     libraries: Libraries, // currently can be present only in masterchain blocks.
     master_ref: Option<BlkMasterInfo>,
 
-    custom: Option<ChildCell<McStateExtra>>, // The field custom is usually present only
-    // in the masterchain and contains all the masterchain-specific data.
+    // This field is present only in the masterchain and contains all the masterchain-specific data.
+    custom: Option<ChildCell<McStateExtra>>, 
+
+    // This field is present only in shardchain blocks (in case of fast_finality consensus)
+    // and contains shard blocks this shardchain block refers to.
+    ref_shard_blocks: Option<RefShardBlocks>,
 }
 
 impl ShardStateUnsplit {
@@ -887,8 +892,22 @@ impl ShardStateUnsplit {
         self.gen_time
     }
 
+    pub fn gen_time_ms(&self) -> u64 {
+        self.gen_time as u64 * 1000 + (self.gen_time_tail_ms as u64)
+    }
+
+    pub fn gen_time_ms_part(&self) -> u16 {
+        self.gen_time_tail_ms
+    }
+
     pub fn set_gen_time(&mut self, value: u32) {
-        self.gen_time = value
+        self.gen_time = value;
+        self.gen_time_tail_ms = 0;
+    }
+
+    pub fn set_gen_time_ms(&mut self, value: u64) {
+        self.gen_time = (value / 1000) as u32;
+        self.gen_time_tail_ms = (value % 1000) as u16;
     }
 
     pub fn gen_lt(&self) -> u64 {
@@ -994,6 +1013,14 @@ impl ShardStateUnsplit {
         &mut self.libraries
     }
 
+    pub fn ref_shard_blocks(&self) -> Option<&RefShardBlocks> {
+        self.ref_shard_blocks.as_ref()
+    }
+
+    pub fn set_ref_shard_blocks(&mut self, rsb: Option<RefShardBlocks>) {
+        self.ref_shard_blocks = rsb;
+    }
+
     pub fn master_ref(&self) -> Option<&BlkMasterInfo> {
         self.master_ref.as_ref()
     }
@@ -1065,35 +1092,61 @@ impl ShardStateUnsplit {
             .read_cur_validator_set_and_cc_conf()
     }
 
-    pub fn update_smc(&mut self, addr: &UInt256, code: Option<&Cell>, data: Option<&Cell>) -> Result<()> {
+    fn update_smc_internal(&mut self, address: &UInt256, op: impl FnOnce(&mut Account) -> Result<()>) -> Result<()> {
         let mut accounts = self.read_accounts()?;
-        let mut shard_smc = accounts.get(addr)?
-            .ok_or_else(|| error!("SMC {:x} isn't present", addr))?;
+        let mut shard_smc = accounts.get(address)?
+            .ok_or_else(|| error!("SMC {:x} isn't present", address))?;
         let mut smc = shard_smc.read_account()?;
-        if let Some(code) = code {
-            smc.set_code(code.clone());
-        }
-        if let Some(data) = data {
-            smc.set_data(data.clone());
-        }
+        op(&mut smc)?;
         shard_smc.write_account(&smc)?;
-        accounts.set(addr, &shard_smc, &smc.aug()?)?;
+        accounts.set(address, &shard_smc, &smc.aug()?)?;
         self.write_accounts(&accounts)
     }
 
+    pub fn update_smc(&mut self, address: &UInt256, code: Option<&Cell>, data: Option<&Cell>) -> Result<()> {
+        self.update_smc_internal(address, |smc| {
+            if let Some(code) = code {
+                smc.set_code(code.clone());
+            }
+            if let Some(data) = data {
+                smc.set_data(data.clone());
+            }
+            Ok(())
+        })
+    }
+
     pub fn update_config_smc(&mut self) -> Result<()> {
+        self.update_config_smc_with_code(None)
+    }
+
+    pub fn update_config_smc_with_code(&mut self, new_code: Option<Cell>) -> Result<()> {
         let config = self.read_custom()?
             .ok_or_else(|| error!("masterchain state must contain config"))?
             .config;
-        let mut accounts = self.read_accounts()?;
-        let mut shard_config_smc = accounts.get(&config.config_addr)?
-            .ok_or_else(|| error!("config SMC isn't present"))?;
-        let mut config_smc = shard_config_smc.read_account()?;
+        let address = config.config_address()?;
+        self.update_smc_internal(&address, |smc| {
+            smc.update_config_smc(&config)?;
+            if let Some(new_code) = new_code {
+                smc.set_code(new_code);
+            }
+            Ok(())
+        })
+    }
 
-        config_smc.update_config_smc(&config)?;
-        shard_config_smc.write_account(&config_smc)?;
-        accounts.set(&config.config_addr, &shard_config_smc, &config_smc.aug()?)?;
-        self.write_accounts(&accounts)
+    pub fn update_elector_smc(&mut self, new_code: Option<Cell>, new_data: Option<Cell>) -> Result<()> {
+        let config = self.read_custom()?
+            .ok_or_else(|| error!("masterchain state must contain config"))?
+            .config;
+        let address = config.elector_address()?;
+        self.update_smc_internal(&address, |smc| {
+            if let Some(new_code) = new_code {
+                smc.set_code(new_code);
+            }
+            if let Some(new_data) = new_data {
+                smc.set_data(new_data);
+            }
+            Ok(())
+        })
     }
 }
 
@@ -1101,7 +1154,7 @@ impl Deserializable for ShardStateUnsplit {
 
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        if tag != SHARD_STATE_UNSPLIT_PFX {
+        if tag != SHARD_STATE_UNSPLIT_PFX && tag != SHARD_STATE_UNSPLIT_PFX_2 {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
@@ -1114,6 +1167,9 @@ impl Deserializable for ShardStateUnsplit {
         self.seq_no.read_from(cell)?;
         self.vert_seq_no.read_from(cell)?;
         self.gen_time.read_from(cell)?;
+        if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+            self.gen_time_tail_ms.read_from(cell)?;
+        }
         self.gen_lt.read_from(cell)?;
         self.min_ref_mc_seqno.read_from(cell)?;
         self.out_msg_queue_info.read_from_reference(cell)?;
@@ -1128,25 +1184,39 @@ impl Deserializable for ShardStateUnsplit {
         self.libraries.read_from(cell1)?;
         self.master_ref = BlkMasterInfo::read_maybe_from(cell1)?;
 
-        self.custom = if cell.get_next_bit()? {
-            let mse = ChildCell::<McStateExtra>::construct_from_reference(cell)?;
-            Some(mse)
-        } else {
-            None
-        };
+        if tag == SHARD_STATE_UNSPLIT_PFX {
+            self.custom = ChildCell::construct_maybe_from_reference(cell)?;
+            self.ref_shard_blocks = None;
+        } else if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+            if self.shard_id.is_masterchain() {
+                self.custom = ChildCell::construct_maybe_from_reference(cell)?;
+                self.ref_shard_blocks = None;
+            } else {
+                self.custom = None;
+                self.ref_shard_blocks = Some(RefShardBlocks::construct_from(cell)?);
+            }
+        }
+
         Ok(())
     }
 }
 
 impl Serializable for ShardStateUnsplit {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
-        let tag = SHARD_STATE_UNSPLIT_PFX;
+        let tag = if self.ref_shard_blocks.is_some() || self.gen_time_tail_ms != 0 {
+            SHARD_STATE_UNSPLIT_PFX_2
+        } else {
+            SHARD_STATE_UNSPLIT_PFX
+        };
         builder.append_u32(tag)?;
         self.global_id.write_to(builder)?;
         self.shard_id.write_to(builder)?;
         self.seq_no.write_to(builder)?;
         self.vert_seq_no.write_to(builder)?;
         self.gen_time.write_to(builder)?;
+        if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+            self.gen_time_tail_ms.write_to(builder)?;
+        }
         self.gen_lt.write_to(builder)?;
         self.min_ref_mc_seqno.write_to(builder)?;
         builder.checked_append_reference(self.out_msg_queue_info.cell())?;
@@ -1163,9 +1233,17 @@ impl Serializable for ShardStateUnsplit {
         self.master_ref.write_maybe_to(&mut b2)?;
         builder.checked_append_reference(b2.into_cell()?)?;
 
-        builder.append_bit_bool(self.custom.is_some())?;
-        if let Some(ref custom) = self.custom {
-            builder.checked_append_reference(custom.cell())?;
+        if tag == SHARD_STATE_UNSPLIT_PFX {
+            ChildCell::write_maybe_to(builder, self.custom.as_ref())?;
+        } else if tag == SHARD_STATE_UNSPLIT_PFX_2 {
+            if self.custom.is_some() && self.ref_shard_blocks.is_some() {
+                fail!("'custom' and 'ref_shard_blocks' fields must not be present simultaneously");
+            }
+            if let Some(rsb) = &self.ref_shard_blocks {
+                rsb.write_to(builder)?;
+            } else {
+                ChildCell::write_maybe_to(builder, self.custom.as_ref())?;
+            }
         }
 
         Ok(())
