@@ -389,6 +389,7 @@ pub enum GlobalCapabilities {
     CapNoSplitOutQueue        = 0x0008_0000_0000, // Don't split out queue on shard splitting
     CapUndeletableAccounts    = 0x0010_0000_0000, // Don't delete frozen accounts
     CapTvmV20                 = 0x0020_0000_0000, // BLS instructions
+    CapDuePaymentFix          = 0x0040_0000_0000, // No due payments on credit phase and add payed dues to storage fee in TVM 
 }
 
 impl ConfigParams {

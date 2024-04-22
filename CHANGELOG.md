@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.10.1
+
+- Added GlobalCapabilities::CapDuePaymentFix which disables due payments on credit phase and adds payed dues to storage fee in TVM
+
 ## Version 1.10.0
 
 - `ton-types` repository was merged with this repository
