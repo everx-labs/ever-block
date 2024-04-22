@@ -243,6 +243,11 @@ pub trait Serializable {
         SliceData::load_bitstring(cell)
     }
 
+    fn write_to_bitstring_with_opts(&self, opts: u8) -> Result<SliceData> {
+        let builder = self.write_to_new_cell_with_opts(opts)?;
+        SliceData::load_bitstring(builder)
+    }
+
     fn write_to_bytes(&self) -> Result<Vec<u8>> {
         let cell = self.serialize()?;
         write_boc(&cell)

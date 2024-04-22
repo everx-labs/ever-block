@@ -15,8 +15,8 @@
 use super::*;
 use rand::Rng;
 use crate::{
-    ValidatorDescr, write_read_and_assert, VarUInteger32, Serializable, read_single_root_boc, 
-    Ed25519KeyOption
+    read_single_root_boc, write_read_and_assert, BlockIdExt, Ed25519KeyOption, Serializable, 
+    ValidatorDescr, VarUInteger32
 };
 
 fn get_config_param0() -> ConfigParam0 {

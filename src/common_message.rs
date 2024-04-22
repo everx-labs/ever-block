@@ -1,8 +1,7 @@
 use crate::{
     error::BlockError, messages::Message, Deserializable, Serializable, SERDE_OPTS_COMMON_MESSAGE,
-    SERDE_OPTS_EMPTY,
+    SERDE_OPTS_EMPTY, error, fail, Error, BuilderData, IBitstring, Result, SliceData
 };
-use ton_types::{error, fail, Error, BuilderData, IBitstring, Result, SliceData};
 
 #[cfg(test)]
 #[path = "tests/test_common_message.rs"]

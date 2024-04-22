@@ -11,7 +11,10 @@
 * limitations under the License.
 */
 
-use crate::{write_read_and_assert, write_read_and_assert_with_opts, MsgAddressInt, MsgAddressExt, Message, CommonMessage};
+use crate::{
+    write_read_and_assert, write_read_and_assert_with_opts, MsgAddressInt, MsgAddressExt, Message,
+    CommonMessage
+};
 use super::*;
 use std::sync::Arc;
 
