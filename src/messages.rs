@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -21,13 +21,10 @@ use crate::{
     shard::MASTERCHAIN_ID,
     types::{AddSub, CurrencyCollection, Grams, Number5, Number9, UnixTime32},
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
-};
-use std::fmt;
-use std::str::FromStr;
-use ton_types::{
     error, fail, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
     SliceData, UInt256, UsageTree, MAX_DATA_BITS, MAX_REFERENCES_COUNT,
 };
+use std::{fmt, str::FromStr};
 
 #[cfg(test)]
 #[path = "tests/test_messages.rs"]
@@ -193,7 +190,7 @@ impl MsgAddressExt {
 }
 
 impl FromStr for MsgAddressExt {
-    type Err = ton_types::Error;
+    type Err = crate::Error;
     fn from_str(string: &str) -> Result<Self> {
         match MsgAddress::from_str(string)? {
             MsgAddress::AddrNone => Ok(MsgAddressExt::AddrNone),
@@ -263,7 +260,7 @@ impl MsgAddress {
 
 
 impl FromStr for MsgAddress {
-    type Err = ton_types::Error;
+    type Err = crate::Error;
     fn from_str(string: &str) -> Result<Self> {
         let parts: Vec<&str> = string.split(':').take(4).collect();
         let len = parts.len();
@@ -366,7 +363,7 @@ impl Default for MsgAddressInt {
 }
 
 impl FromStr for MsgAddressInt {
-    type Err = ton_types::Error;
+    type Err = crate::Error;
     fn from_str(string: &str) -> Result<Self> {
         match MsgAddress::from_str(string)? {
             MsgAddress::AddrStd(addr) => Ok(MsgAddressInt::AddrStd(addr)),

@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -24,15 +24,12 @@ use crate::{
     types::{AddSub, ChildCell, CurrencyCollection},
     transactions::Transaction,
     Serializable, Deserializable, ShardStateUnsplit, MerkleProof, MerkleUpdate, OutQueueUpdate,
-    SERDE_OPTS_EMPTY, SERDE_OPTS_COMMON_MESSAGE, InRefValue,
-};
-use std::{fmt, collections::HashSet};
-use ton_types::{
-    error, fail, Result,
-    AccountId, UInt256,
+    error, fail, Result, SERDE_OPTS_EMPTY, SERDE_OPTS_COMMON_MESSAGE,
+    AccountId, UInt256, InRefValue,
     BuilderData, Cell, SliceData, IBitstring,
     HashmapType, HashmapSubtree, hm_label, UsageTree,
 };
+use std::{fmt, collections::HashSet};
 
 #[cfg(test)]
 #[path = "tests/test_out_msgs.rs"]
@@ -167,8 +164,10 @@ impl OutMsgDescr {
         msg_slice: &SliceData, 
         exported: &CurrencyCollection
     ) -> Result<Option<SliceData>> {
-        self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), exported)
-            .map_err(|_| error!(BlockError::Other("Error insert serialized message".to_string())))
+        match self.set_builder_serialized(key.clone(), &msg_slice.as_builder(), exported) {
+            Ok((result, _)) => Ok(result),
+            Err(err) => fail!(BlockError::Other(format!("Error insert serialized message: {}", err)))
+        }
     }
     pub fn insert_serialized(
         &mut self, 

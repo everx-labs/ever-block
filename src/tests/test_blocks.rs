@@ -7,23 +7,21 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use std::fs::{read, read_dir};
 use std::path::Path;
 
-use ton_types::{AccountId, Cell, read_boc, UsageTree};
-use ton_types::read_single_root_boc;
-
-use crate::tests::create_test_transaction_set;
-use crate::{Transaction, MsgEnvelope};
 use crate::{
     hashmapaug::HashmapAugType,
     AccountBlock, Message, TickTock, write_read_and_assert,
-    bintree::BinTreeType, transactions::tests::generate_test_shard_account_block,
-    types::{AddSub, Grams}, OutMsg, CommonMessage
+    bintree::BinTreeType, CommonMessage, Transaction,
+    types::{AddSub, Grams}, OutMsg, UsageTree,
+    AccountId, Cell, read_boc,
+    read_single_root_boc, MsgEnvelope,
+    transactions::tests::{generate_test_shard_account_block, create_test_transaction_set},
 };
 use super::*;
 
@@ -423,7 +421,7 @@ fn test_real_ton_key_block() {
     if let Some(custom) = block.read_extra().unwrap().read_custom().unwrap() {
         if let Some(c) = custom.config() {
             crate::config_params::dump_config(&c.config_params);
-            // let bytes = ton_types::serialize_toc(c.config_params.data().unwrap()).unwrap();
+            // let bytes = serialize_toc(c.config_params.data().unwrap()).unwrap();
             // std::fs::write("src/tests/data/config.boc", bytes).unwrap();
         }
     }

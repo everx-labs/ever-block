@@ -7,32 +7,22 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
-    accounts::ShardAccount,
-    config_params::CatchainConfig,
-    define_HashmapE,
-    envelope_message::FULL_BITS,
-    error::BlockError,
-    hashmapaug::{Augmentation, HashmapAugType},
-    master::{BlkMasterInfo, LibDescr, McStateExtra},
-    messages::MsgAddressInt,
-    outbound_messages::OutMsgQueueInfo,
-    shard_accounts::ShardAccounts,
-    types::{ChildCell, CurrencyCollection},
-    validators::ValidatorSet,
-    CopyleftRewards, Deserializable, IntermediateAddress, MaybeDeserialize, MaybeSerialize,
-    Serializable, Account, SERDE_OPTS_EMPTY, OutMsgQueuesInfo, SERDE_OPTS_COMMON_MESSAGE, MeshMsgQueuesInfo,
+    accounts::ShardAccount, config_params::CatchainConfig, define_HashmapE, 
+    envelope_message::FULL_BITS, error::BlockError, fail,
+    hashmapaug::{Augmentation, HashmapAugType}, master::{BlkMasterInfo, LibDescr, McStateExtra}, 
+    messages::MsgAddressInt, outbound_messages::OutMsgQueueInfo, shard_accounts::ShardAccounts, 
+    types::{ChildCell, CurrencyCollection}, validators::ValidatorSet, Account, AccountId, 
+    BuilderData, Cell, CopyleftRewards, Deserializable, HashmapE, HashmapType, IBitstring, 
+    IntermediateAddress, MaybeDeserialize, MaybeSerialize, MeshMsgQueuesInfo, OutMsgQueuesInfo, 
+    Result, Serializable, SliceData, UInt256, SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, error,
 };
 use crate::RefShardBlocks;
 use std::fmt::{self, Display, Formatter};
-use ton_types::{
-    error, fail, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
-    SliceData, UInt256,
-};
 
 #[cfg(test)]
 #[path = "tests/test_shard.rs"]

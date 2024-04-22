@@ -1,5 +1,5 @@
 /*
-* Copyright (C) 2019-2021 TON Labs. All Rights Reserved.
+* Copyright (C) 2019-2024 EverX. All Rights Reserved.
 *
 * Licensed under the SOFTWARE EVALUATION License (the "License"); you may not use
 * this file except in compliance with the License.
@@ -7,12 +7,14 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 #![allow(clippy::inconsistent_digit_grouping, clippy::unusual_byte_groupings)]
-use ton_types::{read_single_root_boc, SliceData};
-use crate::{write_read_and_assert_with_opts, AccountIdPrefixFull, BlockIdExt, InRefValue};
+use crate::{
+    read_single_root_boc, write_read_and_assert_with_opts, AccountIdPrefixFull, BlockIdExt, 
+    InRefValue, MeshMsgQueuesInfo, SliceData
+};
 use super::*;
 
 use std::{collections::HashSet, str::FromStr};

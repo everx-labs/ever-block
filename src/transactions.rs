@@ -7,7 +7,7 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
@@ -23,13 +23,10 @@ use crate::{
     shard::ShardStateUnsplit,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
     Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
-    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY
+    error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
+    SliceData, UInt256, UsageTree, SERDE_OPTS_EMPTY, SERDE_OPTS_COMMON_MESSAGE,
 };
 use std::{fmt, sync::Arc};
-use ton_types::{
-    error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
-    SliceData, UInt256, UsageTree,
-};
 
 
 
@@ -2038,7 +2035,8 @@ impl ShardAccountBlocks {
             account_block.account_addr.clone(),
             &account_block.write_to_new_cell_with_opts(self.opts)?,
             account_block.total_fee()
-        ).map(|_|())
+        )?;
+        Ok(())
     }
 
     /// adds transaction to account by id from transaction

@@ -7,15 +7,9 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
-
-use ton_types::{
-    BuilderData, Cell, error,
-    fail,
-    HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256, HashmapIterator,
-};
 
 use crate::{
     define_HashmapE,
@@ -26,7 +20,9 @@ use crate::{
     signature::{CryptoSignature, SigPubKey},
     types::{ChildCell, ExtraCurrencyCollection, Grams, Number8, Number12, Number16, Number13, Number32},
     validators::{ValidatorDescr, ValidatorSet},
-    Serializable, Deserializable, BlockIdExt,
+    Serializable, Deserializable,
+    BuilderData, Cell, error, fail, BlockIdExt,
+    HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256, HashmapIterator,
 };
 
 #[cfg(test)]
@@ -405,7 +401,9 @@ pub enum GlobalCapabilities {
     CapTvmV19                 = 0x0002_0000_0000, // TVM v1.9.x improvemements
     CapSmft                   = 0x0004_0000_0000,
     CapNoSplitOutQueue        = 0x0008_0000_0000, // Don't split out queue on shard splitting
-    CapCommonMessage          = 0x0010_0000_0000,
+    CapUndeletableAccounts    = 0x0010_0000_0000, // Don't delete frozen accounts
+    CapTvmV20                 = 0x0020_0000_0000, // BLS instructions
+    CapCommonMessage          = 0x0080_0000_0000,
 }
 
 impl ConfigParams {

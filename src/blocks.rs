@@ -7,25 +7,21 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
-    config_params::{CatchainConfig, GlobalVersion},
-    define_HashmapE,
-    error::BlockError,
-    inbound_messages::InMsgDescr,
-    master::{BlkMasterInfo, McBlockExtra},
-    merkle_update::MerkleUpdate,
-    outbound_messages::OutMsgDescr,
-    shard::ShardIdent,
-    signature::BlockSignatures,
-    transactions::ShardAccountBlocks,
-    types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32, AddSub},
-    validators::ValidatorSet,
-    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, VarUInteger32,
-    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, MerkleProof, OutMsgQueueInfo,
+    config_params::{CatchainConfig, GlobalVersion}, define_HashmapE, error::BlockError, error,
+    fail, inbound_messages::InMsgDescr,
+    master::{BlkMasterInfo, McBlockExtra}, 
+    merkle_update::MerkleUpdate, outbound_messages::OutMsgDescr, shard::ShardIdent, 
+    signature::BlockSignatures, transactions::ShardAccountBlocks, 
+    types::{AddSub, ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32},
+    validators::ValidatorSet, AccountId, 
+    BuilderData, Cell, Deserializable, ExceptionCode, HashmapE, HashmapType, IBitstring, 
+    MaybeDeserialize, MaybeSerialize, MerkleProof, OutMsgQueueInfo, Result, Serializable, 
+    SliceData, UInt256, VarUInteger32, SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY
 };
 use crate::RefShardBlocks;
 use std::borrow::Cow;
@@ -34,10 +30,6 @@ use std::{
     fmt::{self, Display, Formatter},
     io::{Cursor, Write},
     str::FromStr,
-};
-use ton_types::{
-    error, fail, AccountId, BuilderData, Cell, ExceptionCode, HashmapE, HashmapType, IBitstring,
-    Result, SliceData, UInt256,
 };
 
 #[cfg(test)]
@@ -132,7 +124,7 @@ impl Display for BlockIdExt {
 }
 
 impl FromStr for BlockIdExt {
-    type Err = ton_types::Error;
+    type Err = crate::Error;
 
     fn from_str(s: &str) -> Result<Self> {
         // (0:1800000000000000, 1203696, rh 59b6e56610aa5df5e8ee4cc5f1081cd5d08473f10e0899f7763d580b2a635f90, fh 1b4d177339538562d10166d87823783b7e747ee80d85d033459928fd0605a126)

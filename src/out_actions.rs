@@ -7,17 +7,15 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
     error::BlockError, messages::Message, types::CurrencyCollection, Deserializable, Serializable,
-};
-use std::collections::LinkedList;
-use ton_types::{
     error, fail, AccountId, BuilderData, Cell, IBitstring, Result, SliceData, UInt256,
 };
+use std::collections::LinkedList;
 
 pub const ACTION_SEND_MSG:   u32 = 0x0ec3c86d;
 pub const ACTION_SET_CODE:   u32 = 0xad4de08e;

@@ -7,19 +7,18 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use super::*;
 use crate::{
-    transactions::tests::generate_test_shard_account_block, write_read_and_assert, 
-    write_read_and_assert_with_opts, Block, BlockExtra, BlockInfo, CommonMessage, Deserializable,
-    ExtBlkRef, HashmapAugType, MerkleUpdate, MsgAddressInt, ShardStateUnsplit, Transaction, 
-    ValueFlow, BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY
+    read_single_root_boc, write_read_and_assert, write_read_and_assert_with_opts, Block, BlockExtra,
+    Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit, 
+    BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY, CommonMessage, Transaction, BlockInfo, ValueFlow,
+    MerkleUpdate, transactions::tests::generate_test_shard_account_block,
 };
 use std::collections::{HashMap, HashSet};
-use ton_types::read_single_root_boc;
 use rand::Rng;
 
 #[test]
@@ -536,9 +535,9 @@ fn test_counters() {
 
 fn gen_collator() -> CollatorRange {
     let mut rng = rand::thread_rng();
-    let collator = rng.gen_range(0, 100);
-    let start = rng.gen_range(0, 100);
-    let finish = rng.gen_range(start, 100);
+    let collator = rng.gen_range(0..100);
+    let start = rng.gen_range(0..100);
+    let finish = rng.gen_range(start..100);
     CollatorRange {
         collator,
         start,

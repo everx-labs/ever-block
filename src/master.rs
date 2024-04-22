@@ -7,30 +7,23 @@
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS,
 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific TON DEV software governing permissions and
+* See the License for the specific EVERX DEV software governing permissions and
 * limitations under the License.
 */
 
 use crate::{
-    bintree::{BinTree, BinTreeType},
-    blocks::{Block, BlockIdExt, ExtBlkRef, ProofChain},
-    config_params::ConfigParams,
-    define_HashmapAugE, define_HashmapE,
-    error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugType, TraverseNextStep},
-    inbound_messages::InMsg,
-    shard::{AccountIdPrefixFull, ShardIdent, SHARD_FULL},
-    signature::CryptoSignaturePair,
-    types::{ChildCell, CurrencyCollection, InRefValue},
-    validators::ValidatorInfo,
-    CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15,
-    Augmentation, SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, VarUInteger32, HashUpdate,
+    bintree::{BinTree, BinTreeType}, 
+    blocks::{Block, BlockIdExt, ExtBlkRef, ProofChain}, 
+    config_params::ConfigParams, define_HashmapAugE, define_HashmapE, error::BlockError, error, 
+    fail, hashmapaug::{Augmentable, HashmapAugType, TraverseNextStep}, 
+    hm_label, inbound_messages::InMsg, shard::{AccountIdPrefixFull, ShardIdent, SHARD_FULL}, 
+    signature::CryptoSignaturePair, types::{ChildCell, CurrencyCollection, InRefValue}, 
+    validators::ValidatorInfo, AccountId, Augmentation, BuilderData, Cell, CopyleftRewards, 
+    Deserializable, HashUpdate, HashmapE, HashmapType, IBitstring, MaybeDeserialize, MaybeSerialize, 
+    Result, Serializable, SliceData, UInt256, VarUInteger32, SERDE_OPTS_COMMON_MESSAGE, 
+    SERDE_OPTS_EMPTY, U15
 };
 use std::{collections::HashMap, fmt};
-use ton_types::{
-    error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
-    SliceData, UInt256,
-};
 
 #[cfg(test)]
 #[path = "tests/test_master.rs"]
@@ -413,7 +406,8 @@ impl ShardFees {
             prefix: shard.shard_prefix_with_tag(),
         };
         let fee = ShardFeeCreated{fees, create: created};
-        self.set(&id, &fee, &fee)
+        self.set(&id, &fee, &fee)?;
+        Ok(())
     }
 }
 
