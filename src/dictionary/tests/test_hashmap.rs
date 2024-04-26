@@ -617,57 +617,57 @@ mod subtree_with_prefix {
     #[test]
     fn uncommon_prefix_len() {
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::new_empty(), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::new_empty(), &mut 0).unwrap();
         assert_eq!(tree, make_tree_with_filled_root_label());
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::new_empty(), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::new_empty(), &mut 0).unwrap();
         assert_eq!(tree, make_tree_with_empty_root_label());
     }
 
     #[test]
     fn empty_tree() {
         let tree = HashmapE::with_bit_len(8);
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11111111], 1), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11111111], 1), &mut 0).unwrap();
         assert_eq!(tree, HashmapE::with_bit_len(8));
 
         let tree = HashmapE::with_bit_len(8);
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11111111], 2), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11111111], 2), &mut 0).unwrap();
         assert_eq!(tree, HashmapE::with_bit_len(8));
 
         let tree = HashmapE::with_bit_len(8);
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11111111], 8), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11111111], 8), &mut 0).unwrap();
         assert_eq!(tree, HashmapE::with_bit_len(8));
 
         let tree = HashmapE::with_bit_len(4);
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b00000000], 1), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b00000000], 1), &mut 0).unwrap();
         assert_eq!(tree, HashmapE::with_bit_len(4));
 
         let tree = HashmapE::with_bit_len(4);
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b00000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b00000000], 4), &mut 0).unwrap();
         assert_eq!(tree, HashmapE::with_bit_len(4));
     }
 
     #[test]
     fn subtree_missing() {
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b00000000], 1), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b00000000], 1), &mut 0).unwrap();
         assert_eq!(tree, HashmapE::with_bit_len(8));
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11001000], 6), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11001000], 6), &mut 0).unwrap();
         assert_eq!(tree, HashmapE::with_bit_len(8));
 
         let mut tree = HashmapE::with_bit_len(16);
         tree.set(SliceData::from_raw(vec![0b00000000, 0b00001010], 16), &SliceData::new(vec![0b11111111])).unwrap();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b00000010], 8), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b00000010], 8), &mut 0).unwrap();
         assert_eq!(tree, HashmapE::with_bit_len(16));
     }
 
     #[test]
     fn normal_flow_with_filled_root_label() {
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001111], 8), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
@@ -675,14 +675,14 @@ mod subtree_with_prefix {
         expected.set(SliceData::from_raw(vec![0b11000000], 8), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
 
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11001100], 6), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11001100], 6), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001111], 8), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 3), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 3), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001111], 8), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
@@ -690,7 +690,7 @@ mod subtree_with_prefix {
         expected.set(SliceData::from_raw(vec![0b11000000], 8), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
 
-        let tree  =tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11001000], 5), &mut 0).unwrap();
+        let tree  =tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11001000], 5), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001111], 8), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
@@ -700,25 +700,25 @@ mod subtree_with_prefix {
     #[test]
     fn normal_flow_with_empty_root_label() {
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11000000], 8), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
 
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11001100], 6), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11001100], 6), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 3), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 3), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11000000], 8), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
 
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11001000], 5), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11001000], 5), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
         assert_eq!(tree, expected);
@@ -727,7 +727,7 @@ mod subtree_with_prefix {
     #[test]
     fn normal_flow_in_big_tree() {
         let tree = make_big_tree();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11001111], 8), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11001100], 8), &SliceData::new(vec![0b11001100])).unwrap();
@@ -736,7 +736,7 @@ mod subtree_with_prefix {
         assert_eq!(tree, expected);
 
         let tree = make_big_tree();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b10000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b10000000], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b10001111], 8), &SliceData::new(vec![0b10001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b10001100], 8), &SliceData::new(vec![0b10001100])).unwrap();
@@ -745,38 +745,38 @@ mod subtree_with_prefix {
         assert_eq!(tree, expected);
 
         let tree = make_big_tree();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 2), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 2), &mut 0).unwrap();
         assert_eq!(tree, make_tree_with_filled_root_label());
     }
 
     #[test]
     fn subtree_is_one_elem() {
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11110010], 7), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11110010], 7), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11110011], 8), &SliceData::new(vec![0b11110011])).unwrap();
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11110000], 7), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11110000], 7), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11110000], 8), &SliceData::new(vec![0b11110000])).unwrap();
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11110000], 5), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11110000], 5), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11110000], 8), &SliceData::new(vec![0b11110000])).unwrap();
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b00001100], 6), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b00001100], 6), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b00001100], 8), &SliceData::new(vec![0b00001100])).unwrap();
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b00001100], 7), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b00001100], 7), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b00001100], 8), &SliceData::new(vec![0b00001100])).unwrap();
         assert_eq!(tree, expected);
@@ -785,16 +785,16 @@ mod subtree_with_prefix {
     #[test]
     fn subtree_is_whole_tree() {
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 1), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 1), &mut 0).unwrap();
         assert_eq!(tree, make_tree_with_filled_root_label());
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 2), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 2), &mut 0).unwrap();
         assert_eq!(tree, make_tree_with_filled_root_label());
     }
 
     #[test]
     fn subtree_is_root_branch() {
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 2), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 2), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11111100], 8), &SliceData::new(vec![0b11111100])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11110000], 8), &SliceData::new(vec![0b11110000])).unwrap();
@@ -803,7 +803,7 @@ mod subtree_with_prefix {
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11000000], 1), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11000000], 1), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11111100], 8), &SliceData::new(vec![0b11111100])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11110000], 8), &SliceData::new(vec![0b11110000])).unwrap();
@@ -816,28 +816,28 @@ mod subtree_with_prefix {
     fn tree_with_one_item() {
         let mut tree = HashmapE::with_bit_len(8);
         tree.set(SliceData::from_raw(vec![0b11111111], 8), &SliceData::new(vec![0b11111111])).unwrap();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b11111111], 4), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b11111111], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b11111111], 8), &SliceData::new(vec![0b11111111])).unwrap();
         assert_eq!(tree, expected);
 
         let mut tree = HashmapE::with_bit_len(8);
         tree.set(SliceData::from_raw(vec![0b00010010], 8), &SliceData::new(vec![0b00010010])).unwrap();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b00010010], 4), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b00010010], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b00010010], 8), &SliceData::new(vec![0b00010010])).unwrap();
         assert_eq!(tree, expected);
 
         let mut tree = HashmapE::with_bit_len(8);
         tree.set(SliceData::from_raw(vec![0b00010010], 8), &SliceData::new(vec![0b00010010])).unwrap();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b00010010], 1), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b00010010], 1), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(8);
         expected.set(SliceData::from_raw(vec![0b00010010], 8), &SliceData::new(vec![0b00010010])).unwrap();
         assert_eq!(tree, expected);
 
         let mut tree = HashmapE::with_bit_len(2);
         tree.set(SliceData::from_raw(vec![0b10000000], 2), &SliceData::new(vec![0b10000000])).unwrap();
-        let tree = tree.into_subtree_w_prefix(&SliceData::from_raw(vec![0b10000000], 1), &mut 0).unwrap();
+        let tree = tree.subtree_with_prefix(&SliceData::from_raw(vec![0b10000000], 1), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(2);
         expected.set(SliceData::from_raw(vec![0b10000000], 2), &SliceData::new(vec![0b10000000])).unwrap();
         assert_eq!(tree, expected);
@@ -850,7 +850,7 @@ mod subtree_without_prefix {
     #[test]
     fn normal_flow_with_empty_label() {
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(4);
         expected.set(SliceData::from_raw(vec![0b11110000], 4), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11000000], 4), &SliceData::new(vec![0b11001100])).unwrap();
@@ -858,20 +858,20 @@ mod subtree_without_prefix {
         expected.set(SliceData::from_raw(vec![0b00000000], 4), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
 
-        let tree = expected.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b11000000], 2), &mut 0).unwrap();
+        let tree = expected.subtree_without_prefix(&SliceData::from_raw(vec![0b11000000], 2), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(2);
         expected.set(SliceData::from_raw(vec![0b11000000], 2), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b00000000], 2), &SliceData::new(vec![0b11001100])).unwrap();
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(4);
         expected.set(SliceData::from_raw(vec![0b11000000], 4), &SliceData::new(vec![0b11001100])).unwrap();
         expected.set(SliceData::from_raw(vec![0b00000000], 4), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
 
-        let tree = expected.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b00000000], 2), &mut 0).unwrap();
+        let tree = expected.subtree_without_prefix(&SliceData::from_raw(vec![0b00000000], 2), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(2);
         expected.set(SliceData::from_raw(vec![0b00000000], 2), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
@@ -880,7 +880,7 @@ mod subtree_without_prefix {
     #[test]
     fn normal_flow_with_some_label() {
         let tree = make_tree_with_filled_root_label();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b11000000], 3), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b11000000], 3), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(5);
         expected.set(SliceData::from_raw(vec![0b01111000], 5), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b01100000], 5), &SliceData::new(vec![0b11001100])).unwrap();
@@ -888,20 +888,20 @@ mod subtree_without_prefix {
         expected.set(SliceData::from_raw(vec![0b00000000], 5), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
 
-        let tree = expected.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b01100000], 3), &mut 0).unwrap();
+        let tree = expected.subtree_without_prefix(&SliceData::from_raw(vec![0b01100000], 3), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(2);
         expected.set(SliceData::from_raw(vec![0b11000000], 2), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b00000000], 2), &SliceData::new(vec![0b11001100])).unwrap();
         assert_eq!(tree, expected);
 
         let tree = make_tree_with_empty_root_label();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b11000000], 3), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b11000000], 3), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(5);
         expected.set(SliceData::from_raw(vec![0b01100000], 5), &SliceData::new(vec![0b11001100])).unwrap();
         expected.set(SliceData::from_raw(vec![0b00000000], 5), &SliceData::new(vec![0b11000000])).unwrap();
         assert_eq!(tree, expected);
 
-        let tree = expected.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b00000000], 1), &mut 0).unwrap();
+        let tree = expected.subtree_without_prefix(&SliceData::from_raw(vec![0b00000000], 1), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(4);
         expected.set(SliceData::from_raw(vec![0b11000000], 4), &SliceData::new(vec![0b11001100])).unwrap();
         expected.set(SliceData::from_raw(vec![0b00000000], 4), &SliceData::new(vec![0b11000000])).unwrap();
@@ -912,28 +912,28 @@ mod subtree_without_prefix {
     fn tree_with_one_item() {
         let mut tree = HashmapE::with_bit_len(8);
         tree.set(SliceData::from_raw(vec![0b11111111], 8), &SliceData::new(vec![0b11111111])).unwrap();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b11111111], 4), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b11111111], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(4);
         expected.set(SliceData::from_raw(vec![0b11111111], 4), &SliceData::new(vec![0b11111111])).unwrap();
         assert_eq!(tree, expected);
 
         let mut tree = HashmapE::with_bit_len(8);
         tree.set(SliceData::from_raw(vec![0b00010010], 8), &SliceData::new(vec![0b00010010])).unwrap();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b00010010], 4), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b00010010], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(4);
         expected.set(SliceData::from_raw(vec![0b00100000], 4), &SliceData::new(vec![0b00010010])).unwrap();
         assert_eq!(tree, expected);
 
         let mut tree = HashmapE::with_bit_len(8);
         tree.set(SliceData::from_raw(vec![0b00010010], 8), &SliceData::new(vec![0b00010010])).unwrap();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b00010010], 1), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b00010010], 1), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(7);
         expected.set(SliceData::from_raw(vec![0b00100100], 7), &SliceData::new(vec![0b00010010])).unwrap();
         assert_eq!(tree, expected);
 
         let mut tree = HashmapE::with_bit_len(2);
         tree.set(SliceData::from_raw(vec![0b10000000], 2), &SliceData::new(vec![0b10000000])).unwrap();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b10000000], 1), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b10000000], 1), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(1);
         expected.set(SliceData::from_raw(vec![0b00000000], 1), &SliceData::new(vec![0b10000000])).unwrap();
         assert_eq!(tree, expected);
@@ -942,7 +942,7 @@ mod subtree_without_prefix {
     #[test]
     fn normal_flow_in_big_tree() {
         let tree = make_big_tree();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b11000000], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(4);
         expected.set(SliceData::from_raw(vec![0b11110000], 4), &SliceData::new(vec![0b11001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11000000], 4), &SliceData::new(vec![0b11001100])).unwrap();
@@ -951,7 +951,7 @@ mod subtree_without_prefix {
         assert_eq!(tree, expected);
 
         let tree = make_big_tree();
-        let tree = tree.into_subtree_wo_prefix(&SliceData::from_raw(vec![0b10000000], 4), &mut 0).unwrap();
+        let tree = tree.subtree_without_prefix(&SliceData::from_raw(vec![0b10000000], 4), &mut 0).unwrap();
         let mut expected = HashmapE::with_bit_len(4);
         expected.set(SliceData::from_raw(vec![0b11110000], 4), &SliceData::new(vec![0b10001111])).unwrap();
         expected.set(SliceData::from_raw(vec![0b11000000], 4), &SliceData::new(vec![0b10001100])).unwrap();
@@ -1297,28 +1297,6 @@ fn test_is_single_item_in_hashmap() {
     assert_eq!(tree.is_single().unwrap(), None);
 }
 
-#[test]
-fn test_sub_tree() {
-    let mut tree = HashmapE::with_bit_len(8);
-    tree.set(SliceData::from_raw(vec![0b0000_0000], 8), &SliceData::new(vec![1])).unwrap();
-    tree.set(SliceData::from_raw(vec![0b0111_1111], 8), &SliceData::new(vec![2])).unwrap();
-
-    let tree1 = tree.clone().into_subtree_with_prefix_not_exact(&SliceData::new(vec![0b0010_0000]), &mut 0).unwrap();
-    assert_eq!(tree1.is_single().unwrap().expect("must contain only 1").1, SliceData::new(vec![1]));
-
-    let tree1 = tree.clone().into_subtree_with_prefix_not_exact(&SliceData::new(vec![0b0110_0000]), &mut 0).unwrap();
-    assert_eq!(tree1.is_single().unwrap().expect("must contain only 2").1, SliceData::new(vec![2]));
-
-    let tree1 = tree1.into_subtree_with_prefix_not_exact(&SliceData::new(vec![0b0101_0000]), &mut 0).unwrap();
-    assert_eq!(tree1.is_single().unwrap().expect("must contain only 2").1, SliceData::new(vec![2]));
-
-    let tree1 = tree.clone().into_subtree_with_prefix_not_exact(&SliceData::new(vec![0b0100_0000]), &mut 0).unwrap();
-    assert_eq!(tree1, tree);
-
-    let tree1 = tree1.into_subtree_with_prefix_not_exact(&SliceData::new(vec![0b1100_0000]), &mut 0).unwrap();
-    assert!(tree1.is_empty());
-}
-
 fn check_tree_iterator(tree: &HashmapE) {
     let len = tree.len().unwrap();
 
@@ -1585,5 +1563,35 @@ fn combine_trees(init1: &[(u8, u8)], init2: &[(u8, u8)], combine_result: bool) -
     })?;
     assert_eq!(tree1, tree);
     Ok(())
+}
+
+#[test]
+fn subtree_wrong_prefix() {
+    let tree = make_tree_with_filled_root_label();
+    // no subtree with such prefix
+    let wrong_prefix = SliceData::from_raw(vec![0b11111000], 6);
+
+    // new sub_tree is empty but bit_len was shorted
+    let sub_tree = tree.subtree_without_prefix(&wrong_prefix, &mut 0).unwrap();
+    assert!(sub_tree.is_empty());
+    assert_eq!(sub_tree.bit_len(), 2);
+
+    // new sub_tree is empty with the same bit_len
+    let sub_tree = tree.subtree_with_prefix(&wrong_prefix, &mut 0).unwrap();
+    assert!(sub_tree.is_empty());
+    assert_eq!(sub_tree.bit_len(), 8);
+
+    assert!(tree.subtree_root_cell(&wrong_prefix).unwrap().is_none());
+
+    // too long prefix
+    let wrong_prefix = SliceData::from_raw(vec![0b11111100, 0], 9);
+
+    // cannot create subtree with such prefix
+    tree.subtree_without_prefix(&wrong_prefix, &mut 0).unwrap_err();
+
+    // cannot create subtree with such prefix
+    tree.subtree_with_prefix(&wrong_prefix, &mut 0).unwrap_err();
+
+    tree.subtree_root_cell(&wrong_prefix).unwrap_err();
 }
 

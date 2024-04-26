@@ -14,7 +14,7 @@
 use crate::{
     define_HashmapE,
     error::BlockError,
-    hashmapaug::HashmapAugType,
+    dictionary::hashmapaug::HashmapAugType,
     shard::ShardIdent,
     shard_accounts::ShardAccounts,
     signature::{CryptoSignature, SigPubKey},
@@ -2530,8 +2530,8 @@ impl Deserializable for ConfigVotingSetup {
                 s: std::any::type_name::<Self>().to_string()
             })
         }
-        self.normal_params.read_from_reference(slice)?;
-        self.critical_params.read_from_reference(slice)?;
+        self.normal_params.read_from(slice)?;
+        self.critical_params.read_from(slice)?;
 
         Ok(())
     }
@@ -2540,8 +2540,8 @@ impl Deserializable for ConfigVotingSetup {
 impl Serializable for ConfigVotingSetup {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(CONFIG_VOTING_SETUP_TAG)?;
-        cell.checked_append_reference(self.normal_params.cell())?;
-        cell.checked_append_reference(self.critical_params.cell())?;
+        self.normal_params.write_to(cell)?;
+        self.critical_params.write_to(cell)?;
         Ok(())
     }
 }
@@ -2759,7 +2759,7 @@ impl Deserializable for ValidatorSignedTempKey {
             )
         }
         self.signature.read_from(slice)?;
-        self.key.read_from_reference(slice)?;
+        self.key.read_from_cell(slice.checked_drain_reference()?)?;
         Ok(())
     }
 }

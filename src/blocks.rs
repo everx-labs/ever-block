@@ -24,8 +24,8 @@ use crate::{
     transactions::ShardAccountBlocks,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32, AddSub},
     validators::ValidatorSet,
-    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
-    error, fail, AccountId, BuilderData, Cell, ExceptionCode, HashmapE, HashmapType, IBitstring,
+    Deserializable, Serializable,
+    error, fail, AccountId, BuilderData, Cell, ExceptionCode, IBitstring,
     Result, SliceData, UInt256,
 };
 use crate::RefShardBlocks;
@@ -485,9 +485,7 @@ impl BlockInfo {
         }
 
         self.master_ref = if not_master {
-            let mut bli = BlkMasterInfo::default();
-            bli.read_from_reference(slice)?;
-            Some(ChildCell::with_struct(&bli)?)
+            Some(Deserializable::construct_from(slice)?)
         } else {
             None
         };
@@ -497,7 +495,7 @@ impl BlockInfo {
         } else {
             BlkPrevInfo::default_block()
         };
-        prev_ref.read_from_reference(slice)?;
+        prev_ref.read_from_cell(slice.checked_drain_reference()?)?;
         self.set_prev_stuff(after_merge, &prev_ref)?;
 
         let prev_vert_ref = if vert_seqno_incr == 0 {
@@ -606,8 +604,8 @@ impl Deserializable for BlkPrevInfo {
                 prev.read_from(cell)?;
             },
             BlkPrevInfo::Blocks{prev1, prev2} => {
-                prev1.read_from_reference(cell)?;
-                prev2.read_from_reference(cell)?;
+                prev1.read_from(cell)?;
+                prev2.read_from(cell)?;
             },
         }
         Ok(())
@@ -621,8 +619,8 @@ impl Serializable for BlkPrevInfo {
                 prev.write_to(cell)?;
             }
             BlkPrevInfo::Blocks{prev1, prev2} => {
-                cell.checked_append_reference(prev1.cell())?;
-                cell.checked_append_reference(prev2.cell())?;
+                prev1.write_to(cell)?;
+                prev2.write_to(cell)?;
             },
         }
         Ok(())
@@ -646,7 +644,7 @@ impl Deserializable for OutQueueUpdate {
 impl Serializable for OutQueueUpdate {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         self.is_empty.write_to(builder)?;
-        builder.checked_append_reference(self.update.serialize()?)?;
+        self.update.serialize()?.write_to(builder)?;
         Ok(())
     }
 }
@@ -932,19 +930,19 @@ impl Deserializable for BlockExtra {
                     s: "BlockExtra".to_string()
                 })
         }
-        self.in_msg_descr.read_from_reference(cell)?;
-        self.out_msg_descr.read_from_reference(cell)?;
-        self.account_blocks.read_from_reference(cell)?;
+        self.in_msg_descr.read_from(cell)?;
+        self.out_msg_descr.read_from(cell)?;
+        self.account_blocks.read_from(cell)?;
         self.rand_seed.read_from(cell)?;
         self.created_by.read_from(cell)?;
         
         if tag == BLOCK_EXTRA_TAG {
-            self.custom = ChildCell::construct_maybe_from_reference(cell)?;
+            self.custom.read_from(cell)?;
             self.ref_shard_blocks = RefShardBlocks::default();
         }
         if tag == BLOCK_EXTRA_TAG_2 {
             let mut child = SliceData::load_cell(cell.checked_drain_reference()?)?;
-            self.custom = ChildCell::construct_maybe_from_reference(&mut child)?;
+            self.custom.read_from(&mut child)?;
             self.ref_shard_blocks.read_from(&mut child)?;
         }
 
@@ -960,19 +958,18 @@ impl Serializable for BlockExtra {
             BLOCK_EXTRA_TAG_2
         };
         cell.append_u32(tag)?;
-        cell.checked_append_reference(self.in_msg_descr.cell())?;
-        cell.checked_append_reference(self.out_msg_descr.cell())?;
-        cell.checked_append_reference(self.account_blocks.cell())?;
+        self.in_msg_descr.write_to(cell)?;
+        self.out_msg_descr.write_to(cell)?;
+        self.account_blocks.write_to(cell)?;
         self.rand_seed.write_to(cell)?;
         self.created_by.write_to(cell)?;
 
         if tag == BLOCK_EXTRA_TAG {
-            ChildCell::write_maybe_to(cell, self.custom.as_ref())?;
+            self.custom.write_to(cell)?;
         } else {
-            let mut child = BuilderData::new();
-            ChildCell::write_maybe_to(&mut child, self.custom.as_ref())?;
+            let mut child = self.custom.write_to_new_cell()?;
             self.ref_shard_blocks.write_to(&mut child)?;
-            cell.checked_append_reference(child.into_cell()?)?;
+            child.into_cell()?.write_to(cell)?;
         }
         Ok(())
     }
@@ -1226,12 +1223,12 @@ impl Serializable for BlockInfo {
             fail!(BlockError::InvalidData("GEN_SOFTWARE_EXISTS_FLAG is not set but gen_software is Some".to_string()))
         }
 
-        if let Some(ref master) = self.master_ref {
-            cell.checked_append_reference(master.cell())?;
+        if let Some(master) = &self.master_ref {
+            master.write_to(cell)?;
         }
-        cell.checked_append_reference(self.prev_ref.cell())?;
-        if let Some(prev_vert_ref) = self.prev_vert_ref.as_ref() {
-            cell.checked_append_reference(prev_vert_ref.cell())?;
+        self.prev_ref.write_to(cell)?;
+        if let Some(prev_vert_ref) = &self.prev_vert_ref {
+            prev_vert_ref.write_to(cell)?;
         }
 
         Ok(())
@@ -1324,17 +1321,17 @@ impl Deserializable for Block {
             )
         }
         self.global_id.read_from(slice)?;
-        self.info.read_from_reference(slice)?;
-        self.value_flow.read_from_reference(slice)?;
+        self.info.read_from(slice)?;
+        self.value_flow.read_from(slice)?;
         if tag == BLOCK_TAG_1 {
-            self.state_update.read_from_reference(slice)?;
+            self.state_update.read_from(slice)?;
             self.out_msg_queue_updates = None;
         } else {
             let mut slice = SliceData::load_cell(slice.checked_drain_reference()?)?;
-            self.state_update.read_from_reference(&mut slice)?;
+            self.state_update.read_from(&mut slice)?;
             self.out_msg_queue_updates = Some(OutQueueUpdates::construct_from(&mut slice)?);
         }
-        self.extra.read_from_reference(slice)?;
+        self.extra.read_from(slice)?;
         Ok(())
     }
 }
@@ -1347,19 +1344,19 @@ impl Serializable for Block {
         };
         builder.append_u32(tag)?;
         builder.append_i32(self.global_id)?;
-        builder.checked_append_reference(self.info.cell())?; // info:^BlockInfo
-        builder.checked_append_reference(self.value_flow.cell())?; // value_flow:^ValueFlow
+        self.info.write_to(builder)?; // info:^BlockInfo
+        self.value_flow.write_to(builder)?; // value_flow:^ValueFlow
         if tag == BLOCK_TAG_1 {
-            builder.checked_append_reference(self.state_update.cell())?; // state_update:^(MERKLE_UPDATE ShardState)
+            self.state_update.write_to(builder)?; // state_update:^(MERKLE_UPDATE ShardState)
         } else {
             let mut builder2 = BuilderData::new();
-            builder2.checked_append_reference(self.state_update.cell())?;
+            self.state_update.write_to(&mut builder2)?;
             if let Some(qu) = &self.out_msg_queue_updates {
                 qu.write_to(&mut builder2)?;
             }
-            builder.checked_append_reference(builder2.into_cell()?)?;
+            builder2.into_cell()?.write_to(builder)?;
         }
-        builder.checked_append_reference(self.extra.cell())?; // extra:^BlockExtra
+        self.extra.cell().write_to(builder)?; // extra:^BlockExtra
         Ok(())
     }
 }
@@ -1481,7 +1478,7 @@ impl Serializable for TopBlockDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         TOP_BLOCK_DESCR_TAG.write_to(cell)?;
         self.proof_for.write_to(cell)?;
-        self.signatures.write_maybe_to(cell)?;
+        self.signatures.write_to(cell)?;
         self.chain.write_to(cell)?;
         Ok(())
     }
@@ -1499,7 +1496,7 @@ impl Deserializable for TopBlockDescr {
             )
         }
         self.proof_for.read_from(slice)?;
-        self.signatures = BlockSignatures::read_maybe_from(slice)?;
+        self.signatures.read_from(slice)?;
         self.chain.read_from(slice)?;
         Ok(())
     }

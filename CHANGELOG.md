@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.10.2
+
+- Enhanced HashMap interface
+- Some interfaces were refactored due to merging repos
+
 ## Version 1.10.1
 
 - Added GlobalCapabilities::CapDuePaymentFix which disables due payments on credit phase and adds payed dues to storage fee in TVM

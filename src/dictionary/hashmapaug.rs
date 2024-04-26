@@ -14,7 +14,7 @@
 use crate::{
     error::BlockError,
     Serializable, Deserializable,
-    error, fail, Result, IBitstring, BuilderData, Cell, SliceData,
+    error, fail, Result, IBitstring, BuilderData, Cell, SliceData, LabelReader,
     ExceptionCode, HashmapType, Leaf, HashmapFilterResult, HashmapRemover,
 };
 use std::cmp::Ordering;
@@ -52,14 +52,13 @@ macro_rules! define_HashmapAugE {
         #[derive(Clone, Debug, Eq, PartialEq)] // cannot Default
         pub struct $varname {
             extra: $y_type,
-            bit_len: usize,
             data: Option<Cell>,
         }
 
         impl $varname {
             /// Dumps hashmap contents
             pub fn dump(&self) {
-                self.iterate_slices(|ref mut key, ref mut value| {
+                $crate::HashmapType::iterate_slices(self, |ref mut key, ref mut value| {
                     dbg!(<$k_type>::construct_from(key).unwrap());
                     dbg!(<$y_type>::construct_from(value).unwrap());
                     dbg!(<$x_type>::construct_from(value).unwrap());
@@ -76,26 +75,25 @@ macro_rules! define_HashmapAugE {
                 };
                 Ok(Self {
                     extra,
-                    bit_len: $bit_len,
                     data,
                 })
             }
             /// split map by key
             pub fn split(&self, key: &SliceData) -> Result<(Self, Self)> {
-                let (left, right) = self.hashmap_split(key)?;
+                let (left, right) = $crate::HashmapType::hashmap_split(self, key)?;
                 Ok((Self::with_hashmap(left)?, Self::with_hashmap(right)?))
             }
             /// merge maps
             pub fn merge(&mut self, other: &Self, key: &SliceData) -> Result<()> {
-                if self.bit_len() != other.bit_len || key.remaining_bits() > self.bit_len() {
+                if $bit_len != $crate::HashmapType::bit_len(other) || key.remaining_bits() > $bit_len {
                     fail!("data in hashmaps do not correspond each other or key too long")
                 }
-                if self.data().is_none() {
-                    *self.data_mut() = other.data.clone();
+                if self.data.is_none() {
+                    self.data = other.data.clone();
                     self.set_root_extra(other.extra.clone());
                 } else {
                     self.extra.calc(&other.extra)?;
-                    self.hashmap_merge(other, key)?;
+                    $crate::HashmapType::hashmap_merge(self, other, key)?;
                 }
                 Ok(())
             }
@@ -106,7 +104,7 @@ macro_rules! define_HashmapAugE {
         // hmn_leaf#_ {X:Type} value:X = HashmapAugNode 0 X;
         // hmn_fork#_ {n:#} {X:Type} left:^(HashmapAug n X)
         // right:^(HashmapAug n X) = HashmapAugNode (n+1) X;
-        impl HashmapType for $varname {
+        impl $crate::HashmapType for $varname {
             fn check_key(bit_len: usize, key: &SliceData) -> bool {
                 bit_len == key.remaining_bits()
             }
@@ -165,14 +163,11 @@ macro_rules! define_HashmapAugE {
                 &mut self.data
             }
             fn bit_len(&self) -> usize {
-                self.bit_len
-            }
-            fn bit_len_mut(&mut self) -> &mut usize {
-                &mut self.bit_len
+                $bit_len
             }
         }
 
-        impl HashmapAugType<$k_type, $x_type, $y_type> for $varname {
+        impl $crate::HashmapAugType<$k_type, $x_type, $y_type> for $varname {
             fn root_extra(&self) -> &$y_type {
                 &self.extra
             }
@@ -181,10 +176,10 @@ macro_rules! define_HashmapAugE {
             }
         }
 
-        impl crate::HashmapRemover for $varname {
+        impl $crate::HashmapRemover for $varname {
             fn after_remove(&mut self) -> Result<()> {
-                let aug = match self.data() {
-                    Some(root) => Self::find_extra(&mut SliceData::load_cell_ref(root)?, self.bit_len())?,
+                let aug = match &self.data {
+                    Some(root) => Self::find_extra(&mut SliceData::load_cell_ref(root)?, $bit_len)?,
                     None => <$y_type>::default()
                 };
                 self.set_root_extra(aug);
@@ -196,7 +191,7 @@ macro_rules! define_HashmapAugE {
             /// scans differences in two hashmaps
             pub fn scan_diff_with_aug<F>(&self, other: &Self, mut op: F) -> Result<bool>
             where F: FnMut($k_type, Option<($x_type, $y_type)>, Option<($x_type, $y_type)>) -> Result<bool> {
-                self.scan_diff(&other, |mut key, value_aug1, value_aug2| {
+                $crate::HashmapType::scan_diff(self, other, |mut key, value_aug1, value_aug2| {
                     let key = <$k_type>::construct_from(&mut key)?;
                     let value_aug1 = value_aug1.map(|ref mut slice| Self::value_aug(slice)).transpose()?;
                     let value_aug2 = value_aug2.map(|ref mut slice| Self::value_aug(slice)).transpose()?;
@@ -208,15 +203,14 @@ macro_rules! define_HashmapAugE {
             fn default() -> Self {
                 Self {
                     extra: <$y_type>::default(),
-                    bit_len: $bit_len,
                     data: None
                 }
             }
         }
 
-        impl Serializable for $varname {
+        impl $crate::Serializable for $varname {
             fn write_to(&self, cell: &mut BuilderData) -> Result<()>{
-                if let Some(root) = self.data() {
+                if let Some(root) = &self.data {
                     cell.append_bit_one()?;
                     cell.checked_append_reference(root.clone())?;
                 } else {
@@ -227,7 +221,7 @@ macro_rules! define_HashmapAugE {
             }
         }
 
-        impl Deserializable for $varname {
+        impl $crate::Deserializable for $varname {
             fn construct_from(slice: &mut SliceData) -> Result<Self>{
                 let data = match slice.get_next_bit()? {
                     true => Some(slice.checked_drain_reference()?),
@@ -239,7 +233,6 @@ macro_rules! define_HashmapAugE {
                 }
                 Ok(Self {
                     extra,
-                    bit_len: $bit_len,
                     data
                 })
             }
@@ -247,7 +240,7 @@ macro_rules! define_HashmapAugE {
 
         impl fmt::Display for $varname {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                match self.data() {
+                match &self.data {
                     Some(cell) => write!(f, "HashmapAug: {}", cell),
                     None => write!(f, "Empty HashmapAug"),
                 }
@@ -349,7 +342,7 @@ pub trait HashmapAugType<
     }
     /// sets item to hashmapaug returning prev value if exists by key
     fn set_return_prev(&mut self, key: &K, value: &X, aug: &Y) -> Result<Option<SliceData>> {
-        let (value, _) = self.set_with_prev_and_depth(key, &value, aug)?;
+        let (value, _) = self.set_with_prev_and_depth(key, value, aug)?;
         Ok(value)
     }
     /// sets item to hashmapaug returning prev value if exists by key and depth of tree
@@ -453,7 +446,7 @@ pub trait HashmapAugType<
     /// deserialize not empty root
     fn read_hashmap_root(&mut self, slice: &mut SliceData) -> Result<()> {
         let mut root = slice.clone(); // copy to get as data
-        let label = crate::LabelReader::read_label(slice, self.bit_len())?;
+        let label = LabelReader::read_label(slice, self.bit_len())?;
         if label.remaining_bits() != self.bit_len() { // fork
             slice.shrink_references(2..); // left, right
             self.set_root_extra(Y::construct_from(slice)?);
@@ -471,7 +464,7 @@ pub trait HashmapAugType<
     fn single(&self) -> Result<Option<SliceData>> {
         if let Some(root) = self.data() {
             let mut slice = SliceData::load_cell_ref(root)?;
-            let label = crate::LabelReader::read_label_raw(&mut slice, &mut self.bit_len(), Default::default())?;
+            let label = LabelReader::read_label_raw(&mut slice, &mut self.bit_len(), Default::default())?;
             if label.length_in_bits() == self.bit_len() {
                 Y::skip(&mut slice)?;
                 return Ok(Some(slice))
@@ -486,7 +479,7 @@ pub trait HashmapAugType<
     /// iterates all objects in tree with callback function
     fn iterate_slices_with_keys<F> (&self, mut p: F) -> Result<bool>
     where F: FnMut(K, SliceData) -> Result<bool> {
-        self.iterate_slices(|mut key, mut slice| {
+        crate::HashmapType::iterate_slices(self, |mut key, mut slice| {
             let key = K::construct_from(&mut key)?;
             Y::skip(&mut slice)?;
             p(key, slice)
@@ -495,7 +488,7 @@ pub trait HashmapAugType<
     /// iterates all objects as slices with keys and augs in tree with callback function
     fn iterate_slices_with_keys_and_aug<F> (&self, mut p: F) -> Result<bool>
     where F: FnMut(K, SliceData, Y) -> Result<bool> {
-        self.iterate_slices(|mut key, mut slice| {
+        crate::HashmapType::iterate_slices(self, |mut key, mut slice| {
             let key = K::construct_from(&mut key)?;
             let aug = Y::construct_from(&mut slice)?;
             p(key, slice, aug)
@@ -505,7 +498,7 @@ pub trait HashmapAugType<
     /// iterates objects
     fn iterate_objects<F>(&self, mut p: F) -> Result<bool>
     where F: FnMut(X) -> Result<bool> {
-        self.iterate_slices(|_, mut slice| {
+        crate::HashmapType::iterate_slices(self, |_, mut slice| {
             <Y>::skip(&mut slice)?;
             p(<X>::construct_from(&mut slice)?)
         })
@@ -513,7 +506,7 @@ pub trait HashmapAugType<
     /// iterate objects with keys
     fn iterate_with_keys<F>(&self, mut p: F) -> Result<bool>
     where F: FnMut(K, X) -> Result<bool> {
-        self.iterate_slices(|mut key, mut slice| {
+        crate::HashmapType::iterate_slices(self, |mut key, mut slice| {
             let key = K::construct_from(&mut key)?;
             <Y>::skip(&mut slice)?;
             p(key, <X>::construct_from(&mut slice)?)
@@ -522,7 +515,7 @@ pub trait HashmapAugType<
     /// iterate objects with keys and augs
     fn iterate_with_keys_and_aug<F>(&self, mut p: F) -> Result<bool>
     where F: FnMut(K, X, Y) -> Result<bool> {
-        self.iterate_slices(|mut key, mut slice| {
+        crate::HashmapType::iterate_slices(self, |mut key, mut slice| {
             let key = K::construct_from(&mut key)?;
             let aug = <Y>::construct_from(&mut slice)?;
             p(key, <X>::construct_from(&mut slice)?, aug)
@@ -745,7 +738,7 @@ pub trait HashmapAugType<
         mut bit_len: usize, 
         callback: &mut F
     ) -> Result<Option<R>>
-    where F: FnMut(&[u8], usize, SliceData) -> Result<crate::hashmapaug::TraverseNextStep<R>> {
+    where F: FnMut(&[u8], usize, SliceData) -> Result<crate::TraverseNextStep<R>> {
         let label = cursor.get_label(bit_len)?;
         let label_length = label.remaining_bits();
         match label_length.cmp(&bit_len) {

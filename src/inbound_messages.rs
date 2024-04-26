@@ -20,13 +20,13 @@ use crate::{
     define_HashmapAugE,
     envelope_message::MsgEnvelope,
     error::BlockError,
-    hashmapaug::{Augmentable, Augmentation, HashmapAugType},
+    dictionary::hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     messages::Message,
     transactions::Transaction,
     types::{AddSub, ChildCell, CurrencyCollection, Grams},
     Serializable, Deserializable,
     error, fail, Result,
-    BuilderData, Cell, IBitstring, SliceData, HashmapType, UInt256, hm_label,
+    BuilderData, Cell, IBitstring, SliceData, UInt256, hm_label,
 };
 use std::fmt;
 
@@ -480,16 +480,16 @@ impl InMsgExternal {
 
 impl Serializable for InMsgExternal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
+        self.msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for InMsgExternal {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
+        self.msg.read_from(cell)?;
+        self.transaction.read_from(cell)?;
         Ok(())
     }
 }
@@ -541,20 +541,20 @@ impl InMsgIHR {
 
 impl Serializable for InMsgIHR {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
+        self.msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
         self.ihr_fee.write_to(cell)?;
-        cell.checked_append_reference(self.proof_created.clone())?;
+        self.proof_created.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for InMsgIHR {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
+        self.msg.read_from(cell)?;
+        self.transaction.read_from(cell)?;
         self.ihr_fee.read_from(cell)?;
-        self.proof_created = cell.checked_drain_reference()?;
+        self.proof_created.read_from(cell)?;
         Ok(())
     }
 }
@@ -602,8 +602,8 @@ impl InMsgFinal {
 
 impl Serializable for InMsgFinal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.in_msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
+        self.in_msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
         self.fwd_fee.write_to(cell)?;
         Ok(())
     }
@@ -611,8 +611,8 @@ impl Serializable for InMsgFinal {
 
 impl Deserializable for InMsgFinal {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.in_msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
+        self.in_msg.read_from(cell)?;
+        self.transaction.read_from(cell)?;
         self.fwd_fee.read_from(cell)?;
         Ok(())
     }
@@ -661,8 +661,8 @@ impl InMsgTransit {
 
 impl Serializable for InMsgTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.in_msg.cell())?;
-        cell.checked_append_reference(self.out_msg.cell())?;
+        self.in_msg.write_to(cell)?;
+        self.out_msg.write_to(cell)?;
         self.transit_fee.write_to(cell)?;
         Ok(())
     }
@@ -670,8 +670,8 @@ impl Serializable for InMsgTransit {
 
 impl Deserializable for InMsgTransit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.in_msg.read_from_reference(cell)?;
-        self.out_msg.read_from_reference(cell)?;
+        self.in_msg.read_from(cell)?;
+        self.out_msg.read_from(cell)?;
         self.transit_fee.read_from(cell)?;
         Ok(())
     }
@@ -720,7 +720,7 @@ impl InMsgDiscardedFinal {
 
 impl Serializable for InMsgDiscardedFinal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.in_msg.cell())?;
+        self.in_msg.write_to(cell)?;
         self.transaction_id.write_to(cell)?;
         self.fwd_fee.write_to(cell)?;
         Ok(())
@@ -729,7 +729,7 @@ impl Serializable for InMsgDiscardedFinal {
 
 impl Deserializable for InMsgDiscardedFinal {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.in_msg.read_from_reference(cell)?;
+        self.in_msg.read_from(cell)?;
         self.transaction_id.read_from(cell)?;
         self.fwd_fee.read_from(cell)?;
         Ok(())
@@ -785,20 +785,20 @@ impl InMsgDiscardedTransit {
 
 impl Serializable for InMsgDiscardedTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.in_msg.cell())?;
+        self.in_msg.write_to(cell)?;
         self.transaction_id.write_to(cell)?;
         self.fwd_fee.write_to(cell)?;
-        cell.checked_append_reference(self.proof_delivered.clone())?;
+        self.proof_delivered.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for InMsgDiscardedTransit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.in_msg.read_from_reference(cell)?;
+        self.in_msg.read_from(cell)?;
         self.transaction_id.read_from(cell)?;
         self.fwd_fee.read_from(cell)?;
-        self.proof_delivered = cell.checked_drain_reference()?;
+        self.proof_delivered.read_from(cell)?;
         Ok(())
     }
 }

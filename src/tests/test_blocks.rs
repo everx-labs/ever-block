@@ -13,9 +13,10 @@
 
 use std::fs::{read, read_dir};
 use std::path::Path;
+use std::str::FromStr;
 
 use crate::{
-    hashmapaug::HashmapAugType,
+    HashmapAugType, HashmapE,
     AccountBlock, Message, TickTock, write_read_and_assert,
     bintree::BinTreeType, 
     types::{AddSub, Grams},

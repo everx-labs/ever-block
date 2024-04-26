@@ -19,11 +19,13 @@ use crate::GasConsumer;
 use crate::Mask;
 use crate::types::{ExceptionCode, Result};
 
+mod hashmap;
 pub use self::hashmap::HashmapE;
+mod pfxhashmap;
 pub use self::pfxhashmap::PfxHashmapE;
 
-mod hashmap;
-mod pfxhashmap;
+pub(crate) mod hashmapaug;
+pub use self::hashmapaug::*;
 
 pub type Leaf = Result<Option<SliceData>>;
 
@@ -272,7 +274,7 @@ impl SliceData {
         Ok(key)
     }
     // #[deprecated(note = "use LabelReader::read_label")]
-    pub fn get_label(&mut self, max: usize) -> Result<SliceData> {
+    pub(crate) fn get_label(&mut self, max: usize) -> Result<SliceData> {
         let mut cursor = LabelReader::new(std::mem::take(self));
         let key = cursor.get_label(max)?;
         *self = cursor.remainder()?;
@@ -464,7 +466,6 @@ pub trait HashmapType {
     fn data(&self) -> Option<&Cell>;
     fn data_mut(&mut self) -> &mut Option<Cell>;
     fn bit_len(&self) -> usize;
-    fn bit_len_mut(&mut self) -> &mut usize;
     fn iter(&self) -> HashmapIterator<Self> {
         HashmapIterator::from_hashmap(self)
     }
@@ -1527,116 +1528,59 @@ where
 }
 
 pub trait HashmapSubtree: HashmapType + Clone + Sized {
+    /// make subtree by common prefix
+    fn subtree_with_prefix(&self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer) -> Result<Self> {
+        let mut new_map = self.clone();
+        if prefix.is_empty() {
+            return Ok(new_map);
+        }
+        if let Some((key, mut remainder, None)) = self.subtree_root(prefix, gas_consumer)? {
+            let label = SliceData::load_bitstring(key)?;
+            let is_leaf = Self::is_leaf(&mut remainder);
+            if remainder.cell_opt() != self.data() {
+                let root = Self::make_cell_with_label_and_data(label, self.bit_len(), is_leaf, &remainder)?;
+                *new_map.data_mut() = Some(gas_consumer.finalize_cell(root)?);
+            }
+        } else {
+            *new_map.data_mut() = None;
+        }
+        Ok(new_map)
+    }
+
     /// transform to subtree with the common prefix
-    // #[deprecated]
+    // TBD
     #[allow(clippy::wrong_self_convention)]
     fn into_subtree_with_prefix(&mut self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer) -> Result<()> {
-        self.subtree_with_prefix(prefix, gas_consumer)?;
-        Ok(())
-    }
-    /// transform to subtree with the common prefix
-    fn subtree_with_prefix(&mut self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer) -> Result<Self> {
-        let prefix_len = prefix.remaining_bits();
-        if prefix_len == 0 || self.bit_len() < prefix_len {
-            return Ok(self.clone())
-        }
-        if let Some(root) = self.data() {
-            let mut cursor = LabelReader::new(gas_consumer.load_cell(root.clone())?);
-            let (key, rem_prefix) = down_by_tree::<Self>(prefix, &mut cursor, self.bit_len(), gas_consumer)?;
-            if rem_prefix.is_none() {
-                let label = SliceData::load_bitstring(key)?;
-                let mut remainder = cursor.remainder()?;
-                let is_leaf = Self::is_leaf(&mut remainder);
-                if remainder.cell_opt() != Some(root) {
-                    let root = Self::make_cell_with_label_and_data(label, self.bit_len(), is_leaf, &remainder)?;
-                    *self.data_mut() = Some(gas_consumer.finalize_cell(root)?)
-                }
-            } else {
-                *self.data_mut() = None
-            }
-        }
-        Ok(self.clone())
-    }
-
-    /// transform to subtree with the common prefix
-    fn into_subtree_w_prefix(mut self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer) -> Result<Self> {
-        self.subtree_with_prefix(prefix, gas_consumer)?;
-        Ok(self)
-    }
-
-    /// transform to subtree without the common prefix (dec bit_len)
-    // #[deprecated]
-    #[allow(clippy::wrong_self_convention)]
-    fn into_subtree_without_prefix(&mut self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer)-> Result<()> {
-        self.subtree_without_prefix(prefix, gas_consumer)
-    }
-    /// transform to subtree without the common prefix (dec bit_len)
-    fn subtree_without_prefix(&mut self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer)-> Result<()> {
-        let prefix_len = prefix.remaining_bits();
-        if prefix_len == 0 || self.bit_len() < prefix_len {
-            return Ok(())
-        }
-        if let Some(root) = self.data() {
-            let mut cursor = LabelReader::new(gas_consumer.load_cell(root.clone())?);
-            let (key, rem_prefix) = down_by_tree::<Self>(prefix, &mut cursor, self.bit_len(), gas_consumer)?;
-            if rem_prefix.is_none() {
-                let mut label = SliceData::load_builder(key)?;
-                label.shrink_data(prefix_len..);
-                let mut remainder = cursor.remainder()?;
-                let is_leaf = Self::is_leaf(&mut remainder);
-                *self.bit_len_mut() -= prefix_len;
-                let root = Self::make_cell_with_label_and_data(label, self.bit_len(), is_leaf, &remainder)?;
-                *self.data_mut() = Some(gas_consumer.finalize_cell(root)?)
-            } else {
-                *self.data_mut() = None
-            }
-        }
+        *self = self.subtree_with_prefix(prefix, gas_consumer)?;
         Ok(())
     }
 
-    fn subtree_root_cell(&self, prefix: &SliceData) -> Result<Option<Cell>> {
+    /// returns key, subtree remainder and prefix_remainder of traversed subtree
+    /// if prefix fully found its remainder is None
+    fn subtree_root(&self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer) -> Result<Option<(BuilderData, SliceData, Option<SliceData>)>> {
+        if prefix.is_empty() {
+            fail!("Prefix is empty")
+        }
         let prefix_len = prefix.remaining_bits();
-        if prefix_len == 0 || self.bit_len() < prefix_len {
-            fail!("Invalid prefix len {}", prefix_len)
+        if prefix_len > self.bit_len() {
+            fail!("Prefix too long {} more than {}", prefix_len, self.bit_len())
         }
         if let Some(root) = self.data() {
-            let mut cursor = LabelReader::new(SliceData::load_cell_ref(root)?);
-            let (_key, remainder_prefix) = down_by_tree::<Self>(prefix, &mut cursor, self.bit_len(), &mut 0)?;
-            if remainder_prefix.is_none() {
-                Ok(Some(cursor.remainder()?.cell()))
-            } else {
-                Ok(None)
-            }
+            let mut cursor = LabelReader::new(gas_consumer.load_cell(root.clone())?);
+            let (key, prefix_remainder_opt) = down_by_tree::<Self>(prefix, &mut cursor, self.bit_len(), &mut 0)?;
+            Ok(Some((key, cursor.remainder()?, prefix_remainder_opt)))
         } else {
             Ok(None)
         }
     }
 
-    /// transform to subtree without the common prefix (dec bit_len)
-    fn into_subtree_wo_prefix(mut self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer)-> Result<Self> {
-        self.subtree_without_prefix(prefix, gas_consumer)?;
-        Ok(self)
-    }
-
-    /// transform to subtree with the maximal common prefix
-    fn into_subtree_with_prefix_not_exact(mut self, prefix: &SliceData, gas_consumer: &mut dyn GasConsumer) -> Result<Self> {
-        let bit_len = self.bit_len();
-        if bit_len <= prefix.remaining_bits() {
-            return Ok(self)
+    /// returns original root cell of traversed subtree
+    fn subtree_root_cell(&self, prefix: &SliceData) -> Result<Option<Cell>> {
+        if let Some((_key, remainder, None)) = self.subtree_root(prefix, &mut 0)? {
+            Ok(Some(remainder.cell()))
+        } else {
+            Ok(None)
         }
-        if let Some(root) = self.data() {
-            let mut cursor = LabelReader::new(gas_consumer.load_cell(root.clone())?);
-            let (key, rem_prefix) = down_by_tree::<Self>(prefix, &mut cursor, self.bit_len(), gas_consumer)?;
-            if rem_prefix.as_ref() == Some(prefix) {
-                *self.data_mut() = None;
-                return Ok(self)
-            }
-            let mut remainder = cursor.remainder()?;
-            let is_leaf = Self::is_leaf(&mut remainder);
-            let root = Self::make_cell_with_label_and_data(SliceData::load_bitstring(key)?, self.bit_len(), is_leaf, &remainder)?;
-            *self.data_mut() = Some(gas_consumer.finalize_cell(root)?);
-        }
-        Ok(self)
     }
 }
 

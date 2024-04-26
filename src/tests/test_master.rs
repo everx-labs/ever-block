@@ -14,8 +14,8 @@
 use super::*;
 use crate::{
     write_read_and_assert, Block,
-    BlockExtra, Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit,
-    BASE_WORKCHAIN_ID, read_single_root_boc,
+    BlockExtra, Deserializable, ExtBlkRef, HashmapType, HashmapAugType, MsgAddressInt, ShardStateUnsplit,
+    BASE_WORKCHAIN_ID, read_single_root_boc, HashmapE,
 };
 use std::collections::{HashMap, HashSet};
 use rand::Rng;

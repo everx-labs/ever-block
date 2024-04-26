@@ -16,15 +16,15 @@ use crate::{
     blocks::{Block, BlockIdExt, ExtBlkRef, ProofChain},
     config_params::ConfigParams,
     define_HashmapAugE, define_HashmapE,
+    dictionary::hashmapaug::{Augmentable, HashmapAugType, TraverseNextStep},
     error::BlockError,
-    hashmapaug::{Augmentable, HashmapAugType, TraverseNextStep},
     inbound_messages::InMsg,
     shard::{AccountIdPrefixFull, ShardIdent, SHARD_FULL},
     signature::CryptoSignaturePair,
     types::{ChildCell, CurrencyCollection, InRefValue},
     validators::ValidatorInfo,
-    CopyleftRewards, Deserializable, MaybeDeserialize, MaybeSerialize, Serializable, U15, Augmentation,
-    error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
+    CopyleftRewards, Deserializable, Serializable, U15, Augmentation,
+    error, fail, hm_label, AccountId, BuilderData, Cell, IBitstring, Result,
     SliceData, UInt256,
 };
 use std::{collections::HashMap, fmt};
@@ -36,16 +36,6 @@ mod tests;
 /*
 _ (HashmapE 32 ^(BinTree ShardDescr)) = ShardHashes;
 _ (HashmapAugE 96 ShardFeeCreated ShardFeeCreated) = ShardFees;
-
-masterchain_block_extra#cca5
-  key_block:(## 1)
-  shard_hashes:ShardHashes
-  shard_fees:ShardFees
-  ^[ prev_blk_signatures:(HashmapE 16 CryptoSignaturePair)
-     recover_create_msg:(Maybe ^InMsg)
-     mint_msg:(Maybe ^InMsg) ]
-  config:key_block?ConfigParams
-= McBlockExtra;
 */
 define_HashmapE!{ShardHashes, 32, InRefValue<BinTree<ShardDescr>>}
 define_HashmapE!{CryptoSignatures, 16, CryptoSignaturePair}
@@ -534,8 +524,8 @@ impl Deserializable for McBlockExtra {
 
         let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         self.prev_blk_signatures.read_from(cell1)?;
-        self.recover_create_msg = ChildCell::construct_maybe_from_reference(cell1)?;
-        self.mint_msg = ChildCell::construct_maybe_from_reference(cell1)?;
+        self.recover_create_msg.read_from(cell1)?;
+        self.mint_msg.read_from(cell1)?;
 
         if tag == MC_BLOCK_EXTRA_TAG_2 {
             self.copyleft_msgs.read_from(cell1)?;
@@ -564,8 +554,8 @@ impl Serializable for McBlockExtra {
         self.fees.write_to(cell)?;
 
         let mut cell1 = self.prev_blk_signatures.write_to_new_cell()?;
-        ChildCell::write_maybe_to(&mut cell1, self.recover_create_msg.as_ref())?;
-        ChildCell::write_maybe_to(&mut cell1, self.mint_msg.as_ref())?;
+        self.recover_create_msg.write_to(&mut cell1)?;
+        self.mint_msg.write_to(&mut cell1)?;
 
         if !self.copyleft_msgs.is_empty() {
             self.copyleft_msgs.write_to(&mut cell1)?;
@@ -1158,7 +1148,7 @@ impl Deserializable for McStateExtra {
         self.validator_info.read_from(cell1)?; // 65 + 0
         self.prev_blocks.read_from(cell1)?; // 1 + 1
         self.after_key_block.read_from(cell1)?; // 1 + 0
-        self.last_key_block = ExtBlkRef::read_maybe_from(cell1)?; // 609 + 0
+        self.last_key_block.read_from(cell1)?; // 609 + 0
         self.block_create_stats = if flags & 1 == 0 {
             None
         } else {
@@ -1190,7 +1180,7 @@ impl Serializable for McStateExtra {
         self.validator_info.write_to(&mut cell1)?;
         self.prev_blocks.write_to(&mut cell1)?;
         self.after_key_block.write_to(&mut cell1)?;
-        self.last_key_block.write_maybe_to(&mut cell1)?;
+        self.last_key_block.write_to(&mut cell1)?;
         if let Some(ref block_create_stats) = self.block_create_stats {
             block_create_stats.write_to(&mut cell1)?;
         }
@@ -1340,10 +1330,10 @@ impl Serializable for ShardCollators {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(SHARD_COLLATORS_TAG as usize, 4)?;
         self.prev.write_to(cell)?;
-        self.prev2.write_maybe_to(cell)?;
+        self.prev2.write_to(cell)?;
         self.current.write_to(cell)?;
         self.next.write_to(cell)?;
-        self.next2.write_maybe_to(cell)?;
+        self.next2.write_to(cell)?;
         self.updated_at.write_to(cell)?;
         Ok(())
     }
@@ -1666,8 +1656,8 @@ impl Deserializable for ShardDescr {
                 let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
                 self.fees_collected.read_from(&mut slice1)?;
                 self.funds_created.read_from(&mut slice1)?;
-                self.proof_chain = Vec::<Cell>::read_maybe_from(&mut slice1)?;
-                self.collators = ShardCollators::read_maybe_from(&mut slice1)?;
+                self.proof_chain.read_from(&mut slice1)?;
+                self.collators.read_from(&mut slice1)?;
             }
             _ => ()
         }
@@ -1732,8 +1722,8 @@ impl Serializable for ShardDescr {
         self.funds_created.write_to(&mut child)?;
         match tag {
             SHARD_IDENT_TAG_E => {
-                self.proof_chain.write_maybe_to(&mut child)?;
-                self.collators.write_maybe_to(&mut child)?;
+                self.proof_chain.write_to(&mut child)?;
+                self.collators.write_to(&mut child)?;
             }
             SHARD_IDENT_TAG_D => {
                 let proof_chain = self.proof_chain.as_ref()

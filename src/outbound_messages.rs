@@ -15,7 +15,7 @@ use crate::{
     define_HashmapAugE,
     error::BlockError,
     envelope_message::MsgEnvelope,
-    hashmapaug::{Augmentable, Augmentation, HashmapAugType},
+    dictionary::hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     inbound_messages::InMsg,
     messages::{CommonMsgInfo, Message},
     miscellaneous::{IhrPendingInfo, ProcessedInfo},
@@ -109,7 +109,7 @@ impl Augmentation<u64> for EnqueuedMsg {
 impl Serializable for EnqueuedMsg {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.enqueued_lt.write_to(cell)?;
-        cell.checked_append_reference(self.out_msg.cell())?;
+        self.out_msg.write_to(cell)?;
         Ok(())
     }
 }
@@ -117,7 +117,7 @@ impl Serializable for EnqueuedMsg {
 impl Deserializable for EnqueuedMsg {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.enqueued_lt.read_from(cell)?;
-        self.out_msg.read_from_reference(cell)?;
+        self.out_msg.read_from(cell)?;
         Ok(())
     }
 }
@@ -205,18 +205,8 @@ impl OutMsgQueue {
         self.set(&key, &enq, &msg_lt)
     }
 
-    pub fn queue_for_wc(&self, workchain_id: i32) -> Result<OutMsgQueue> {
-        let cell = workchain_id.serialize()?;
-        let mut subtree = self.clone();
-        subtree.into_subtree_without_prefix(&SliceData::load_cell(cell)?, &mut 0)?;
-        Ok(subtree)
-    }
-
     pub fn queue_for_wc_with_prefix(&self, workchain_id: i32) -> Result<OutMsgQueue> {
-        let cell = workchain_id.serialize()?;
-        let mut subtree = self.clone();
-        subtree.subtree_with_prefix(&SliceData::load_cell(cell)?, &mut 0)?;
-        Ok(subtree)
+        self.subtree_with_prefix(&workchain_id.write_to_bitstring()?, &mut 0)
     }
 }
 
@@ -386,7 +376,7 @@ impl OutMsgQueueInfo {
         let usage_tree = UsageTree::with_root(old_proof.proof.proof.clone());
         let visit_state = |state: &ShardStateUnsplit| -> Result<()> {
             let out_msg_queue_info = state.read_out_msg_queue_info()?;
-            let _queue_for_wc = out_msg_queue_info.out_queue().queue_for_wc(workchain_id)?;
+            let _queue_for_wc = out_msg_queue_info.out_queue().queue_for_wc_with_prefix(workchain_id)?;
             let _proc_info = out_msg_queue_info.proc_info().root();
             Ok(())
         };
@@ -444,7 +434,7 @@ impl OutMsgQueueInfo {
         ) -> Result<(UInt256, UInt256)> {
             let queue_info = state.read_out_msg_queue_info()?;
             let sub_queue_root_hash = queue_info.out_queue()
-                .subtree_root_cell(&SliceData::load_bitstring(workchain_id.write_to_new_cell()?)?)?
+                .subtree_root_cell(&workchain_id.write_to_bitstring()?)?
                 .map(|c| c.repr_hash()).unwrap_or_default();
             let proc_info_root_hash = queue_info.proc_info().root()
                 .map(|c| c.repr_hash()).unwrap_or_default();
@@ -899,16 +889,16 @@ impl OutMsgExternal {
 
 impl Serializable for OutMsgExternal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
+        self.msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for OutMsgExternal {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
+        self.msg.read_from(cell)?;
+        self.transaction.read_from(cell)?;
         Ok(())
     }
 }
@@ -960,18 +950,18 @@ impl OutMsgImmediate {
 
 impl Serializable for OutMsgImmediate {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.out_msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
-        cell.checked_append_reference(self.reimport.cell())?;
+        self.out_msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
+        self.reimport.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for OutMsgImmediate {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
-        self.reimport.read_from_reference(cell)?;
+        self.out_msg.read_from(cell)?;
+        self.transaction.read_from(cell)?;
+        self.reimport.read_from(cell)?;
         Ok(())
     }
 }
@@ -1013,16 +1003,16 @@ impl OutMsgNew {
 
 impl Serializable for OutMsgNew {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.out_msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
+        self.out_msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for OutMsgNew {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from_reference(cell)?;
-        self.transaction.read_from_reference(cell)?;
+        self.out_msg.read_from(cell)?;
+        self.transaction.read_from(cell)?;
         Ok(())
     }
 }
@@ -1064,16 +1054,16 @@ impl OutMsgTransit {
 
 impl Serializable for OutMsgTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.out_msg.cell())?;
-        cell.checked_append_reference(self.imported.cell())?;
+        self.out_msg.write_to(cell)?;
+        self.imported.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for OutMsgTransit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from_reference(cell)?;
-        self.imported.read_from_reference(cell)?; 
+        self.out_msg.read_from(cell)?;
+        self.imported.read_from(cell)?; 
         Ok(())
     }
 }
@@ -1115,16 +1105,16 @@ impl OutMsgDequeueImmediate {
 
 impl Serializable for OutMsgDequeueImmediate {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.out_msg.cell())?;
-        cell.checked_append_reference(self.reimport.cell())?;
+        self.out_msg.write_to(cell)?;
+        self.reimport.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for OutMsgDequeueImmediate {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from_reference(cell)?;
-        self.reimport.read_from_reference(cell)?;
+        self.out_msg.read_from(cell)?;
+        self.reimport.read_from(cell)?;
         Ok(())
     }
 }
@@ -1170,7 +1160,7 @@ impl OutMsgDequeue {
 
 impl Serializable for OutMsgDequeue {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.out_msg.cell())?;
+        self.out_msg.write_to(cell)?;
         cell.append_bits(self.import_block_lt as usize, 63)?;
         Ok(())
     }
@@ -1178,7 +1168,7 @@ impl Serializable for OutMsgDequeue {
 
 impl Deserializable for OutMsgDequeue {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from_reference(cell)?;
+        self.out_msg.read_from(cell)?;
         self.import_block_lt = cell.get_next_int(63)?;
         Ok(())
     }
@@ -1253,16 +1243,16 @@ impl OutMsgTransitRequeued {
 
 impl Serializable for OutMsgTransitRequeued {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.out_msg.cell())?;
-        cell.checked_append_reference(self.imported.cell())?;
+        self.out_msg.write_to(cell)?;
+        self.imported.write_to(cell)?;
         Ok(())
     }
 }
 
 impl Deserializable for OutMsgTransitRequeued {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.out_msg.read_from_reference(cell)?;
-        self.imported.read_from_reference(cell)?; 
+        self.out_msg.read_from(cell)?;
+        self.imported.read_from(cell)?; 
         Ok(())
     }
 }

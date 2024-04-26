@@ -14,13 +14,13 @@
 use crate::{
     define_HashmapAugE,
     accounts::{Account, ShardAccount},
-    hashmapaug::{Augmentable, HashmapAugType},
+    dictionary::hashmapaug::{Augmentable, HashmapAugType},
     types::{CurrencyCollection, Number5},
     Serializable, Deserializable, Augmentation,
     error, fail, Result,
     AccountId, UInt256,
     BuilderData, Cell, IBitstring,
-    HashmapType, SliceData, hm_label, HashmapSubtree,
+    SliceData, hm_label, HashmapSubtree,
 };
 use std::fmt;
 
@@ -64,7 +64,7 @@ impl ShardAccounts {
     }
 
     pub fn split_for(&mut self, split_key: &SliceData) -> Result<&DepthBalanceInfo> {
-        self.into_subtree_with_prefix(split_key, &mut 0)?;
+        *self = self.subtree_with_prefix(split_key, &mut 0)?;
         self.update_root_extra()
     }
 }

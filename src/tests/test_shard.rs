@@ -11,7 +11,7 @@
 * limitations under the License.
 */
 #![allow(clippy::inconsistent_digit_grouping, clippy::unusual_byte_groupings)]
-use crate::{AccountIdPrefixFull, BlockIdExt, read_single_root_boc, SliceData};
+use crate::{AccountIdPrefixFull, BlockIdExt, read_single_root_boc, SliceData, HashmapType};
 use super::*;
 
 use std::{collections::HashSet, str::FromStr};

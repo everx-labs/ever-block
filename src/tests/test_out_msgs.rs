@@ -17,7 +17,6 @@ use crate::{
     StateInit, TickTock, TransactionDescr, write_read_and_assert,
     types::{Grams, Number5}
 };
-#[allow(unused_imports)] // TBD when types fixed
 use std::str::FromStr;
 
 fn get_message_with_addrs(src: AccountId, dst: AccountId) -> Message
