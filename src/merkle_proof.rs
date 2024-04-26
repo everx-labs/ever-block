@@ -12,7 +12,7 @@
 */
 
 use crate::{
-    hashmapaug::HashmapAugType,
+    dictionary::hashmapaug::HashmapAugType,
     merkle_update::MerkleUpdate,
     Serializable, Deserializable, GetRepresentationHash,
     accounts::Account,

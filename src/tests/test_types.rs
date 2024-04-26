@@ -15,7 +15,8 @@ use num::{CheckedAdd, CheckedSub};
 
 use super::*;
 use crate::{
-    base64_decode, base64_encode, cell::{Cell, CellType, DataCell}, ed25519_generate_private_key, ed25519_sign_with_secret, write_read_and_assert, Ed25519KeyOption
+    base64_decode, base64_encode, cell::{Cell, CellType, DataCell},
+    ed25519_generate_private_key, ed25519_sign_with_secret, write_read_and_assert, Ed25519KeyOption,
 };
 
 #[test]

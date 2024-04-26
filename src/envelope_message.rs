@@ -398,10 +398,8 @@ impl MsgEnvelope {
 
     ///
     /// Create Envelope with hypercube routing params
-    /// TBD
     ///
-    #[allow(dead_code)]
-    pub(crate) fn hypercube_routing(msg: &Message, src_shard: &ShardIdent, fwd_fee_remaining: Grams) -> Result<Self> {
+    pub fn hypercube_routing(msg: &Message, src_shard: &ShardIdent, fwd_fee_remaining: Grams) -> Result<Self> {
         let msg_cell = msg.serialize()?;
         let src = msg.src_ref().ok_or_else(|| error!("source address of message {:x} is invalid", msg_cell.repr_hash()))?;
         let src_prefix = AccountIdPrefixFull::prefix(src)?;
@@ -523,7 +521,7 @@ impl Serializable for MsgEnvelope {
         self.cur_addr.write_to(cell)?;
         self.next_addr.write_to(cell)?;
         self.fwd_fee_remaining.write_to(cell)?;
-        cell.checked_append_reference(self.msg.cell())?;
+        self.msg.write_to(cell)?;
         Ok(())
     }
 }
@@ -542,7 +540,7 @@ impl Deserializable for MsgEnvelope {
         self.cur_addr.read_from(cell)?;
         self.next_addr.read_from(cell)?;
         self.fwd_fee_remaining.read_from(cell)?;
-        self.msg.read_from_reference(cell)?;
+        self.msg.read_from(cell)?;
         Ok(())
     }
 }

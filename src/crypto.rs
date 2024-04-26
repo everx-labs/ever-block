@@ -228,8 +228,8 @@ impl BlsKeyOption {
         let key = Self::generate()?;
         let json = KeyOptionJson {
             type_id: Self::KEY_TYPE,
-            pub_key: Some(base64::encode(key.pub_key)),
-            pvt_key: key.pvt_key.map(base64::encode)
+            pub_key: Some(base64_encode(key.pub_key)),
+            pvt_key: key.pvt_key.map(base64_encode)
         };
 
         Ok((json, Arc::new(key)))
@@ -247,7 +247,7 @@ impl BlsKeyOption {
     pub fn from_private_key_json(json: &KeyOptionJson) -> Result<Arc<dyn KeyOption>> {
         let pub_key: [u8; BLS_PUBLIC_KEY_LEN] = match &json.pub_key {
             Some(pub_key) => {
-                let pub_key = base64::decode(pub_key)?;
+                let pub_key = base64_decode(pub_key)?;
                 pub_key.as_slice().try_into()?
             },
             None => fail!("Bad public key")
@@ -255,7 +255,7 @@ impl BlsKeyOption {
 
         let pvt_key: [u8; BLS_SECRET_KEY_LEN] = match &json.pvt_key {
             Some(pvt_key) => {
-                let pvt_key = base64::decode(pvt_key)?;
+                let pvt_key = base64_decode(pvt_key)?;
                 pvt_key.as_slice().try_into()?
             },
             None => fail!("Bad private key")

@@ -13,13 +13,13 @@
 
 use crate::{
     error::BlockError,
-    hashmapaug::{HashmapAugType, Augmentation},
+    dictionary::hashmapaug::{HashmapAugType, Augmentation},
     merkle_proof::MerkleProof,
     messages::{AnycastInfo, Message, MsgAddressInt, SimpleLib, StateInit, StateInitLib, TickTock},
     types::{AddSub, ChildCell, CurrencyCollection, Grams, Number5, VarUInteger7},
     shard::{ShardIdent, ShardStateUnsplit},
     shard_accounts::DepthBalanceInfo,
-    GetRepresentationHash, Serializable, Deserializable, MaybeSerialize, MaybeDeserialize, ConfigParams,
+    GetRepresentationHash, Serializable, Deserializable, ConfigParams,
     error, fail, Result,
     UInt256, AccountId, BuilderData, Cell, IBitstring, SliceData, UsageTree, HashmapType,
 };
@@ -258,7 +258,7 @@ impl Serializable for StorageInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.used.write_to(cell)?;
         cell.append_u32(self.last_paid)?;
-        self.due_payment.write_maybe_to(cell)?;
+        self.due_payment.write_to(cell)?;
         Ok(())
     }
 }
@@ -267,7 +267,7 @@ impl Deserializable for StorageInfo {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.used.read_from(cell)?;
         self.last_paid = cell.get_next_u32()?;
-        self.due_payment = Grams::read_maybe_from(cell)?;
+        self.due_payment.read_from(cell)?;
         Ok(())
     }
 }
@@ -404,7 +404,7 @@ impl Serializable for AccountStorage {
         self.balance.write_to(cell)?; //balance:CurrencyCollection
         self.state.write_to(cell)?; //state:AccountState
         if self.init_code_hash.is_some() {
-            self.init_code_hash.write_maybe_to(cell)?;
+            self.init_code_hash.write_to(cell)?;
         }
         Ok(())
     }
@@ -1123,7 +1123,7 @@ impl Account {
         let last_trans_lt = Deserializable::construct_from(slice)?; //last_trans_lt:uint64
         let balance = CurrencyCollection::construct_from(slice)?; //balance:CurrencyCollection
         let state = Deserializable::construct_from(slice)?; //state:AccountState
-        let init_code_hash = UInt256::read_maybe_from(slice)?;
+        let init_code_hash = Deserializable::construct_from(slice)?;
         let storage = AccountStorage {
             last_trans_lt,
             balance,
@@ -1306,7 +1306,7 @@ impl ShardAccount {
 
 impl Serializable for ShardAccount {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.account.cell())?;
+        self.account.write_to(cell)?;
         self.last_trans_hash.write_to(cell)?;
         self.last_trans_lt.write_to(cell)?;
         Ok(())
@@ -1315,7 +1315,7 @@ impl Serializable for ShardAccount {
 
 impl Deserializable for ShardAccount {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.account.read_from_reference(cell)?;
+        self.account.read_from(cell)?;
         self.last_trans_hash.read_from(cell)?;
         self.last_trans_lt.read_from(cell)?;
         Ok(())

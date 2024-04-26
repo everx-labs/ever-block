@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 use crate::{
-    AccountId, AccountStatus, ExternalInboundMessageHeader, HashUpdate, InternalMessageHeader, 
+    AccountId, AccountStatus, ExternalInboundMessageHeader, HashmapType, HashUpdate, InternalMessageHeader, 
     MsgAddressExt, MsgAddressInt, StateInit, TickTock, TransactionDescr, 
     write_read_and_assert, 
     types::Number5

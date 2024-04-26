@@ -233,10 +233,10 @@ impl SliceData {
 
     fn remaining_data(self) -> (SmallData, usize) {
         if self.data_window.start >= self.data_window.end {
-            return (SmallVec::new(), 0)
+            return (SmallData::new(), 0)
         }
         let data = match self.data {
-            InternalData::None => return (SmallVec::new(), 0),
+            InternalData::None => return (SmallData::new(), 0),
             InternalData::Data(data, length_in_bits) => {
                 if self.data_window.start == 0 && self.data_window.end == length_in_bits {
                     return (data, length_in_bits);
@@ -247,9 +247,9 @@ impl SliceData {
                 if self.references_window.start == 0 && self.data_window.start == 0
                     && self.references_window.end == cell.references_count()
                     && self.data_window.end == cell.bit_length() {
-                        return (SmallVec::from_slice(cell.data()), cell.bit_length())
+                        return (SmallData::from_slice(cell.data()), cell.bit_length())
                 }
-                SmallVec::from_slice(cell.data())
+                SmallData::from_slice(cell.data())
             }
         };
         let length_in_bits = self.data_window.end - self.data_window.start;
@@ -257,9 +257,9 @@ impl SliceData {
         let end = (self.data_window.end + 7) / 8;
         let trailing = self.data_window.start % 8;
         if trailing == 0 {
-            return (SmallVec::from_slice(&data[start..end]), length_in_bits);
+            return (SmallData::from_slice(&data[start..end]), length_in_bits);
         }
-        let mut vec = SmallVec::from_slice(&[data[start] << trailing]);
+        let mut vec = SmallData::from_slice(&[data[start] << trailing]);
         if trailing + length_in_bits > 8 {
             let mut new_length = 8 - trailing;
             let bits = length_in_bits - new_length;
@@ -373,14 +373,6 @@ impl SliceData {
 
     pub fn get_references(&self) -> Range<usize> {
         self.references_window.clone()
-    }
-
-    // TBD: remove using in TVM first
-    #[deprecated]
-    pub fn undrain_reference(&mut self) {
-        if self.references_window.start > 0 {
-            self.references_window.start -= 1;
-        }
     }
 
     /// Returns subslice of current slice
@@ -726,7 +718,6 @@ impl SliceData {
         )
     }
 
-    // TBD
     pub fn overwrite_prefix(&mut self, prefix: &SliceData) -> Result<()> {
         if prefix.is_empty() {
             Ok(())
@@ -849,7 +840,7 @@ impl SliceData {
         }
     }
 
-    pub fn from_raw(data: Vec<u8>, length_in_bits: usize) -> SliceData {
+    pub fn from_raw(data: impl Into<SmallData>, length_in_bits: usize) -> SliceData {
         SliceData::load_builder(BuilderData::with_raw(data, length_in_bits).unwrap()).unwrap()
     }
 

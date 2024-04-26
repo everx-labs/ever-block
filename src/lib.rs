@@ -36,9 +36,6 @@ pub use bls::*;
 pub mod error;
 pub use self::error::*;
 
-pub mod hashmapaug;
-pub use self::hashmapaug::*;
-
 pub mod blocks;
 pub use self::blocks::*;
 
@@ -309,17 +306,13 @@ pub trait Deserializable: Default {
     fn read_from_cell(&mut self, cell: Cell) -> Result<()> {
         self.read_from(&mut SliceData::load_cell(cell)?)
     }
-    fn read_from_reference(&mut self, slice: &mut SliceData) -> Result<()> {
-        self.read_from_cell(slice.checked_drain_reference()?)
-    }
+    // fn read_from_reference(&mut self, slice: &mut SliceData) -> Result<()> {
+    //     self.read_from_cell(slice.checked_drain_reference()?)
+    // }
     fn invalid_tag(t: u32) -> BlockError {
         let s = std::any::type_name::<Self>().to_string();
         BlockError::InvalidConstructorTag { t, s }
     }
-}
-
-pub trait MaybeSerialize {
-    fn write_maybe_to(&self, cell: &mut BuilderData) -> Result<()>;
 }
 
 impl Deserializable for Cell {
@@ -346,31 +339,27 @@ impl Serializable for SliceData {
     }
 }
 */
-impl<T: Serializable> MaybeSerialize for Option<T> {
-    fn write_maybe_to(&self, cell: &mut BuilderData) -> Result<()> {
-        match self {
-            Some(x) => {
-                cell.append_bit_one()?;
-                x.write_to(cell)?;
-            }
-            None => {
-                cell.append_bit_zero()?;
-            }
+
+impl<T: Serializable> Serializable for Option<T> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        if let Some(x) = self {
+            cell.append_bit_one()?;
+            x.write_to(cell)?;
+        } else {
+            cell.append_bit_zero()?;
         }
         Ok(())
     }
 }
 
-pub trait MaybeDeserialize {
-    fn read_maybe_from<T: Deserializable + Default> (slice: &mut SliceData) -> Result<Option<T>> {
+impl<T: Deserializable> Deserializable for Option<T> {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
         match slice.get_next_bit_int()? {
             1 => Ok(Some(T::construct_from(slice)?)),
             _ => Ok(None)
         }
     }
 }
-
-impl<T: Deserializable> MaybeDeserialize for T {}
 
 pub trait GetRepresentationHash: Serializable + std::fmt::Debug {
     fn hash(&self) -> Result<UInt256> {
@@ -443,16 +432,3 @@ where T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq {
     pretty_assertions::assert_eq!(s, s2);
     s2
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

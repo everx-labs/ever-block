@@ -16,13 +16,13 @@ use crate::{
     blocks::Block,
     define_HashmapAugE, define_HashmapE,
     error::BlockError,
-    hashmapaug::{Augmentable, Augmentation, HashmapAugType},
+    dictionary::hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     merkle_proof::MerkleProof,
     messages::Message,
     shard::ShardStateUnsplit,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, VarUInteger3, VarUInteger7},
-    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
-    error, fail, hm_label, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
+    Deserializable, Serializable,
+    error, fail, hm_label, AccountId, BuilderData, Cell, HashmapType, IBitstring, Result,
     SliceData, UInt256, UsageTree,
 };
 use std::{fmt, sync::Arc};
@@ -234,10 +234,10 @@ impl Serializable for TrComputePhase {
             let mut sep_cell = BuilderData::new();
             v.gas_used.write_to(&mut sep_cell)?; // gas_used:(VarUInteger 7)
             v.gas_limit.write_to(&mut sep_cell)?;// gas_limit:(VarUInteger 7)
-            v.gas_credit.write_maybe_to(&mut sep_cell)?; // gas_credit:(Maybe (VarUInteger 3))
+            v.gas_credit.write_to(&mut sep_cell)?; // gas_credit:(Maybe (VarUInteger 3))
             v.mode.write_to(&mut sep_cell)?; // mode:int8
             v.exit_code.write_to(&mut sep_cell)?; // exit_code:int32
-            v.exit_arg.write_maybe_to(&mut sep_cell)?; // exit_arg:(Maybe int32)
+            v.exit_arg.write_to(&mut sep_cell)?; // exit_arg:(Maybe int32)
             v.vm_steps.write_to(&mut sep_cell)?; // vm_steps:uint32
             v.vm_init_state_hash.write_to(&mut sep_cell)?; // vm_init_state_hash:uint256
             v.vm_final_state_hash.write_to(&mut sep_cell)?; // vm_final_state_hash:uint256
@@ -320,7 +320,7 @@ impl TrStoragePhase {
 impl Serializable for TrStoragePhase {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.storage_fees_collected.write_to(cell)?;
-        self.storage_fees_due.write_maybe_to(cell)?;
+        self.storage_fees_due.write_to(cell)?;
         self.status_change.write_to(cell)?;
 
         Ok(())
@@ -330,7 +330,7 @@ impl Serializable for TrStoragePhase {
 impl Deserializable for TrStoragePhase {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         self.storage_fees_collected.read_from(cell)?;
-        self.storage_fees_due = Grams::read_maybe_from(cell)?;
+        self.storage_fees_due.read_from(cell)?;
         self.status_change.read_from(cell)?;
 
         Ok(())
@@ -471,7 +471,7 @@ impl TrCreditPhase {
 
 impl Serializable for TrCreditPhase {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.due_fees_collected.write_maybe_to(cell)?;
+        self.due_fees_collected.write_to(cell)?;
         self.credit.write_to(cell)?;
         Ok(())
     }
@@ -479,7 +479,7 @@ impl Serializable for TrCreditPhase {
 
 impl Deserializable for TrCreditPhase {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.due_fees_collected = Grams::read_maybe_from(cell)?;
+        self.due_fees_collected.read_from(cell)?;
         self.credit.read_from(cell)?;
         Ok(())
     }
@@ -571,10 +571,10 @@ impl Serializable for TrActionPhase {
             .append_bit_bool(self.valid)? // valid:Bool
             .append_bit_bool(self.no_funds)?; // no_funds:Bool
         self.status_change.write_to(cell)?; // status_change:AccStatusChange
-        self.total_fwd_fees.write_maybe_to(cell)?; // total_fwd_fees:(Maybe Grams)
-        self.total_action_fees.write_maybe_to(cell)?; // total_action_fees:(Maybe Grams)
+        self.total_fwd_fees.write_to(cell)?; // total_fwd_fees:(Maybe Grams)
+        self.total_action_fees.write_to(cell)?; // total_action_fees:(Maybe Grams)
         self.result_code.write_to(cell)?; // result_code:int32
-        self.result_arg.write_maybe_to(cell)?; // result_arg:(Maybe int32)
+        self.result_arg.write_to(cell)?; // result_arg:(Maybe int32)
         self.tot_actions.write_to(cell)?; // tot_actions:uint16
         self.spec_actions.write_to(cell)?; // spec_actions:uint16
         self.skipped_actions.write_to(cell)?; // skipped_actions: uint16
@@ -591,10 +591,10 @@ impl Deserializable for TrActionPhase {
         self.valid = cell.get_next_bit()?; // valid:Bool
         self.no_funds = cell.get_next_bit()?; // no_funds:Bool
         self.status_change.read_from(cell)?; // status_change:AccStatusChange
-        self.total_fwd_fees = Grams::read_maybe_from(cell)?; // total_fwd_fees:(Maybe Grams)
-        self.total_action_fees = Grams::read_maybe_from(cell)?; // total_action_fees:(Maybe Grams)
+        self.total_fwd_fees.read_from(cell)?; // total_fwd_fees:(Maybe Grams)
+        self.total_action_fees.read_from(cell)?; // total_action_fees:(Maybe Grams)
         self.result_code.read_from(cell)?; // result_code:int32
-        self.result_arg = i32::read_maybe_from(cell)?; // result_arg:(Maybe int32)
+        self.result_arg.read_from(cell)?; // result_arg:(Maybe int32)
         self.tot_actions.read_from(cell)?; // tot_actions:uint16
         self.spec_actions.read_from(cell)?; // spec_actions:uint16
         self.skipped_actions.read_from(cell)?; // skipped_actions: uint16
@@ -681,16 +681,16 @@ impl Serializable for TransactionDescrOrdinary {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         // constructor tag is written in TransactionDescr::write_to
         cell.append_bit_bool(self.credit_first)?;
-        self.storage_ph.write_maybe_to(cell)?;
-        self.credit_ph.write_maybe_to(cell)?;
+        self.storage_ph.write_to(cell)?;
+        self.credit_ph.write_to(cell)?;
         self.compute_ph.write_to(cell)?;
         cell.append_bit_bool(self.action.is_some())?;
         cell.append_bit_bool(self.aborted)?;
-        self.bounce.write_maybe_to(cell)?;
+        self.bounce.write_to(cell)?;
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.checked_append_reference(a.serialize()?)?;
+            a.serialize()?.write_to(cell)?;
         }
 
         Ok(())
@@ -701,18 +701,16 @@ impl Deserializable for TransactionDescrOrdinary {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         // constructor tag is read in TransactionDescr::write_to
         self.credit_first = cell.get_next_bit()?;
-        self.storage_ph = TrStoragePhase::read_maybe_from(cell)?;
-        self.credit_ph = TrCreditPhase::read_maybe_from(cell)?;
+        self.storage_ph.read_from(cell)?;
+        self.credit_ph.read_from(cell)?;
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
-            let mut ap = TrActionPhase::default();
-            ap.read_from_reference(cell)?;
-            Option::Some(ap)
+            Some(TrActionPhase::construct_from_cell(cell.checked_drain_reference()?)?)
         } else {
-            Option::None
+            None
         };
         self.aborted = cell.get_next_bit()?;
-        self.bounce = TrBouncePhase::read_maybe_from(cell)?;
+        self.bounce.read_from(cell)?;
         self.destroyed = cell.get_next_bit()?;
         Ok(())
     }
@@ -769,7 +767,7 @@ impl Serializable for TransactionDescrTickTock {
         cell.append_bit_bool(self.destroyed)?;
 
         if let Some(a) = &self.action {
-            cell.checked_append_reference(a.serialize()?)?;
+            a.serialize()?.write_to(cell)?;
         }
 
         Ok(())
@@ -782,11 +780,9 @@ impl Deserializable for TransactionDescrTickTock {
         self.storage.read_from(cell)?;
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
-            let mut ap = TrActionPhase::default();
-            ap.read_from_reference(cell)?;
-            Option::Some(ap)
+            Some(TrActionPhase::construct_from_cell(cell.checked_drain_reference()?)?)
         } else {
-            Option::None
+            None
         };
         self.aborted = cell.get_next_bit()?;
         self.destroyed = cell.get_next_bit()?;
@@ -815,12 +811,12 @@ impl Serializable for TransactionDescrSplitPrepare {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         self.compute_ph.write_to(cell)?;
-        cell.append_bit_bool(self.action.is_some())?;
-        cell.append_bit_bool(self.aborted)?;
-        cell.append_bit_bool(self.destroyed)?;
+        self.action.is_some().write_to(cell)?;
+        self.aborted.write_to(cell)?;
+        self.destroyed.write_to(cell)?;
 
         if let Some(a) = &self.action {
-            cell.checked_append_reference(a.serialize()?)?;
+            a.serialize()?.write_to(cell)?;
         }
 
         Ok(())
@@ -832,11 +828,9 @@ impl Deserializable for TransactionDescrSplitPrepare {
         self.split_info.read_from(cell)?;
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
-            let mut ap = TrActionPhase::default();
-            ap.read_from_reference(cell)?;
-            Option::Some(ap)
+            Some(TrActionPhase::construct_from_cell(cell.checked_drain_reference()?)?)
         } else {
-            Option::None
+            None
         };
         self.aborted = cell.get_next_bit()?;
         self.destroyed = cell.get_next_bit()?;
@@ -934,14 +928,14 @@ impl Serializable for TransactionDescrMergeInstall {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.split_info.write_to(cell)?;
         cell.checked_append_reference(self.prepare_transaction.serialize()?)?;
-        self.credit_ph.write_maybe_to(cell)?;
+        self.credit_ph.write_to(cell)?;
         self.compute_ph.write_to(cell)?;
-        cell.append_bit_bool(self.action.is_some())?;
-        cell.append_bit_bool(self.aborted)?;
-        cell.append_bit_bool(self.destroyed)?;
+        self.action.is_some().write_to(cell)?;
+        self.aborted.write_to(cell)?;
+        self.destroyed.write_to(cell)?;
 
         if let Some(a) = &self.action {
-            cell.checked_append_reference(a.serialize()?)?;
+            a.serialize()?.write_to(cell)?;
         }
 
         Ok(())
@@ -955,14 +949,12 @@ impl Deserializable for TransactionDescrMergeInstall {
         let tr = Transaction::construct_from_reference(cell)?;
         self.prepare_transaction = Arc::new(tr);
 
-        self.credit_ph = TrCreditPhase::read_maybe_from(cell)?;
+        self.credit_ph.read_from(cell)?;
         self.compute_ph.read_from(cell)?;
         self.action = if cell.get_next_bit()? {
-            let mut ap = TrActionPhase::default();
-            ap.read_from_reference(cell)?;
-            Option::Some(ap)
+            Some(TrActionPhase::construct_from_cell(cell.checked_drain_reference()?)?)
         } else {
-            Option::None
+            None
         };
         self.aborted = cell.get_next_bit()?;
         self.destroyed = cell.get_next_bit()?;
@@ -1605,7 +1597,7 @@ impl Serializable for Transaction {
         builder.append_bits(self.outmsg_cnt as usize, 15)?; // outmsg_cnt: u15
         self.orig_status.write_to(builder)?; // orig_status: AccountStatus,
         self.end_status.write_to(builder)?; // end_status: AccountStatus
-        // self.in_msg.write_maybe_to(builder)?;
+        // self.in_msg.write_to(builder)?;
         let mut builder1 = BuilderData::new();
         match &self.in_msg {
             Some(in_msg) => {
@@ -1619,8 +1611,8 @@ impl Serializable for Transaction {
         self.out_msgs.write_to(&mut builder1)?;
         builder.checked_append_reference(builder1.into_cell()?)?;
         self.total_fees.write_to(builder)?; // total_fees
-        builder.checked_append_reference(self.state_update.cell())?; // ^(HASH_UPDATE Account)
-        builder.checked_append_reference(self.description.cell())?; // ^TransactionDescr
+        self.state_update.write_to(builder)?; // ^(HASH_UPDATE Account)
+        self.description.write_to(builder)?; // ^TransactionDescr
 
         Ok(())
     }
@@ -1646,15 +1638,11 @@ impl Deserializable for Transaction {
         self.orig_status.read_from(cell)?; // orig_status
         self.end_status.read_from(cell)?; // end_status
         let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
-        if cell1.get_next_bit()? {
-            let mut msg = ChildCell::default();
-            msg.read_from_reference(cell1)?;
-            self.in_msg = Some(msg);
-        }
+        self.in_msg.read_from(cell1)?;
         self.out_msgs.read_from(cell1)?;
         self.total_fees.read_from(cell)?; // total_fees
-        self.state_update.read_from_reference(cell)?; // ^(HASH_UPDATE Account)
-        self.description.read_from_reference(cell)?; // ^TransactionDescr
+        self.state_update.read_from(cell)?; // ^(HASH_UPDATE Account)
+        self.description.read_from(cell)?; // ^TransactionDescr
 
         Ok(())
     }
@@ -1831,9 +1819,9 @@ const ACCOUNT_BLOCK_TAG : usize = 0x5;
 impl Serializable for AccountBlock {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_bits(ACCOUNT_BLOCK_TAG, 4)?;
-        self.account_addr.write_to(cell)?;                                  // account_addr: AccountId,
-        self.transactions.write_hashmap_root(cell)?;
-        cell.checked_append_reference(self.state_update.cell())?;      // ^(HASH_UPDATE Account)
+        self.account_addr.write_to(cell)?;           // account_addr: AccountId,
+        self.transactions.write_hashmap_root(cell)?; // transactions:(HashmapAug 64 ^Transaction CurrencyCollection)
+        self.state_update.write_to(cell)?;           // ^(HASH_UPDATE Account)
         Ok(())
     }
 }
@@ -1855,7 +1843,7 @@ impl Deserializable for AccountBlock {
         trs.read_hashmap_root(slice)?;
         self.transactions = trs;
 
-        self.state_update.read_from_reference(slice)?;   // ^(HASH_UPDATE Account)
+        self.state_update.read_from(slice)?;   // ^(HASH_UPDATE Account)
         Ok(())
     }
 }

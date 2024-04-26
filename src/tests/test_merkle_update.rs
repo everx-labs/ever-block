@@ -19,9 +19,9 @@ use std::{
 
 use crate::{
     define_HashmapE, generate_test_account_by_init_code_hash, ShardStateUnsplit, MsgEnvelope,
-    HashmapE, ShardState, HashmapType, ProcessedInfoKey, ProcessedUpto,
+    ShardState, HashmapType, ProcessedInfoKey, ProcessedUpto,
     CurrencyCollection, Grams, Block, MerkleProof, OutQueueUpdates, OutMsgQueueInfo,
-    hashmapaug::HashmapAugType, Message, InternalMessageHeader, MsgAddressInt, StateInit, Number5, 
+    HashmapAugType, Message, InternalMessageHeader, MsgAddressInt, StateInit, Number5, 
     TickTock, OutMsgQueueKey, ShardIdent, ShardStateSplit, OutQueueUpdate,
     UsageTree, AccountId, ExceptionCode, write_boc, BocWriter, read_single_root_boc,
 };
