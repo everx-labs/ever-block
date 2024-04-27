@@ -59,7 +59,7 @@ macro_rules! fail {
     //     panic!("{}", error!(ExceptionCode::CellUnderflow))
     // };
     ($error:expr) => {
-        return Err(crate::error!($error))
+        return Err($crate::error!($error))
     };
     ($fmt:expr, $($arg:tt)*) => {
         return Err(failure::err_msg(format!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!())))
