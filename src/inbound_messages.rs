@@ -20,14 +20,14 @@ use crate::{
     define_HashmapAugE,
     envelope_message::MsgEnvelope,
     error::BlockError,
-    hashmapaug::{Augmentable, Augmentation, HashmapAugType},
+    dictionary::hashmapaug::{Augmentable, Augmentation, HashmapAugType},
     messages::Message,
     common_message::CommonMessage,
     transactions::Transaction,
     types::{AddSub, ChildCell, CurrencyCollection, Grams},
     Serializable, Deserializable,
     error, fail, Result, SERDE_OPTS_EMPTY, SERDE_OPTS_COMMON_MESSAGE,
-    BuilderData, Cell, IBitstring, SliceData, HashmapType, UInt256, hm_label,
+    BuilderData, Cell, IBitstring, SliceData, UInt256, hm_label,
 };
 use std::fmt;
 
@@ -539,8 +539,8 @@ impl InMsgExternal {
 
 impl Serializable for InMsgExternal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
+        self.msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
         Ok(())
     }
 }
@@ -550,8 +550,8 @@ impl Deserializable for InMsgExternal {
         self.read_from_with_opts(slice, SERDE_OPTS_EMPTY)
     }
     fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
-        self.msg.read_from_reference_with_opts(slice, opts)?;
-        self.transaction.read_from_reference_with_opts(slice, opts)?;
+        self.msg.read_from_with_opts(slice, opts)?;
+        self.transaction.read_from_with_opts(slice, opts)?;
         Ok(())
     }
 }
@@ -617,10 +617,10 @@ impl InMsgIHR {
 
 impl Serializable for InMsgIHR {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
+        self.msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
         self.ihr_fee.write_to(cell)?;
-        cell.checked_append_reference(self.proof_created.clone())?;
+        self.proof_created.write_to(cell)?;
         Ok(())
     }
 }
@@ -630,10 +630,10 @@ impl Deserializable for InMsgIHR {
         self.read_from_with_opts(slice, SERDE_OPTS_EMPTY)
     }
     fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
-        self.msg.read_from_reference_with_opts(slice, opts)?;
-        self.transaction.read_from_reference_with_opts(slice, opts)?;
+        self.msg.read_from_with_opts(slice, opts)?;
+        self.transaction.read_from_with_opts(slice, opts)?;
         self.ihr_fee.read_from_with_opts(slice, opts)?;
-        self.proof_created = slice.checked_drain_reference()?;
+        self.proof_created.read_from(slice)?;
         Ok(())
     }
 }
@@ -685,8 +685,8 @@ impl InMsgFinal {
 
 impl Serializable for InMsgFinal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.in_msg.cell())?;
-        cell.checked_append_reference(self.transaction.cell())?;
+        self.in_msg.write_to(cell)?;
+        self.transaction.write_to(cell)?;
         self.fwd_fee.write_to(cell)?;
         Ok(())
     }
@@ -697,8 +697,8 @@ impl Deserializable for InMsgFinal {
         self.read_from_with_opts(slice, SERDE_OPTS_EMPTY)
     }
     fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
-        self.in_msg.read_from_reference_with_opts(slice, opts)?;
-        self.transaction.read_from_reference_with_opts(slice, opts)?;
+        self.in_msg.read_from_with_opts(slice, opts)?;
+        self.transaction.read_from_with_opts(slice, opts)?;
         self.fwd_fee.read_from_with_opts(slice, opts)?;
         Ok(())
     }
@@ -751,8 +751,8 @@ impl InMsgTransit {
 
 impl Serializable for InMsgTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.in_msg.cell())?;
-        cell.checked_append_reference(self.out_msg.cell())?;
+        self.in_msg.write_to(cell)?;
+        self.out_msg.write_to(cell)?;
         self.transit_fee.write_to(cell)?;
         Ok(())
     }
@@ -763,8 +763,8 @@ impl Deserializable for InMsgTransit {
         self.read_from_with_opts(slice, SERDE_OPTS_EMPTY)
     }
     fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
-        self.in_msg.read_from_reference_with_opts(slice, opts)?;
-        self.out_msg.read_from_reference_with_opts(slice, opts)?;
+        self.in_msg.read_from_with_opts(slice, opts)?;
+        self.out_msg.read_from_with_opts(slice, opts)?;
         self.transit_fee.read_from_with_opts(slice, opts)?;
         Ok(())
     }
@@ -817,7 +817,7 @@ impl InMsgDiscardedFinal {
 
 impl Serializable for InMsgDiscardedFinal {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.in_msg.cell())?;
+        self.in_msg.write_to(cell)?;
         self.transaction_id.write_to(cell)?;
         self.fwd_fee.write_to(cell)?;
         Ok(())
@@ -829,7 +829,7 @@ impl Deserializable for InMsgDiscardedFinal {
         self.read_from_with_opts(slice, SERDE_OPTS_EMPTY)
     }
     fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
-        self.in_msg.read_from_reference_with_opts(slice, opts)?;
+        self.in_msg.read_from_with_opts(slice, opts)?;
         self.transaction_id.read_from_with_opts(slice, opts)?;
         self.fwd_fee.read_from_with_opts(slice, opts)?;
         Ok(())
@@ -890,10 +890,10 @@ impl InMsgDiscardedTransit {
 
 impl Serializable for InMsgDiscardedTransit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.checked_append_reference(self.in_msg.cell())?;
+        self.in_msg.write_to(cell)?;
         self.transaction_id.write_to(cell)?;
         self.fwd_fee.write_to(cell)?;
-        cell.checked_append_reference(self.proof_delivered.clone())?;
+        self.proof_delivered.write_to(cell)?;
         Ok(())
     }
 }
@@ -903,10 +903,10 @@ impl Deserializable for InMsgDiscardedTransit {
         self.read_from_with_opts(slice, SERDE_OPTS_EMPTY)
     }
     fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
-        self.in_msg.read_from_reference_with_opts(slice, opts)?;
+        self.in_msg.read_from_with_opts(slice, opts)?;
         self.transaction_id.read_from_with_opts(slice, opts)?;
         self.fwd_fee.read_from_with_opts(slice, opts)?;
-        self.proof_delivered = slice.checked_drain_reference()?;
+        self.proof_delivered.read_from(slice)?;
         Ok(())
     }
 }

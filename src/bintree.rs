@@ -13,7 +13,7 @@
 
 use crate::{
     error::BlockError,
-    hashmapaug::Augmentable,
+    Augmentable,
     Serializable, Deserializable,
     error, fail, Result,
     BuilderData, Cell, IBitstring, SliceData

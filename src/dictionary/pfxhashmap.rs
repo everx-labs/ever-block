@@ -266,9 +266,6 @@ impl HashmapType for PfxHashmapE {
     fn bit_len(&self) -> usize {
         self.bit_len
     }
-    fn bit_len_mut(&mut self) -> &mut usize {
-        &mut self.bit_len
-    }
 }
 
 impl HashmapRemover for PfxHashmapE {}

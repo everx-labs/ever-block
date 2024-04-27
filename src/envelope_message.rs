@@ -412,10 +412,8 @@ impl MsgEnvelope {
 
     ///
     /// Create Envelope with hypercube routing params
-    /// TBD
     ///
-    #[allow(dead_code)]
-    pub(crate) fn hypercube_routing(msg: &Message, src_shard: &ShardIdent, fwd_fee_remaining: Grams) -> Result<Self> {
+    pub fn hypercube_routing(msg: &Message, src_shard: &ShardIdent, fwd_fee_remaining: Grams) -> Result<Self> {
         let msg_cell = msg.serialize()?;
         let src = msg.src_ref().ok_or_else(|| error!("source address of message {:x} is invalid", msg_cell.repr_hash()))?;
         let src_prefix = AccountIdPrefixFull::prefix(src)?;

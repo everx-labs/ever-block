@@ -19,7 +19,7 @@ use crate::{
     Serializable, Deserializable,
     config_params::CatchainConfig,
     shard::{SHARD_FULL, MASTERCHAIN_ID},
-    error, fail, BuilderData, ByteOrderRead, Cell, Crc32, HashmapE, HashmapType, 
+    fail, BuilderData, ByteOrderRead, Cell, Crc32, 
     IBitstring, Result, sha512_digest, SliceData, UInt256, 
     bls::BLS_PUBLIC_KEY_LEN 
 };

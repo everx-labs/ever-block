@@ -16,12 +16,12 @@ use crate::{
     blocks::Block,
     define_HashmapE,
     error::BlockError,
-    hashmapaug::HashmapAugType,
+    dictionary::hashmapaug::HashmapAugType,
     merkle_proof::MerkleProof,
     shard::MASTERCHAIN_ID,
     types::{AddSub, CurrencyCollection, Grams, Number5, Number9, UnixTime32},
-    Deserializable, MaybeDeserialize, MaybeSerialize, Serializable,
-    error, fail, AccountId, BuilderData, Cell, HashmapE, HashmapType, IBitstring, Result,
+    Deserializable, Serializable,
+    error, fail, AccountId, BuilderData, Cell, IBitstring, Result,
     SliceData, UInt256, UsageTree, MAX_DATA_BITS, MAX_REFERENCES_COUNT,
 };
 use std::{fmt, str::FromStr};
@@ -100,7 +100,7 @@ impl MsgAddrVar {
 impl Serializable for MsgAddrVar {
 
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.anycast.write_maybe_to(cell)?;                            // anycast
+        self.anycast.write_to(cell)?;                                  // anycast
         let addr_len = Number9::new(self.address.remaining_bits() as u32)?;
         addr_len.write_to(cell)?;                                      // addr_len
         cell.append_i32(self.workchain_id)?;                           // workchain_id
@@ -137,7 +137,7 @@ impl Default for MsgAddrStd {
 impl Serializable for MsgAddrStd {
 
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.anycast.write_maybe_to(cell)?;  // anycast
+        self.anycast.write_to(cell)?;        // anycast
         self.workchain_id.write_to(cell)?;   // workchain_id
         self.address.write_to(cell)?;        // address
         Ok(())
@@ -491,6 +491,7 @@ impl fmt::Display for InternalMessageHeader {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum MsgAddressIntOrNone {
     #[default]
     None,
@@ -827,6 +828,7 @@ impl fmt::Display for CommonMsgInfo {
 
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum CommonMsgInfo{
     IntMsgInfo(InternalMessageHeader),
     ExtInMsgInfo(ExternalInboundMessageHeader),
@@ -1733,10 +1735,10 @@ impl StateInit {
 impl Serializable for StateInit {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
 
-        self.split_depth.write_maybe_to(cell)?;
-        self.special.write_maybe_to(cell)?;
-        self.code.write_maybe_to(cell)?;
-        self.data.write_maybe_to(cell)?;
+        self.split_depth.write_to(cell)?;
+        self.special.write_to(cell)?;
+        self.code.write_to(cell)?;
+        self.data.write_to(cell)?;
         self.library.write_to(cell)?;
         Ok(())
     }
@@ -1745,8 +1747,8 @@ impl Serializable for StateInit {
 impl Deserializable for StateInit {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
 
-        self.split_depth = Number5::read_maybe_from(cell)?;
-        self.special = TickTock::read_maybe_from(cell)?;
+        self.split_depth.read_from(cell)?;
+        self.special.read_from(cell)?;
         // code:(Maybe ^Cell)
         self.code = match cell.get_next_bit()? {
             true => Some(cell.checked_drain_reference()?),
@@ -1845,7 +1847,7 @@ pub struct MsgAddrStd {
 
 impl Deserializable for MsgAddrStd {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.anycast = AnycastInfo::read_maybe_from(cell)?;
+        self.anycast.read_from(cell)?;
         self.workchain_id.read_from(cell)?;
         self.address = cell.get_next_slice(256)?;
         Ok(())
@@ -1862,7 +1864,7 @@ pub struct MsgAddrVar {
 
 impl Deserializable for MsgAddrVar {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        self.anycast = AnycastInfo::read_maybe_from(cell)?;
+        self.anycast.read_from(cell)?;
         self.addr_len.read_from(cell)?;
         self.workchain_id.read_from(cell)?;
         self.address = cell.get_next_slice(self.addr_len.as_usize())?;

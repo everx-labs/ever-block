@@ -17,6 +17,7 @@ use crate::{
     Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit, 
     BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY, CommonMessage, Transaction, BlockInfo, ValueFlow,
     MerkleUpdate, transactions::tests::generate_test_shard_account_block,
+    HashmapType, HashmapE,
 };
 use std::collections::{HashMap, HashSet};
 use rand::Rng;

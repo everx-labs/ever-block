@@ -13,7 +13,7 @@
 #![allow(clippy::inconsistent_digit_grouping, clippy::unusual_byte_groupings)]
 use crate::{
     read_single_root_boc, write_read_and_assert_with_opts, AccountIdPrefixFull, BlockIdExt, 
-    InRefValue, MeshMsgQueuesInfo, SliceData
+    InRefValue, MeshMsgQueuesInfo, SliceData, HashmapType
 };
 use super::*;
 

@@ -14,7 +14,7 @@
 use crate::{
     define_HashmapE,
     error::BlockError,
-    hashmapaug::HashmapAugType,
+    dictionary::hashmapaug::HashmapAugType,
     shard::ShardIdent,
     shard_accounts::ShardAccounts,
     signature::{CryptoSignature, SigPubKey},
@@ -403,6 +403,7 @@ pub enum GlobalCapabilities {
     CapNoSplitOutQueue        = 0x0008_0000_0000, // Don't split out queue on shard splitting
     CapUndeletableAccounts    = 0x0010_0000_0000, // Don't delete frozen accounts
     CapTvmV20                 = 0x0020_0000_0000, // BLS instructions
+    CapDuePaymentFix          = 0x0040_0000_0000, // No due payments on credit phase and add payed dues to storage fee in TVM 
     CapCommonMessage          = 0x0080_0000_0000,
 }
 
@@ -2547,8 +2548,8 @@ impl Deserializable for ConfigVotingSetup {
                 s: std::any::type_name::<Self>().to_string()
             })
         }
-        self.normal_params.read_from_reference(slice)?;
-        self.critical_params.read_from_reference(slice)?;
+        self.normal_params.read_from(slice)?;
+        self.critical_params.read_from(slice)?;
 
         Ok(())
     }
@@ -2557,8 +2558,8 @@ impl Deserializable for ConfigVotingSetup {
 impl Serializable for ConfigVotingSetup {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         cell.append_u8(CONFIG_VOTING_SETUP_TAG)?;
-        cell.checked_append_reference(self.normal_params.cell())?;
-        cell.checked_append_reference(self.critical_params.cell())?;
+        self.normal_params.write_to(cell)?;
+        self.critical_params.write_to(cell)?;
         Ok(())
     }
 }
@@ -2776,7 +2777,7 @@ impl Deserializable for ValidatorSignedTempKey {
             )
         }
         self.signature.read_from(slice)?;
-        self.key.read_from_reference(slice)?;
+        self.key.read_from_cell(slice.checked_drain_reference()?)?;
         Ok(())
     }
 }

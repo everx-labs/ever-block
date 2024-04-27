@@ -2,10 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## Version 1.10.1
+## Version 1.10.3
 
 - New CommonMessage structure as a container of old `Message` and new types of messages.
 - New serialization option for ser/de operations with other structs.
+
+## Version 1.10.2
+
+- Enhanced HashMap interface
+- Some interfaces were refactored due to merging repos
+
+## Version 1.10.1
+
+- Added GlobalCapabilities::CapDuePaymentFix which disables due payments on credit phase and adds payed dues to storage fee in TVM
 
 ## Version 1.10.0
 

@@ -15,7 +15,7 @@ use crate::{
     define_HashmapE,
     Serializable, Deserializable,
     Result, BuilderData, Cell, SliceData, UInt256,
-    HashmapE, HashmapType, HashmapSubtree, fail, error
+    HashmapSubtree, fail,
 };
 
 #[cfg(test)]
@@ -123,7 +123,8 @@ define_HashmapE!(IhrPendingInfo, 320, IhrPendingSince);
 
 impl IhrPendingInfo {
     pub fn split_inplace(&mut self, split_key: &SliceData) -> Result<()> {
-        self.0.into_subtree_with_prefix(split_key, &mut 0)
+        self.0 = self.0.subtree_with_prefix(split_key, &mut 0)?;
+        Ok(())
     }
 }
 
