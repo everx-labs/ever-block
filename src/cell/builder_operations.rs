@@ -11,9 +11,11 @@
 * limitations under the License.
 */
 
-use crate::{error, fail};
-use crate::cell::{BuilderData, find_tag, MAX_DATA_BITS, MAX_REFERENCES_COUNT, SliceData};
-use crate::types::{ExceptionCode, Result};
+use crate::{
+    cell::{BuilderData, find_tag, MAX_DATA_BITS, MAX_REFERENCES_COUNT, SliceData},
+    types::{ExceptionCode, Result},
+    fail
+};
 
 impl BuilderData {
     /// maximum number of references

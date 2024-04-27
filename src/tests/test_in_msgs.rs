@@ -344,6 +344,7 @@ fn test_inmsg_serde_with_cmnmsg_success() {
         };
         let msg_cell = ChildCell::with_struct_and_opts(&msg, opts).unwrap();
         let tr_cell = ChildCell::with_struct_and_opts(&tr, opts).unwrap();
+        assert_eq!(tr_cell.read_struct().unwrap(), tr);
         let env_cell = ChildCell::with_struct_and_opts(&enveloped, opts).unwrap();
         let inmsg_variants = [
             InMsg::external(msg_cell.clone(), tr_cell.clone()),
@@ -355,13 +356,15 @@ fn test_inmsg_serde_with_cmnmsg_success() {
             InMsg::discarded_transit(env_cell.clone(), 20, 6.into(), Cell::default()),
         ];
         for ref inmsg in inmsg_variants {
+            if let Some(tr2) = inmsg.read_transaction().unwrap() {
+                assert_eq!(tr2, tr);
+            }
             let cell = inmsg.serialize_with_opts(opts).unwrap();
             let inmsg2 = InMsg::construct_from_cell_with_opts(cell, opts).unwrap();
             assert_eq!(inmsg, &inmsg2);
             let msg2 = inmsg2.read_message().unwrap();
             assert_eq!(&msg2, msg.get_std().unwrap());
-            let tr2 = inmsg2.read_transaction().unwrap();
-            if let Some(tr2) = tr2 {
+            if let Some(tr2) = inmsg2.read_transaction().unwrap() {
                 assert_eq!(tr2, tr);
             }
         }

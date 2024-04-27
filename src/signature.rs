@@ -14,7 +14,7 @@
 use crate::{
     blocks::BlockIdExt, define_HashmapE, error::BlockError, validators::ValidatorBaseInfo,
     validators::ValidatorDescr, Deserializable, Serializable,
-    error, fail, BuilderData, Cell, Ed25519KeyOption, HashmapE, HashmapType, IBitstring, KeyOption,
+    fail, BuilderData, Cell, Ed25519KeyOption, HashmapE, HashmapType, IBitstring, KeyOption,
     Result, SliceData, UInt256,
     ED25519_PUBLIC_KEY_LENGTH, ED25519_SIGNATURE_LENGTH
 };

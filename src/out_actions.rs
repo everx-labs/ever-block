@@ -13,7 +13,7 @@
 
 use crate::{
     error::BlockError, messages::Message, types::CurrencyCollection, Deserializable, Serializable,
-    error, fail, AccountId, BuilderData, Cell, IBitstring, Result, SliceData, UInt256,
+    fail, AccountId, BuilderData, Cell, IBitstring, Result, SliceData, UInt256,
 };
 use std::collections::LinkedList;
 

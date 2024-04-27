@@ -15,7 +15,7 @@ use crate::{
     error::BlockError,
     Augmentable,
     Serializable, Deserializable,
-    error, fail, Result,
+    fail, Result,
     BuilderData, Cell, IBitstring, SliceData
 };
 use std::marker::PhantomData;

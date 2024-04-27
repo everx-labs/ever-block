@@ -21,7 +21,7 @@ use crate::{
     blocks::{Block, BlockInfo, BlockSeqNoAndShard},
     transactions::Transaction,
     messages::Message,
-    Cell, CellType, BuilderData, error, fail, IBitstring, SliceData, Result,
+    Cell, CellType, BuilderData, fail, IBitstring, SliceData, Result,
     UsageTree, types::UInt256
 };
 use std::{cmp::max, collections::{HashMap, HashSet}};

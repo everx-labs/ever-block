@@ -21,8 +21,7 @@ use crate::cell::{
     append_tag, find_tag, Cell, CellType, DataCell, LevelMask, SliceData, MAX_DATA_BITS,
     MAX_SAFE_DEPTH,
 };
-use crate::types::{ExceptionCode, Result};
-use crate::{error, fail};
+use crate::{types::{ExceptionCode, Result}, fail};
 
 const EXACT_CAPACITY: usize = 128;
 

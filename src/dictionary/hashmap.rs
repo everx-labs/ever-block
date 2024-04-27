@@ -14,7 +14,7 @@
 use std::fmt;
 
 use crate::{
-    error, fail, Result, GasConsumer,
+    fail, Result, GasConsumer,
     types::ExceptionCode,
     cell::{BuilderData, Cell, SliceData},
 
@@ -261,15 +261,23 @@ impl IntoIterator for &HashmapE {
 macro_rules! define_HashmapE {
     ( $varname:ident, $bit_len:expr, $x_type:ty ) => {
         #[derive(PartialEq, Clone, Debug, Eq)]
-        pub struct $varname($crate::HashmapE);
+        pub struct $varname($crate::HashmapE, u8);
 
         #[allow(dead_code)]
         impl $varname {
             /// default constructor
-            pub fn new() -> Self { Self::default() }
+            pub const fn new() -> Self {
+                Self(
+                    $crate::HashmapE::with_hashmap($bit_len, None),
+                    $crate::SERDE_OPTS_EMPTY,
+                )
+            }
+            pub const fn with_serde_opts(opts: u8) -> Self {
+                Self($crate::HashmapE::with_hashmap($bit_len, None), opts)
+            }
             /// constructor with HashmapE root
-            pub const fn with_hashmap(data: Option<Cell>) -> Self {
-                Self($crate::HashmapE::with_hashmap($bit_len, data))
+            pub const fn with_hashmap(data: Option<Cell>, opts: u8) -> Self {
+                Self($crate::HashmapE::with_hashmap($bit_len, data), opts)
             }
             /// constructor with single element
             pub fn with_key_and_value<K: Serializable>(key: &K, value: &$x_type) -> Result<Self> {
@@ -282,6 +290,9 @@ macro_rules! define_HashmapE {
             }
             pub fn inner(self) -> $crate::HashmapE {
                 self.0
+            }
+            pub fn serde_opts(&self) -> u8 {
+                self.1
             }
             pub fn as_hashmap(&self) -> $crate::HashmapE {
                 self.0.clone()
@@ -311,7 +322,10 @@ macro_rules! define_HashmapE {
             /// iterates items
             pub fn iterate<F>(&self, mut p: F) -> Result<bool>
             where F: FnMut($x_type) -> Result<bool> {
-                $crate::HashmapType::iterate_slices(&self.0, |_, ref mut slice| p(<$x_type>::construct_from(slice)?))
+                $crate::HashmapType::iterate_slices(
+                    &self.0,
+                    |_, ref mut slice| p(<$x_type>::construct_from_with_opts(slice, self.1)?)
+                )
             }
             /// iterates items as raw slices
             pub fn iterate_slices<F>(&self, mut p: F) -> Result<bool>
@@ -321,14 +335,17 @@ macro_rules! define_HashmapE {
             /// iterates keys
             pub fn iterate_keys<K, F>(&self, mut p: F) -> Result<bool>
             where K: Default + Deserializable, F: FnMut(K) -> Result<bool> {
-                $crate::HashmapType::iterate_slices(&self.0, |ref mut key, _| p(K::construct_from(key)?))
+                $crate::HashmapType::iterate_slices(
+                    &self.0,
+                    |ref mut key, _| p(K::construct_from_with_opts(key, self.1)?)
+                )
             }
             /// iterates items with keys
             pub fn iterate_with_keys<K, F>(&self, mut p: F) -> Result<bool>
             where K: Default + Deserializable, F: FnMut(K, $x_type) -> Result<bool> {
                 $crate::HashmapType::iterate_slices(&self.0, |ref mut key, ref mut slice| p(
                     K::construct_from(key)?,
-                    <$x_type>::construct_from(slice)?
+                    <$x_type>::construct_from_with_opts(slice, self.1)?
                 ))
             }
             /// iterates items as slices with keys
@@ -337,13 +354,13 @@ macro_rules! define_HashmapE {
                 $crate::HashmapType::iterate_slices(&self.0, |key, slice| p(key, slice))
             }
             pub fn set<K: Serializable>(&mut self, key: &K, value: &$x_type) -> Result<()> {
-                let key = key.write_to_bitstring()?;
-                let value = value.write_to_new_cell()?;
+                let key = key.write_to_bitstring_with_opts(self.1)?;
+                let value = value.write_to_new_cell_with_opts(self.1)?;
                 self.0.set_builder(key, &value)?;
                 Ok(())
             }
             pub fn setref<K: Serializable>(&mut self, key: &K, value: &Cell) -> Result<()> {
-                let key = key.write_to_bitstring()?;
+                let key = key.write_to_bitstring_with_opts(self.1)?;
                 self.0.setref(key, value)?;
                 Ok(())
             }
@@ -353,33 +370,34 @@ macro_rules! define_HashmapE {
                 Ok(())
             }
             pub fn add_key<K: Serializable>(&mut self, key: &K) -> Result<()> {
-                let key = key.write_to_bitstring()?;
+                let key = key.write_to_bitstring_with_opts(self.1)?;
                 self.add_key_serialized(key)
             }
             pub fn get<K: Serializable>(&self, key: &K) -> Result<Option<$x_type>> {
-                self.get_as_slice(key)?
-                    .map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()
+                self.get_as_slice(key)?.map(
+                    |ref mut slice| <$x_type>::construct_from_with_opts(slice, self.1)
+                ).transpose()
             }
             pub fn get_as_slice<K: Serializable>(&self, key: &K) -> Result<Option<SliceData>> {
-                let key = key.write_to_bitstring()?;
+                let key = key.write_to_bitstring_with_opts(self.1)?;
                 self.get_raw(key)
             }
             pub fn get_raw(&self, key: SliceData) -> Result<Option<SliceData>> {
                 self.0.get(key)
             }
             pub fn remove<K: Serializable>(&mut self, key: &K) -> Result<bool> {
-                let key = key.write_to_bitstring()?;
+                let key = key.write_to_bitstring_with_opts(self.1)?;
                 let leaf = self.0.remove(key)?;
                 Ok(leaf.is_some())
             }
             pub fn check_key<K: Serializable>(&self, key: &K) -> Result<bool> {
-                let key = key.write_to_bitstring()?;
+                let key = key.write_to_bitstring_with_opts(self.1)?;
                 self.0.get(key).map(|value| value.is_some())
             }
             pub fn export_vector(&self) -> Result<Vec<$x_type>> {
                 let mut vec = Vec::new();
                 $crate::HashmapType::iterate_slices(&self.0, |_, ref mut slice| {
-                    vec.push(<$x_type>::construct_from(slice)?);
+                    vec.push(<$x_type>::construct_from_with_opts(slice, self.1)?);
                     Ok(true)
                 })?;
                 Ok(vec)
@@ -388,7 +406,7 @@ macro_rules! define_HashmapE {
                 self.0.merge(&other.0, split_key)
             }
             pub fn split(&self, split_key: &SliceData) -> Result<(Self, Self)> {
-                self.0.split(split_key).map(|(left, right)| (Self(left), Self(right)))
+                self.0.split(split_key).map(|(left, right)| (Self(left, self.1), Self(right, self.1)))
             }
             pub fn combine_with(&mut self, other: &Self) -> Result<bool> {
                 $crate::HashmapType::combine_with(&mut self.0, &other.0)
@@ -396,16 +414,20 @@ macro_rules! define_HashmapE {
             pub fn scan_diff<K, F>(&self, other: &Self, mut op: F) -> Result<bool>
             where K: Deserializable, F: FnMut(K, Option<$x_type>, Option<$x_type>) -> Result<bool> {
                 $crate::HashmapType::scan_diff(&self.0, &other.0, |mut key, value1, value2| {
-                    let key = K::construct_from(&mut key)?;
-                    let value1 = value1.map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()?;
-                    let value2 = value2.map(|ref mut slice| <$x_type>::construct_from(slice)).transpose()?;
+                    let key = K::construct_from_with_opts(&mut key, self.1)?;
+                    let value1 = value1.map(
+                        |ref mut slice| <$x_type>::construct_from_with_opts(slice, self.1)
+                    ).transpose()?;
+                    let value2 = value2.map(
+                        |ref mut slice| <$x_type>::construct_from_with_opts(slice, self.1)
+                    ).transpose()?;
                     op(key, value1, value2)
                 })
             }
 
             pub fn filter<K, F>(&mut self, mut op: F) -> Result<()>
             where K: Deserializable, K : Serializable, F: FnMut(&K, &$x_type) -> Result<bool> {
-                let mut other_tree = $varname($crate::HashmapE::with_bit_len($bit_len));
+                let mut other_tree = Self($crate::HashmapE::with_bit_len($bit_len), self.1);
                 self.iterate_with_keys(&mut |key : K, value| {
                     if op(&key, &value)? {
                         other_tree.set(&key, &value)?;
@@ -432,11 +454,11 @@ macro_rules! define_HashmapE {
                 eq: bool,
                 signed_int: bool,
             ) -> Result<Option<(K, $x_type)>> {
-                let key = key.write_to_bitstring()?;
+                let key = key.write_to_bitstring_with_opts(self.1)?;
                 if let Some((k, mut v)) = self.0.find_leaf(key, next, eq, signed_int, &mut 0)? {
                     // BuilderData, SliceData
-                    let key = K::construct_from_cell(k.into_cell()?)?;
-                    let value = <$x_type>::construct_from(&mut v)?;
+                    let key = K::construct_from_cell_with_opts(k.into_cell()?, self.1)?;
+                    let value = <$x_type>::construct_from_with_opts(&mut v, self.1)?;
                     Ok(Some((key, value)))
                 } else {
                     Ok(None)
@@ -446,19 +468,33 @@ macro_rules! define_HashmapE {
 
         impl Default for $varname {
             fn default() -> Self {
-                $varname($crate::HashmapE::with_bit_len($bit_len))
+                $varname($crate::HashmapE::with_bit_len($bit_len), crate::SERDE_OPTS_EMPTY)
             }
         }
 
         impl Serializable for $varname {
             fn write_to(&self, cell: &mut BuilderData) -> Result<()>{
-                self.0.write_to(cell)
+                self.write_with_opts(cell, crate::SERDE_OPTS_EMPTY)
+            }
+            fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
+                if opts != self.1 {
+                    fail!(crate::error::BlockError::MismatchedSerdeOptions(
+                        std::any::type_name::<Self>().to_string(),
+                        self.1 as usize,
+                        opts as usize,
+                    ));
+                }
+                self.0.write_with_opts(cell, opts)
             }
         }
 
         impl Deserializable for $varname {
             fn read_from(&mut self, slice: &mut SliceData) -> Result<()>{
                 self.0.read_from(slice)
+            }
+            fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
+                self.1 = opts;
+                self.0.read_from_with_opts(slice, opts)
             }
         }
     }
