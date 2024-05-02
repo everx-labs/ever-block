@@ -17,7 +17,7 @@ use crate::{
     Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit, 
     BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY, CommonMessage, Transaction, BlockInfo, ValueFlow,
     MerkleUpdate, transactions::tests::generate_test_shard_account_block,
-    HashmapType, HashmapE,
+    HashmapType, HashmapE, InMsgFinal,
 };
 use std::collections::{HashMap, HashSet};
 use rand::Rng;
@@ -233,6 +233,7 @@ fn build_mc_block_extra(serde_opts: u8) -> McBlockExtra {
     extra.shards.add_workchain(22, 135, UInt256::default(), UInt256::default(), None).unwrap();
     extra.fees.store_shard_fees(&ident, CurrencyCollection::with_grams(1), CurrencyCollection::with_grams(1)).unwrap();
     extra.shards.split_shard(&ident, |_| Ok((shard2, shard2_2))).unwrap();
+    extra.write_recover_create_msg(Some(&InMsg::Final(InMsgFinal::default()))).unwrap();
     extra
 }
 
@@ -309,7 +310,8 @@ fn test_mc_block_extra_2() {
 fn test_mc_block_extra_3() {
     let mut extra = build_mc_block_extra(SERDE_OPTS_COMMON_MESSAGE);
     extra.mesh_descr_mut().set(&12345678, &build_mesh_descr()).unwrap();
-    write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    let extra2 = write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    extra2.read_recover_create_msg().unwrap();
 }
 
 #[test]

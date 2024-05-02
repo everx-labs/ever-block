@@ -391,11 +391,23 @@ impl<T: Serializable> Serializable for Option<T> {
 }
 
 impl<T: Deserializable> Deserializable for Option<T> {
-    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+    fn construct_from_with_opts(slice: &mut SliceData, opts: u8) -> Result<Self> {
         match slice.get_next_bit_int()? {
-            1 => Ok(Some(T::construct_from(slice)?)),
+            1 => Ok(Some(T::construct_from_with_opts(slice, opts)?)),
             _ => Ok(None)
         }
+    
+    }
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        Self::construct_from_with_opts(slice, SERDE_OPTS_EMPTY)
+    }
+    fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
+        *self = Self::construct_from_with_opts(slice, opts)?;
+        Ok(())
+    }
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        *self = Self::construct_from_with_opts(slice, SERDE_OPTS_EMPTY)?;
+        Ok(())
     }
 }
 
