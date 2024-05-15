@@ -21,7 +21,7 @@ use crate::{
     types::{ChildCell, ExtraCurrencyCollection, Grams, Number8, Number12, Number16, Number13, Number32},
     validators::{ValidatorDescr, ValidatorSet},
     Serializable, Deserializable,
-    BuilderData, Cell, error, fail,
+    BuilderData, Cell, error, fail, BlockIdExt,
     HashmapE, HashmapType, IBitstring, Result, SliceData, UInt256, HashmapIterator,
 };
 
@@ -343,6 +343,20 @@ impl ConfigParams {
         }
     }
     // TODO 39 validator signed temp keys
+    // ConfigParam58(MeshConfig),
+    pub fn mesh_config(&self) -> Result<Option<MeshConfig>> {
+        match self.config(58)? {
+            Some(ConfigParamEnum::ConfigParam58(mc)) => Ok(Some(mc)),
+            None => Ok(None),
+            _ =>  fail!("wrong config 58 (mesh config)")
+        }
+    }
+    pub fn mesh_config_for(&self, nw_id: i32) -> Result<ConnectedNwConfig> {
+        self.mesh_config()?
+            .ok_or_else(|| error!("no mesh config"))?
+            .get(&nw_id)?
+            .ok_or_else(|| error!("no mesh config for {}", nw_id))
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -390,6 +404,7 @@ pub enum GlobalCapabilities {
     CapUndeletableAccounts    = 0x0010_0000_0000, // Don't delete frozen accounts
     CapTvmV20                 = 0x0020_0000_0000, // BLS instructions
     CapDuePaymentFix          = 0x0040_0000_0000, // No due payments on credit phase and add payed dues to storage fee in TVM 
+    CapCommonMessage          = 0x0080_0000_0000,
 }
 
 impl ConfigParams {
@@ -562,6 +577,7 @@ pub enum ConfigParamEnum {
     ConfigParam40(ConfigParam40),
     ConfigParam42(ConfigCopyleft),
     ConfigParam44(SuspendedAddresses),
+    ConfigParam58(MeshConfig),
     ConfigParamAny(u32, SliceData),
 }
 
@@ -622,6 +638,7 @@ impl ConfigParamEnum {
             40 => { read_config!(ConfigParam40, ConfigParam40, slice) },
             42 => { read_config!(ConfigParam42, ConfigCopyleft, slice) },
             44 => { read_config!(ConfigParam44, SuspendedAddresses, slice) },
+            58 => { read_config!(ConfigParam58, MeshConfig, slice) },
             index => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
         }
     }
@@ -668,6 +685,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam40(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(40)},
             ConfigParamEnum::ConfigParam42(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(42)},
             ConfigParamEnum::ConfigParam44(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(44)},
+            ConfigParamEnum::ConfigParam58(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(58)},
             ConfigParamEnum::ConfigParamAny(index, slice) => { 
                 cell.checked_append_reference(slice.clone().into_cell())?; 
                 Ok(*index)
@@ -3222,6 +3240,104 @@ impl SuspendedAddresses {
     pub fn add_suspended_address(&mut self, wc: i32, addr: UInt256) -> Result<()> {
         let key = SuspendedAddressesKey::new(wc, addr);
         self.set(&key, &())
+    }
+}
+
+define_HashmapE!{MeshConfig, 32, ConnectedNwConfig}
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct ConnectedNwConfig {
+    // root cell
+    pub zerostate: BlockIdExt, // 1 + 4 + 8 + 4 + 32 + 32 = 81
+    pub is_active: bool,       //                            1
+    pub currency_id: u32,      //                            4
+                               //                           86
+    // cell1
+    pub init_block: BlockIdExt, //         81 
+    pub emergency_guard_addr: UInt256, //  32
+                                       // 113
+    
+    // cell2
+    pub pull_addr: UInt256, // The storage for native tokens of our network,
+                            // which are wrapped in the connected network.
+                            //  32
+    pub minter_addr: UInt256,// 32
+                             // 64
+    // cell3
+    pub hardforks: Vec<BlockIdExt>, // 81 + chain
+
+}
+
+const MESH_INFO_TAG: u8 = 0x01;
+
+impl Deserializable for ConnectedNwConfig {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_byte()?;
+        if tag != MESH_INFO_TAG {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: std::any::type_name::<Self>().to_string()
+                }
+            )
+        }
+        self.zerostate.read_from(slice)?;
+        self.is_active.read_from(slice)?;
+        self.currency_id.read_from(slice)?;
+
+        let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
+        self.init_block.read_from(&mut slice1)?;
+        self.emergency_guard_addr.read_from(&mut slice1)?;
+
+        let mut slice2 = SliceData::load_cell(slice.checked_drain_reference()?)?;
+        self.pull_addr.read_from(&mut slice2)?;
+        self.minter_addr.read_from(&mut slice2)?;
+
+        if slice.get_next_bit()? {
+            let mut slice = slice.clone();
+            while let Ok(ref_cell) = slice.checked_drain_reference() {
+                let mut ref_slice = SliceData::load_cell(ref_cell)?;
+                self.hardforks.push(BlockIdExt::construct_from(&mut ref_slice)?);
+                slice = ref_slice;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Serializable for ConnectedNwConfig {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_u8(MESH_INFO_TAG)?;
+        self.zerostate.write_to(builder)?;
+        self.is_active.write_to(builder)?;
+        self.currency_id.write_to(builder)?;
+
+        let mut builder1 = BuilderData::new();
+        self.init_block.write_to(&mut builder1)?;
+        self.emergency_guard_addr.write_to(&mut builder1)?;
+        builder.checked_append_reference(builder1.into_cell()?)?;
+
+        let mut builder2 = BuilderData::new();
+        self.pull_addr.write_to(&mut builder2)?;
+        self.minter_addr.write_to(&mut builder2)?;
+        builder.checked_append_reference(builder2.into_cell()?)?;
+
+        let mut prev_builder: Option<BuilderData> = None;
+        for hardfork in self.hardforks.iter().rev() {
+            let mut builder = BuilderData::new();
+            hardfork.write_to(&mut builder)?;
+            if let Some(prev_builder) = prev_builder {
+                builder.checked_append_reference(prev_builder.into_cell()?)?;
+            }
+            prev_builder = Some(builder);
+        }
+        if let Some(prev_builder) = prev_builder {
+            builder.append_bit_one()?;
+            builder.checked_append_reference(prev_builder.into_cell()?)?;
+        } else {
+            builder.append_bit_zero()?;
+        }
+        Ok(())
     }
 }
 

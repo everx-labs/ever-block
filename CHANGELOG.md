@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.10.3
+
+- New CommonMessage structure as a container of old `Message` and new types of messages.
+- New serialization option for ser/de operations with other structs.
+
 ## Version 1.10.2
 
 - Enhanced HashMap interface

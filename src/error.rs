@@ -54,4 +54,10 @@ pub enum BlockError {
     WrongMerkleUpdate(String),
     #[fail(display = "Bad signature")]
     BadSignature,
+    #[fail(display = "Unexpected struct variant: exp={} real={}", 0, 1)]
+    UnexpectedStructVariant(String, String),
+    #[fail(display = "Unsupported serde opts: {} {:x}", 0, 1)]
+    UnsupportedSerdeOptions(String, usize),
+    #[fail(display = "Mismatched serde options: {} exp={} real={}", 0, 1, 2)]
+    MismatchedSerdeOptions(String, usize, usize),
 }

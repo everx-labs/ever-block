@@ -19,7 +19,7 @@ use crate::{
     Serializable, Deserializable,
     config_params::CatchainConfig,
     shard::{SHARD_FULL, MASTERCHAIN_ID},
-    error, fail, BuilderData, ByteOrderRead, Cell, Crc32, 
+    fail, BuilderData, ByteOrderRead, Cell, Crc32, 
     IBitstring, Result, sha512_digest, SliceData, UInt256, 
     bls::BLS_PUBLIC_KEY_LEN 
 };
@@ -162,6 +162,7 @@ pub struct ValidatorDescr {
     pub prev_weight_sum: u64,
 }
 
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for ValidatorDescr {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.public_key.as_slice().hash(state);

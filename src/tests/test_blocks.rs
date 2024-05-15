@@ -18,10 +18,11 @@ use std::str::FromStr;
 use crate::{
     HashmapAugType, HashmapE,
     AccountBlock, Message, TickTock, write_read_and_assert,
-    bintree::BinTreeType, 
-    types::{AddSub, Grams},
+    bintree::BinTreeType, CommonMessage, Transaction,
+    types::{AddSub, Grams}, OutMsg, UsageTree,
     AccountId, Cell, read_boc,
-    read_single_root_boc
+    read_single_root_boc, MsgEnvelope,
+    transactions::tests::{generate_test_shard_account_block, create_test_transaction_set},
 };
 use super::*;
 
@@ -40,7 +41,7 @@ fn test_serialize_tick_tock(){
 
 fn test_blockinfo(block_info: BlockInfo) {
     let mut block_extra = BlockExtra::new();
-    block_extra.write_account_blocks(&crate::generate_test_shard_account_block()).unwrap();
+    block_extra.write_account_blocks(&generate_test_shard_account_block(SERDE_OPTS_EMPTY)).unwrap();
 
     let mut collection = CurrencyCollection::with_grams(3);
     collection.set_other(1005004, 2_000_003).unwrap();
@@ -55,7 +56,8 @@ fn test_blockinfo(block_info: BlockInfo) {
         recovered: CurrencyCollection::default(),
         created: CurrencyCollection::default(),
         minted: CurrencyCollection::default(),
-        copyleft_rewards: CopyleftRewards::default(),
+        copyleft_rewards: CopyleftRewards::new(),
+        mesh_exported: MeshExported::new(),
     };
 
     let state_update = MerkleUpdate::default();
@@ -264,6 +266,7 @@ fn test_value_flow() {
         created: created.clone(),
         minted: minted.clone(),
         copyleft_rewards,
+        mesh_exported: MeshExported::new(),
     };
 
     write_read_and_assert(value_flow);
@@ -279,6 +282,7 @@ fn test_value_flow() {
         created,
         minted,
         copyleft_rewards: CopyleftRewards::default(),
+        mesh_exported: MeshExported::new(),
     };
 
     write_read_and_assert(value_flow_without_copyleft);
@@ -694,4 +698,179 @@ fn block_info_serde(){
     }
     assert_eq!(block_info, deserialized);
 
+}
+
+fn create_test_block(opts: u8) -> Block {
+    let mut outmsg_descr = OutMsgDescr::with_serde_opts(opts);
+    let trans_data = create_test_transaction_set();
+    let (enveloped, mut tr) = if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+        ( 
+            MsgEnvelope::with_common_msg_support(
+                &CommonMessage::Std(Message::default()),
+                1.into(),
+            ).unwrap(),
+            Transaction::with_common_msg_support(trans_data.account_id),
+        )
+    } else {
+        (
+            MsgEnvelope::with_message_and_fee(
+                &Message::default(),
+                1.into(),
+            ).unwrap(),
+            Transaction::with_address_and_status(
+                trans_data.account_id, 
+                trans_data.orig_status.clone()
+            ),
+        )
+    };
+    for ref msg in trans_data.out_msgs {
+        tr.add_out_message(msg).unwrap();
+    }
+    tr.write_in_msg(Some(&trans_data.in_msg)).unwrap();
+    tr.set_logical_time(trans_data.lt);
+    tr.orig_status = trans_data.orig_status;
+    let out_msg = OutMsg::new(
+        ChildCell::with_struct_and_opts(
+                &enveloped,
+                opts,
+            ).unwrap(),
+        ChildCell::with_struct_and_opts(
+            &tr,
+            opts,
+        ).unwrap()
+    );
+    outmsg_descr.insert(&out_msg).unwrap();
+    let mut block_extra = if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+        BlockExtra::with_common_msg_support() 
+    } else {
+        BlockExtra::new()
+    };
+    block_extra.write_account_blocks(&generate_test_shard_account_block(opts)).unwrap();
+    block_extra.write_out_msg_descr(&outmsg_descr).unwrap();
+    
+    let block_info = BlockInfo::new();
+    let value_flow = ValueFlow::default();
+    let state_update = MerkleUpdate::default();
+    let updates = Some(OutQueueUpdates::new());
+
+    if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+        Block::with_common_msg_support(
+            1,
+            &block_info,
+            &value_flow,
+            &state_update,
+            updates,
+            &block_extra,
+        ).unwrap()
+    } else {
+        Block::with_out_queue_updates(
+            1,
+            block_info,
+            value_flow,
+            state_update,
+            updates,
+            block_extra,
+        ).unwrap()
+    }
+}
+
+#[test]
+fn test_serde_block_options_empty() {
+    let mut block = create_test_block(SERDE_OPTS_EMPTY);
+    block.out_msg_queue_updates = None;
+    let cell = block.serialize().unwrap();
+    let block2 = Block::construct_from_cell(cell.clone()).unwrap();
+    let block3 = Block::construct_from_cell_with_opts(cell.clone(), SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    assert_eq!(block, block2);
+    assert_eq!(block2, block3);
+    assert!(matches!(block3.serialize_with_opts(SERDE_OPTS_COMMON_MESSAGE), Err(_)));
+}
+
+#[test]
+fn test_serde_block_options_commonmsg() {
+    let block = create_test_block(SERDE_OPTS_COMMON_MESSAGE);
+    let cell = block.serialize_with_opts(SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    assert!(matches!(block.serialize(), Err(_)));
+    let block1 = Block::construct_from_cell_with_opts(cell.clone(), SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    let block2 = Block::construct_from_cell(cell.clone()).unwrap();
+    assert_eq!(block1, block2);
+}
+
+#[test]
+fn test_block_with_common_message() -> Result<()> {
+    let block = create_test_block(SERDE_OPTS_COMMON_MESSAGE);
+
+    let err = block.serialize().unwrap_err();
+    assert!(matches!(err.downcast_ref().unwrap(), &BlockError::MismatchedSerdeOptions(_, _, _)));
+
+    let err = block.serialize_with_opts(SERDE_OPTS_EMPTY).unwrap_err();
+    assert!(matches!(err.downcast_ref().unwrap(), &BlockError::MismatchedSerdeOptions(_, _, _)));
+
+    let cell = block.serialize_with_opts(SERDE_OPTS_COMMON_MESSAGE)?;
+
+    let block2 = Block::construct_from_cell_with_opts(cell.clone(), SERDE_OPTS_COMMON_MESSAGE)?;
+    let extra = block2.read_extra()?;
+    let msg_descr = extra.read_out_msg_descr()?;
+    assert_eq!(msg_descr.serde_opts(), SERDE_OPTS_COMMON_MESSAGE);
+
+    let mut msg = None;
+    let _ = msg_descr.iterate_objects(|x| {
+        let enveloped = x.read_out_message()?.unwrap();
+        msg = Some(enveloped.read_common_message()?);
+        Ok(true)
+    }).unwrap();
+    let msg = msg.unwrap();
+    assert_eq!(msg.get_std().unwrap(), &Message::default());
+
+    let block3 = Block::construct_from_cell(cell)?;
+    assert_eq!(block2, block3);
+    Ok(())
+}
+
+#[test]
+fn test_block_queue_updates_serde() {
+    let mut block = create_test_block(SERDE_OPTS_COMMON_MESSAGE);
+    block.out_msg_queue_updates = None;
+    let cell = block.serialize_with_opts(SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    let block2 = Block::construct_from_cell_with_opts(cell, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    assert_eq!(block2.out_msg_queue_updates, None);
+}
+
+
+fn create_block_proof() -> MerkleProof {
+    let block_root = read_single_root_boc(std::fs::read("src/tests/data/key_block.boc").unwrap()).unwrap();
+    let usage_tree = UsageTree::with_root(block_root.clone());
+    let block = Block::construct_from_cell(usage_tree.root_cell()).unwrap();
+    block.read_info().unwrap();
+    block.read_state_update().unwrap();
+    MerkleProof::create_by_usage_tree(&block_root, usage_tree).unwrap()
+}
+
+#[test]
+fn test_mesh_kit_serde() {
+    let mut mesh_kit = MeshKit::default();
+    mesh_kit.mc_block_part = create_block_proof();
+    mesh_kit.queues = MeshMsgQueuesKit::default();
+    mesh_kit.queues.add_queue(&ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), OutMsgQueueInfo::default()).unwrap();
+    mesh_kit.queues.add_queue(&ShardIdent::with_tagged_prefix(0, 0xc000_0000_0000_0000_u64).unwrap(), OutMsgQueueInfo::default()).unwrap();
+
+    let cell = mesh_kit.serialize().unwrap();
+    let mesh_kit2 = MeshKit::construct_from_cell(cell).unwrap();
+    assert_eq!(mesh_kit, mesh_kit2);
+}
+
+#[test]
+fn test_mesh_update_serde() {
+    let mut mesh_update = MeshUpdate::default();
+    mesh_update.mc_block_part = create_block_proof();
+    mesh_update.queue_updates = MeshMsgQueueUpdates::default();
+    mesh_update.queue_updates.add_queue_update(&ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), MerkleUpdate::default()).unwrap();
+    mesh_update.queue_updates.add_queue_update(&ShardIdent::with_tagged_prefix(0, 0xc000_0000_0000_0000_u64).unwrap(), MerkleUpdate::default()).unwrap();
+
+    mesh_update.queue_updates.get_queue_update(&ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap()).unwrap().unwrap();
+    mesh_update.queue_updates.get_queue_update(&ShardIdent::with_tagged_prefix(0, 0xc000_0000_0000_0000_u64).unwrap()).unwrap().unwrap();
+
+    let cell = mesh_update.serialize().unwrap();
+    let mesh_update2 = MeshUpdate::construct_from_cell(cell).unwrap();
+    assert_eq!(mesh_update, mesh_update2);
 }

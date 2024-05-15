@@ -18,23 +18,22 @@ use crate::{
     inbound_messages::InMsgDescr,
     master::{BlkMasterInfo, McBlockExtra},
     merkle_update::MerkleUpdate,
+    merkle_proof::MerkleProof,
     outbound_messages::OutMsgDescr,
+    OutMsgQueueInfo,
     shard::ShardIdent,
     signature::BlockSignatures,
     transactions::ShardAccountBlocks,
     types::{ChildCell, CurrencyCollection, Grams, InRefValue, UnixTime32, AddSub},
-    validators::ValidatorSet,
+    validators::ValidatorSet, VarUInteger32,
     Deserializable, Serializable,
     error, fail, AccountId, BuilderData, Cell, ExceptionCode, IBitstring,
-    Result, SliceData, UInt256,
+    RefShardBlocks, Result, SliceData, UInt256,
+    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY
 };
-use crate::RefShardBlocks;
-use std::borrow::Cow;
 use std::{
-    cmp::Ordering,
-    fmt::{self, Display, Formatter},
-    io::{Cursor, Write},
-    str::FromStr,
+    borrow::Cow, cmp::Ordering, fmt::{self, Display, Formatter}, io::{Cursor, Write},
+    str::FromStr
 };
 
 #[cfg(test)]
@@ -649,6 +648,112 @@ impl Serializable for OutQueueUpdate {
     }
 }
 
+// key is wc + shard
+define_HashmapE!(MeshMsgQueuesKit, 96, OutMsgQueueInfo);
+
+impl MeshMsgQueuesKit {
+    pub fn get_queue(&self, shard: &ShardIdent) -> Result<Option<OutMsgQueueInfo>> {
+        self.get_raw(shard.full_key_with_tag()?)?
+            .map(|mut s| OutMsgQueueInfo::construct_from(&mut s))
+            .transpose()
+    }
+    pub fn add_queue(&mut self, shard: &ShardIdent, queue: OutMsgQueueInfo) -> Result<()> {
+        self.0.set_builder(
+            shard.full_key_with_tag()?,
+            &queue.write_to_new_cell()?
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct MeshKit {
+    pub mc_block_part: MerkleProof,
+    // Contains full OutMsgQueueInfo from masterchain and all shardes to some connected network.
+    pub queues: MeshMsgQueuesKit,
+    pub signatures: BlockSignatures,
+}
+
+const MESH_KIT_TAG: u32 = 0x3FF11737;
+
+impl Deserializable for MeshKit {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let tag = slice.get_next_u32()?;
+        if tag != MESH_KIT_TAG {
+            fail!(BlockError::InvalidConstructorTag {
+                t: tag,
+                s: std::any::type_name::<Self>().to_string()
+            })
+        }
+        let mc_block_part = MerkleProof::construct_from_cell(slice.checked_drain_reference()?)?;
+        let queue_updates = MeshMsgQueuesKit::construct_from(slice)?;
+        let signatures = BlockSignatures::construct_from(slice)?;
+        Ok(MeshKit {mc_block_part, queues: queue_updates, signatures})
+    }
+}
+
+impl Serializable for MeshKit {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_u32(MESH_KIT_TAG)?;
+        builder.checked_append_reference(self.mc_block_part.serialize()?)?;
+        self.queues.write_to(builder)?;
+        self.signatures.write_to(builder)?;
+        Ok(())
+    }
+}
+
+define_HashmapE!(MeshMsgQueueUpdates, 96, InRefValue<MerkleUpdate>); // key - wc + shard
+
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct MeshUpdate {
+    pub mc_block_part: MerkleProof,
+    pub queue_updates: MeshMsgQueueUpdates,
+    pub signatures: BlockSignatures,
+}
+
+impl MeshMsgQueueUpdates {
+    pub fn get_queue_update(&self, shard: &ShardIdent) -> Result<Option<MerkleUpdate>> {
+        self.0.get(shard.full_key()?)?
+            .map(|mut s| InRefValue::<MerkleUpdate>::construct_from(&mut s).map(|r| r.inner()))
+            .transpose()
+    }
+    pub fn add_queue_update(&mut self, shard: &ShardIdent, update: MerkleUpdate) -> Result<()> {
+        self.0.set_builder(
+            shard.full_key()?,
+            &InRefValue::new(update).write_to_new_cell()?
+        )?;
+        Ok(())
+    }
+}
+
+const MESH_UPDATE_TAG: u32 = 0x2AF72591;
+
+impl Deserializable for MeshUpdate {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let tag = slice.get_next_u32()?;
+        if tag != MESH_UPDATE_TAG {
+            fail!(BlockError::InvalidConstructorTag {
+                t: tag,
+                s: std::any::type_name::<Self>().to_string()
+            })
+        }
+        let mc_block_part = MerkleProof::construct_from_cell(slice.checked_drain_reference()?)?;
+        let queue_updates = MeshMsgQueueUpdates::construct_from(slice)?;
+        let signatures = BlockSignatures::construct_from(slice)?;
+        Ok(MeshUpdate {mc_block_part, queue_updates, signatures})
+    }
+}
+
+impl Serializable for MeshUpdate {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_u32(MESH_UPDATE_TAG)?;
+        builder.checked_append_reference(self.mc_block_part.serialize()?)?;
+        self.queue_updates.write_to(builder)?;
+        self.signatures.write_to(builder)?;
+        Ok(())
+    }
+}
+
 pub type BlockId = UInt256;
 
 /*
@@ -716,6 +821,25 @@ impl Block {
             value_flow: ChildCell::with_struct(&value_flow)?,
             extra: ChildCell::with_struct(&extra)?,
             state_update: ChildCell::with_struct(&state_update)?,
+            out_msg_queue_updates,
+        })
+    }
+
+    pub fn with_common_msg_support(
+        global_id: i32,
+        info: &BlockInfo,
+        value_flow: &ValueFlow,
+        state_update: &MerkleUpdate,
+        out_msg_queue_updates: Option<OutQueueUpdates>,
+        extra: &BlockExtra,
+    ) -> Result<Self> {
+        let opts = SERDE_OPTS_COMMON_MESSAGE;
+        Ok(Block {
+            global_id,
+            info: ChildCell::with_struct_and_opts(info, opts)?,
+            value_flow: ChildCell::with_struct_and_opts(value_flow, opts)?,
+            extra: ChildCell::with_struct_and_opts(extra, opts)?,
+            state_update: ChildCell::with_struct_and_opts(state_update, opts)?,
             out_msg_queue_updates,
         })
     }
@@ -840,6 +964,19 @@ pub struct BlockExtra {
 impl BlockExtra {
     pub fn new() -> Self { Self::default() }
 
+    pub fn with_common_msg_support() -> BlockExtra {
+        let opts = SERDE_OPTS_COMMON_MESSAGE;
+        BlockExtra {
+            in_msg_descr: ChildCell::with_serde_opts(opts),
+            out_msg_descr: ChildCell::with_serde_opts(opts),
+            account_blocks: ChildCell::with_serde_opts(opts),
+            rand_seed: UInt256::rand(),
+            created_by: UInt256::default(), // TODO: Need to fill?
+            custom: None,
+            ref_shard_blocks: RefShardBlocks::default(),
+        }
+    }
+
     pub fn read_in_msg_descr(&self) -> Result<InMsgDescr> {
         self.in_msg_descr.read_struct()
     }
@@ -897,7 +1034,7 @@ impl BlockExtra {
     }
 
     pub fn write_custom(&mut self, value: Option<&McBlockExtra>) -> Result<()> {
-        self.custom = value.map(ChildCell::with_struct).transpose()?;
+        self.custom = value.map(|s| ChildCell::with_struct_and_opts(s, s.serde_opts())).transpose()?;
         Ok(())
     }
 
@@ -920,36 +1057,65 @@ impl BlockExtra {
 
 const BLOCK_EXTRA_TAG: u32 = 0x4a33f6fd;
 const BLOCK_EXTRA_TAG_2: u32 = 0x4a33f6fc;
+const BLOCK_EXTRA_TAG_3: u32 = 0xca33f6fc;
 
 impl Deserializable for BlockExtra {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
         let tag = cell.get_next_u32()?;
-        if tag != BLOCK_EXTRA_TAG && tag != BLOCK_EXTRA_TAG_2 {
+        if tag != BLOCK_EXTRA_TAG && tag != BLOCK_EXTRA_TAG_2 && tag != BLOCK_EXTRA_TAG_3 {
             fail!(BlockError::InvalidConstructorTag {
                     t: tag,
                     s: "BlockExtra".to_string()
                 })
         }
-        self.in_msg_descr.read_from(cell)?;
-        self.out_msg_descr.read_from(cell)?;
-        self.account_blocks.read_from(cell)?;
+        let opts = match tag {
+            BLOCK_EXTRA_TAG_3 => SERDE_OPTS_COMMON_MESSAGE,
+            _ => SERDE_OPTS_EMPTY,
+        };
+        self.in_msg_descr.read_from_with_opts(cell, opts)?;
+        self.out_msg_descr.read_from_with_opts(cell, opts)?;
+        self.account_blocks.read_from_with_opts(cell, opts)?;
         self.rand_seed.read_from(cell)?;
         self.created_by.read_from(cell)?;
         
-        if tag == BLOCK_EXTRA_TAG {
-            self.custom.read_from(cell)?;
-            self.ref_shard_blocks = RefShardBlocks::default();
-        }
-        if tag == BLOCK_EXTRA_TAG_2 {
-            let mut child = SliceData::load_cell(cell.checked_drain_reference()?)?;
-            self.custom.read_from(&mut child)?;
-            self.ref_shard_blocks.read_from(&mut child)?;
-        }
-
+        match tag {
+            BLOCK_EXTRA_TAG => {
+                self.custom.read_from(cell)?;
+                self.ref_shard_blocks = RefShardBlocks::default();
+            },
+            BLOCK_EXTRA_TAG_2 | BLOCK_EXTRA_TAG_3 => {
+                let mut child = SliceData::load_cell(cell.checked_drain_reference()?)?;
+                self.custom.read_from(&mut child)?;
+                self.ref_shard_blocks.read_from(&mut child)?;
+            },
+            _ => unreachable!(),
+        };
         Ok(())
     }
 }
 
+fn serialize_blockextra(
+    extra: &BlockExtra,
+    cell: &mut BuilderData,
+    tag: u32,
+) -> Result<()> {
+    cell.append_u32(tag)?;
+    cell.checked_append_reference(extra.in_msg_descr.cell())?;
+    cell.checked_append_reference(extra.out_msg_descr.cell())?;
+    cell.checked_append_reference(extra.account_blocks.cell())?;
+    extra.rand_seed.write_to(cell)?;
+    extra.created_by.write_to(cell)?;
+
+    if tag == BLOCK_EXTRA_TAG {
+        extra.custom.write_to(cell)?;
+    } else {
+        let mut child = BuilderData::new();
+        extra.custom.write_to(&mut child)?;
+        extra.ref_shard_blocks.write_to(&mut child)?;
+        cell.checked_append_reference(child.into_cell()?)?;
+    }
+    Ok(())
+}
 impl Serializable for BlockExtra {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let tag = if self.ref_shard_blocks.is_empty() {
@@ -957,21 +1123,21 @@ impl Serializable for BlockExtra {
         } else {
             BLOCK_EXTRA_TAG_2
         };
-        cell.append_u32(tag)?;
-        self.in_msg_descr.write_to(cell)?;
-        self.out_msg_descr.write_to(cell)?;
-        self.account_blocks.write_to(cell)?;
-        self.rand_seed.write_to(cell)?;
-        self.created_by.write_to(cell)?;
+        serialize_blockextra(self, cell, tag)
+    }
 
-        if tag == BLOCK_EXTRA_TAG {
-            self.custom.write_to(cell)?;
-        } else {
-            let mut child = self.custom.write_to_new_cell()?;
-            self.ref_shard_blocks.write_to(&mut child)?;
-            child.into_cell()?.write_to(cell)?;
+    fn write_with_opts(&self, cell:&mut BuilderData, opts: u8) -> Result<()> {
+        if opts == SERDE_OPTS_EMPTY {
+            return self.write_to(cell);
         }
-        Ok(())
+        if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+            serialize_blockextra(self, cell, BLOCK_EXTRA_TAG_3)
+        } else {
+            fail!(BlockError::UnsupportedSerdeOptions(
+                std::any::type_name::<Self>().to_string(),
+                opts as usize
+            ))
+        }
     }
 }
 
@@ -1029,6 +1195,8 @@ impl CopyleftRewards {
     }
 }
 
+define_HashmapE!(MeshExported, 32, VarUInteger32);
+
 /// value_flow ^[ from_prev_blk:CurrencyCollection
 ///   to_next_blk:CurrencyCollection
 ///   imported:CurrencyCollection
@@ -1057,6 +1225,7 @@ pub struct ValueFlow {
     pub created: CurrencyCollection,       // serialized into another cell 2
     pub minted: CurrencyCollection,        // serialized into another cell 2
     pub copyleft_rewards: CopyleftRewards,
+    pub mesh_exported: MeshExported,
 }
 
 impl fmt::Display for ValueFlow {
@@ -1080,7 +1249,12 @@ impl fmt::Display for ValueFlow {
             self.recovered,
             self.created,
             self.minted
-        )
+        )?;
+        let _ = self.mesh_exported.iterate_with_keys(|key: u32, value| {
+            write!(f, ", mesh_exported {}: {}", key, value)?;
+            Ok(true)
+        });
+        Ok(())
     }
 }
 
@@ -1096,6 +1270,7 @@ impl ValueFlow {
         self.created.other.iterate(|_value| Ok(true))?;
         self.minted.other.iterate(|_value| Ok(true))?;
         self.copyleft_rewards.iterate(|_value| Ok(true))?;
+        self.mesh_exported.iterate(|_value| Ok(true))?;
         Ok(())
     }
 }
@@ -1149,6 +1324,7 @@ impl Serializable for ExtBlkRef {
 
 const BLOCK_TAG_1: u32 = 0x11ef55aa;
 const BLOCK_TAG_2: u32 = 0x11ef55bb;
+const BLOCK_TAG_3: u32 = 0x31ef55bb;
 
 const BLOCK_INFO_TAG_1: u32 = 0x9bc7a987;
 const BLOCK_INFO_TAG_2: u32 = 0x9bc7a988;
@@ -1239,31 +1415,38 @@ const VALUE_FLOW_TAG: u32 = 0xb8e48dfb;
 const VALUE_FLOW_TAG_V2: u32 = 0xe0864f6d;
 
 impl Serializable for ValueFlow {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        let tag = if self.copyleft_rewards.is_empty() {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        let tag = if self.copyleft_rewards.is_empty() && self.mesh_exported.is_empty() {
             VALUE_FLOW_TAG
         } else {
             VALUE_FLOW_TAG_V2
         };
-        cell.append_u32(tag)?;
+        builder.append_u32(tag)?;
 
-        let mut cell1 = BuilderData::new();
-        self.from_prev_blk.write_to(&mut cell1)?;
-        self.to_next_blk.write_to(&mut cell1)?;
-        self.imported.write_to(&mut cell1)?;
-        self.exported.write_to(&mut cell1)?;
-        cell.checked_append_reference(cell1.into_cell()?)?;
-        self.fees_collected.write_to(cell)?;
+        let mut builder1 = BuilderData::new();
+        self.from_prev_blk.write_to(&mut builder1)?;
+        self.to_next_blk.write_to(&mut builder1)?;
+        self.imported.write_to(&mut builder1)?;
+        self.exported.write_to(&mut builder1)?;
+        builder.checked_append_reference(builder1.into_cell()?)?;
 
-        let mut cell2 = BuilderData::new();
-        self.fees_imported.write_to(&mut cell2)?;
-        self.recovered.write_to(&mut cell2)?;
-        self.created.write_to(&mut cell2)?;
-        self.minted.write_to(&mut cell2)?;
-        cell.checked_append_reference(cell2.into_cell()?)?;
+        if tag == VALUE_FLOW_TAG {
+            self.fees_collected.write_to(builder)?;
+        }
 
-        if !self.copyleft_rewards.is_empty() {
-            self.copyleft_rewards.write_to(cell)?;
+        let mut builder2 = BuilderData::new();
+        self.fees_imported.write_to(&mut builder2)?;
+        self.recovered.write_to(&mut builder2)?;
+        self.created.write_to(&mut builder2)?;
+        self.minted.write_to(&mut builder2)?;
+        builder.checked_append_reference(builder2.into_cell()?)?;
+
+        if tag == VALUE_FLOW_TAG_V2 {
+            let mut builder3 = BuilderData::new();
+            self.fees_collected.write_to(&mut builder3)?;
+            self.copyleft_rewards.write_to(&mut builder3)?;
+            self.mesh_exported.write_to(&mut builder3)?;
+            builder.checked_append_reference(builder3.into_cell()?)?;
         }
 
         Ok(())
@@ -1271,8 +1454,8 @@ impl Serializable for ValueFlow {
 }
 
 impl Deserializable for ValueFlow {
-    fn read_from(&mut self, cell: &mut SliceData) -> Result<()> {
-        let tag = cell.get_next_u32()?;
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_u32()?;
         if tag != VALUE_FLOW_TAG && tag != VALUE_FLOW_TAG_V2 {
             fail!(
                 BlockError::InvalidConstructorTag {
@@ -1281,21 +1464,27 @@ impl Deserializable for ValueFlow {
                 }
             )
         }
-        let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
-        self.from_prev_blk.read_from(cell1)?;
-        self.to_next_blk.read_from(cell1)?;
-        self.imported.read_from(cell1)?;
-        self.exported.read_from(cell1)?;
-        self.fees_collected.read_from(cell)?;
+        let slice1 = &mut SliceData::load_cell(slice.checked_drain_reference()?)?;
+        self.from_prev_blk.read_from(slice1)?;
+        self.to_next_blk.read_from(slice1)?;
+        self.imported.read_from(slice1)?;
+        self.exported.read_from(slice1)?;
 
-        let cell2 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
-        self.fees_imported.read_from(cell2)?;
-        self.recovered.read_from(cell2)?;
-        self.created.read_from(cell2)?;
-        self.minted.read_from(cell2)?;
+        if tag == VALUE_FLOW_TAG {
+            self.fees_collected.read_from(slice)?;
+        }
+
+        let slice2 = &mut SliceData::load_cell(slice.checked_drain_reference()?)?;
+        self.fees_imported.read_from(slice2)?;
+        self.recovered.read_from(slice2)?;
+        self.created.read_from(slice2)?;
+        self.minted.read_from(slice2)?;
 
         if tag == VALUE_FLOW_TAG_V2 {
-            self.copyleft_rewards.read_from(cell)?;
+            let slice3 = &mut SliceData::load_cell(slice.checked_drain_reference()?)?;
+            self.fees_collected.read_from(slice3)?;
+            self.copyleft_rewards.read_from(slice3)?;
+            self.mesh_exported.read_from(slice3)?;
         }
 
         Ok(())
@@ -1312,7 +1501,7 @@ impl Deserializable for BlockInfo {
 impl Deserializable for Block {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_u32()?;
-        if tag != BLOCK_TAG_1 && tag != BLOCK_TAG_2 {
+        if tag != BLOCK_TAG_1 && tag != BLOCK_TAG_2 && tag != BLOCK_TAG_3 {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
@@ -1320,44 +1509,86 @@ impl Deserializable for Block {
                 }
             )
         }
+        let opts = match tag {
+            BLOCK_TAG_3 => SERDE_OPTS_COMMON_MESSAGE,
+            _ => SERDE_OPTS_EMPTY,
+        };
         self.global_id.read_from(slice)?;
-        self.info.read_from(slice)?;
-        self.value_flow.read_from(slice)?;
-        if tag == BLOCK_TAG_1 {
-            self.state_update.read_from(slice)?;
-            self.out_msg_queue_updates = None;
-        } else {
-            let mut slice = SliceData::load_cell(slice.checked_drain_reference()?)?;
-            self.state_update.read_from(&mut slice)?;
-            self.out_msg_queue_updates = Some(OutQueueUpdates::construct_from(&mut slice)?);
-        }
-        self.extra.read_from(slice)?;
+        self.info.read_from_with_opts(slice, opts)?;
+        self.value_flow.read_from_with_opts(slice, opts)?;
+        match tag {
+            BLOCK_TAG_1 => {
+                self.state_update.read_from_with_opts(slice, opts)?;
+                self.out_msg_queue_updates = None;
+            },
+            BLOCK_TAG_2 | BLOCK_TAG_3 => {
+                let mut slice = SliceData::load_cell(slice.checked_drain_reference()?)?;
+                self.state_update.read_from_with_opts(&mut slice, opts)?;
+                let updates = OutQueueUpdates::construct_from_with_opts(&mut slice, opts)?;
+                if updates.is_empty() {
+                    self.out_msg_queue_updates = None;
+                } else {
+                    self.out_msg_queue_updates = Some(updates);
+                }
+            },
+            _ => unreachable!(),
+        };
+        self.extra.read_from_with_opts(slice, opts)?;
         Ok(())
     }
 }
 
+fn serialize_block(
+    block: &Block,
+    builder: &mut BuilderData,
+    tag: u32,
+    opts: u8,
+) -> Result<()> {
+    if opts != block.extra.serde_opts() {
+        fail!(BlockError::MismatchedSerdeOptions(
+            std::any::type_name::<Block>().to_string(),
+            opts as usize,
+            block.extra.serde_opts() as usize
+        ))
+    }
+    builder.append_u32(tag)?;
+    builder.append_i32(block.global_id)?;
+    builder.checked_append_reference(block.info.cell())?; // info:^BlockInfo
+    builder.checked_append_reference(block.value_flow.cell())?; // value_flow:^ValueFlow
+    if tag == BLOCK_TAG_1 {
+        builder.checked_append_reference(block.state_update.cell())?; // state_update:^(MERKLE_UPDATE ShardState)
+    } else {
+        let mut builder2 = BuilderData::new();
+        builder2.checked_append_reference(block.state_update.cell())?;
+        if let Some(qu) = &block.out_msg_queue_updates {
+            qu.write_to(&mut builder2)?;
+        } else if tag == BLOCK_TAG_3 {
+            builder2.append_bit_zero()?;
+        }
+        builder.checked_append_reference(builder2.into_cell()?)?;
+    }
+    builder.checked_append_reference(block.extra.cell())?; // extra:^BlockExtra
+    Ok(())
+}
+
 impl Serializable for Block {
-    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let tag = match self.out_msg_queue_updates {
             None => BLOCK_TAG_1,
             Some(_) => BLOCK_TAG_2
         };
-        builder.append_u32(tag)?;
-        builder.append_i32(self.global_id)?;
-        self.info.write_to(builder)?; // info:^BlockInfo
-        self.value_flow.write_to(builder)?; // value_flow:^ValueFlow
-        if tag == BLOCK_TAG_1 {
-            self.state_update.write_to(builder)?; // state_update:^(MERKLE_UPDATE ShardState)
-        } else {
-            let mut builder2 = BuilderData::new();
-            self.state_update.write_to(&mut builder2)?;
-            if let Some(qu) = &self.out_msg_queue_updates {
-                qu.write_to(&mut builder2)?;
-            }
-            builder2.into_cell()?.write_to(builder)?;
+        serialize_block(self, cell, tag, SERDE_OPTS_EMPTY)
+    }
+
+    fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
+        if opts == SERDE_OPTS_EMPTY {
+            return self.write_to(cell);
         }
-        self.extra.cell().write_to(builder)?; // extra:^BlockExtra
-        Ok(())
+        if opts == SERDE_OPTS_COMMON_MESSAGE {
+            serialize_block(self, cell, BLOCK_TAG_3, opts)
+        } else {
+            fail!(BlockError::UnsupportedSerdeOptions(std::any::type_name::<Self>().to_string(), opts as usize))
+        }
     }
 }
 

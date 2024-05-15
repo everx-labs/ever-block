@@ -48,6 +48,9 @@ pub use self::accounts::*;
 pub mod messages;
 pub use self::messages::*;
 
+pub mod common_message;
+pub use self::common_message::*;
+
 pub mod inbound_messages;
 pub use self::inbound_messages::*;
 
@@ -219,6 +222,9 @@ impl Deserializable for HashmapE {
     }
 }
 
+pub const SERDE_OPTS_EMPTY: u8 = 0b0000_0000;
+pub const SERDE_OPTS_COMMON_MESSAGE: u8 = 0b0000_0001;
+
 pub trait Serializable {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()>;
 
@@ -232,6 +238,11 @@ pub trait Serializable {
         let mut cell = BuilderData::new();
         self.write_to(&mut cell)?;
         SliceData::load_bitstring(cell)
+    }
+
+    fn write_to_bitstring_with_opts(&self, opts: u8) -> Result<SliceData> {
+        let builder = self.write_to_new_cell_with_opts(opts)?;
+        SliceData::load_bitstring(builder)
     }
 
     fn write_to_bytes(&self) -> Result<Vec<u8>> {
@@ -250,12 +261,31 @@ pub trait Serializable {
     fn serialize(&self) -> Result<Cell> {
         self.write_to_new_cell()?.into_cell()
     }
+
+    fn write_with_opts(&self, cell: &mut BuilderData, _opts: u8) -> Result<()> {
+        Serializable::write_to(self, cell)
+    }
+
+    fn serialize_with_opts(&self, opts: u8) -> Result<Cell> {
+        self.write_to_new_cell_with_opts(opts)?.into_cell()
+    }
+
+    fn write_to_new_cell_with_opts(&self, opts: u8) -> Result<BuilderData> {
+        let mut cell = BuilderData::new();
+        self.write_with_opts(&mut cell, opts)?;
+        Ok(cell)
+    }
 }
 
 pub trait Deserializable: Default {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         let mut x = Self::default();
         x.read_from(slice)?;
+        Ok(x)
+    }
+    fn construct_from_with_opts(slice: &mut SliceData, opts: u8) -> Result<Self> {
+        let mut x = Self::default();
+        x.read_from_with_opts(slice, opts)?;
         Ok(x)
     }
     fn construct_maybe_from(slice: &mut SliceData) -> Result<Option<Self>> {
@@ -274,6 +304,9 @@ pub trait Deserializable: Default {
     }
     fn construct_from_cell(cell: Cell) -> Result<Self> {
         Self::construct_from(&mut SliceData::load_cell(cell)?)
+    }
+    fn construct_from_cell_with_opts(cell: Cell, opts: u8) -> Result<Self> {
+        Self::construct_from_with_opts(&mut SliceData::load_cell(cell)?, opts)
     }
     fn construct_from_reference(slice: &mut SliceData) -> Result<Self> {
         Self::construct_from_cell(slice.checked_drain_reference()?)
@@ -302,6 +335,9 @@ pub trait Deserializable: Default {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         *self = Self::construct_from(slice)?;
         Ok(())
+    }
+    fn read_from_with_opts(&mut self, slice: &mut SliceData, _opts: u8) -> Result<()> {
+        self.read_from(slice)
     }
     fn read_from_cell(&mut self, cell: Cell) -> Result<()> {
         self.read_from(&mut SliceData::load_cell(cell)?)
@@ -353,11 +389,23 @@ impl<T: Serializable> Serializable for Option<T> {
 }
 
 impl<T: Deserializable> Deserializable for Option<T> {
-    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+    fn construct_from_with_opts(slice: &mut SliceData, opts: u8) -> Result<Self> {
         match slice.get_next_bit_int()? {
-            1 => Ok(Some(T::construct_from(slice)?)),
+            1 => Ok(Some(T::construct_from_with_opts(slice, opts)?)),
             _ => Ok(None)
         }
+    
+    }
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        Self::construct_from_with_opts(slice, SERDE_OPTS_EMPTY)
+    }
+    fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
+        *self = Self::construct_from_with_opts(slice, opts)?;
+        Ok(())
+    }
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        *self = Self::construct_from_with_opts(slice, SERDE_OPTS_EMPTY)?;
+        Ok(())
     }
 }
 
@@ -423,12 +471,25 @@ impl Serializable for () {
 
 #[cfg(test)]
 pub fn write_read_and_assert<T>(s: T) -> T
-where T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq {
-    let cell = s.write_to_new_cell().unwrap();
-    let mut slice = SliceData::load_builder(cell).unwrap();
+where 
+    T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq,
+{
+    write_read_and_assert_with_opts(s, SERDE_OPTS_EMPTY).unwrap()
+}
+
+#[cfg(test)]
+pub fn write_read_and_assert_with_opts<T>(s: T, opts: u8) -> Result<T>
+where 
+    T: Serializable + Deserializable + Default + std::fmt::Debug + PartialEq,
+{
+    let cell = s.serialize_with_opts(opts)?;
+    let mut slice = SliceData::load_cell_ref(&cell)?;
     println!("slice: {}", slice);
-    let s2 = T::construct_from(&mut slice).unwrap();
-    s2.serialize().unwrap();
+    let s2: T = T::construct_from_with_opts(&mut slice, opts)?;
+    let cell2 = s2.serialize_with_opts(opts)?;
     pretty_assertions::assert_eq!(s, s2);
-    s2
+    if cell != cell2 {
+        panic!("write_read_and_assert_with_opts: cells are not equal\nleft: {:#.5}\nright: {:#.5}", cell, cell2)
+    }
+    Ok(s2)
 }

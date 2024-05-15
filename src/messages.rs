@@ -11,7 +11,7 @@
 * limitations under the License.
 */
 
-use crate::GetRepresentationHash;
+use crate::{GetRepresentationHash, SERDE_OPTS_EMPTY};
 use crate::{
     blocks::Block,
     define_HashmapE,
@@ -825,6 +825,7 @@ impl fmt::Display for CommonMsgInfo {
         }
     }
 }
+
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
@@ -1719,7 +1720,10 @@ impl StateInit {
     pub fn libraries(&self) -> StateInitLib { self.library.clone() }
 
     pub fn set_library(&mut self, val: Cell) {
-        self.library = StateInitLib::with_hashmap(Some(val));
+        self.library = StateInitLib::with_hashmap(
+            Some(val), 
+            SERDE_OPTS_EMPTY
+        );
     }
 
     pub fn set_library_code(&mut self, code: Cell, public: bool) -> Result<()> {

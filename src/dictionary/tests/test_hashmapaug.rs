@@ -15,7 +15,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::vec_init_then_push)]
 use super::*;
-use crate::{define_HashmapAugE, IBitstring, hm_label, HashmapSubtree, AddSub, Grams};
+use crate::{error, define_HashmapAugE, IBitstring, hm_label, HashmapSubtree, AddSub, Grams};
 use std::fmt;
 
 #[derive(Eq, Clone, Debug, Default, PartialEq)]
