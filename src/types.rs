@@ -20,6 +20,7 @@ use crate::{
     HashmapE, HashmapType, Cell, CellType, BuilderData, SliceData,
     IBitstring,
     Serializable, Deserializable,
+    SERDE_OPTS_EMPTY
 };
 
 use num::{BigInt, bigint::Sign, FromPrimitive, One, Zero};
@@ -58,7 +59,7 @@ macro_rules! fail {
     //     panic!("{}", error!(ExceptionCode::CellUnderflow))
     // };
     ($error:expr) => {
-        return Err(error!($error))
+        return Err($crate::error!($error))
     };
     ($fmt:expr, $($arg:tt)*) => {
         return Err(failure::err_msg(format!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!())))
@@ -1108,7 +1109,7 @@ define_HashmapE!{ExtraCurrencyCollection, 32, VarUInteger32}
 
 impl From<HashmapE> for ExtraCurrencyCollection {
     fn from(other: HashmapE) -> Self {
-        Self::with_hashmap(other.data().cloned())
+        Self::with_hashmap(other.data().cloned(), SERDE_OPTS_EMPTY)
     }
 }
 
@@ -1482,11 +1483,18 @@ impl<X: Deserializable + Serializable> Deserializable for InRefValue<X> {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         Ok(Self(X::construct_from_reference(slice)?))
     }
+    fn construct_from_with_opts(slice: &mut SliceData, opts: u8) -> Result<Self> {
+        Ok(Self(X::construct_from_cell_with_opts(slice.checked_drain_reference()?, opts)?))
+    }
 }
 
 impl<X: Deserializable + Serializable> Serializable for InRefValue<X> {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         self.0.serialize()?.write_to(cell)
+    }
+    fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
+        cell.checked_append_reference(self.0.serialize_with_opts(opts)?)?;
+        Ok(())
     }
 }
 
@@ -1550,27 +1558,37 @@ impl Display for UnixTime32 {
 #[derive(Debug, Default, Clone, Eq)]
 pub struct ChildCell<T: Serializable + Deserializable> {
     cell: Option<Cell>,
-    phantom: PhantomData<T>
+    opts: u8,
+    phantom: PhantomData<T>,
 }
 
 impl<T: Serializable + Deserializable> ChildCell<T> {
+    pub fn with_serde_opts(opts: u8) -> Self {
+        Self {
+            opts,
+            ..Default::default()
+        }
+    }
     pub fn with_cell(cell: Cell) -> Self {
+        Self::with_cell_and_opts(cell, crate::SERDE_OPTS_EMPTY)
+    }
+    pub fn with_cell_and_opts(cell: Cell, opts: u8) -> Self {
         Self {
             cell: Some(cell),
-            phantom: PhantomData
+            opts,
+            phantom: PhantomData,
         }
     }
     pub fn with_struct(s: &T) -> Result<Self> {
-        Ok(
-            ChildCell {
-                cell: Some(s.serialize()?),
-                phantom: PhantomData
-            }
-        )
+        Ok(Self::with_cell_and_opts(s.serialize()?, crate::SERDE_OPTS_EMPTY))
+    }
+
+    pub fn with_struct_and_opts(s: &T, opts: u8) -> Result<Self> {
+        Ok(Self::with_cell_and_opts(s.serialize_with_opts(opts)?, opts))
     }
 
     pub fn write_struct(&mut self, s: &T) -> Result<()> {
-        self.cell = Some(s.serialize()?);
+        self.cell = Some(s.serialize_with_opts(self.opts)?);
         Ok(())
     }
 
@@ -1582,7 +1600,7 @@ impl<T: Serializable + Deserializable> ChildCell<T> {
                         BlockError::PrunedCellAccess(std::any::type_name::<T>().into())
                     )
                 }
-                T::construct_from_cell(cell)
+                T::construct_from_cell_with_opts(cell, self.opts)
             }
             None => Ok(T::default())
         }
@@ -1591,19 +1609,31 @@ impl<T: Serializable + Deserializable> ChildCell<T> {
     pub fn cell(&self)-> Cell {
         match self.cell.as_ref() {
             Some(cell) => cell.clone(),
-            None => T::default().serialize().unwrap_or_default()
+            None => T::default().serialize_with_opts(self.opts).unwrap_or_default()
         }
+    }
+
+    pub fn serde_opts(&self) -> u8 {
+        self.opts
     }
 
     pub fn set_cell(&mut self, cell: Cell) {
         self.cell = Some(cell);
     }
 
-    pub fn hash(&self) -> crate::UInt256 {
+    pub fn set_options(&mut self, opts: u8) {
+        self.opts = opts;
+    }
+
+    pub fn hash(&self) -> UInt256 {
         match self.cell.as_ref() {
             Some(cell) => cell.repr_hash(),
-            None => T::default().serialize().unwrap_or_default().repr_hash()
+            None => T::default().serialize_with_opts(self.opts).unwrap_or_default().repr_hash()
         }
+    }
+
+    pub fn empty(&self) -> bool {
+        self.cell.is_none()
     }
 }
 
@@ -1615,7 +1645,9 @@ impl<T: Default + Serializable + Deserializable> PartialEq for ChildCell<T> {
         match (self.cell.as_ref(), other.cell.as_ref()) {
             (Some(cell), Some(other)) => cell.eq(other),
             (None, Some(cell)) |
-            (Some(cell), None) => cell.eq(&T::default().serialize().unwrap_or_default()),
+            (Some(cell), None) => cell.eq(
+                &T::default().serialize_with_opts(self.opts).unwrap_or_default()
+            ),
             (None, None) => true
         }
     }
@@ -1626,15 +1658,26 @@ impl<T: Serializable + Deserializable> Serializable for ChildCell<T> {
         if let Some(child_cell) = &self.cell {
             child_cell.write_to(cell)?;
         } else {
-            T::default().serialize()?.write_to(cell)?;
+            T::default().serialize_with_opts(self.opts)?.write_to(cell)?;
         }
         Ok(())
     }
 }
 
 impl<T: Serializable + Deserializable> Deserializable for ChildCell<T> {
+    fn construct_from_with_opts(slice: &mut SliceData, opts: u8) -> Result<Self> {
+        Ok(Self::with_cell_and_opts(slice.checked_drain_reference()?, opts))
+    }
+    fn read_from_with_opts(&mut self, slice: &mut SliceData, opts: u8) -> Result<()> {
+        *self = Self::construct_from_with_opts(slice, opts)?;
+        Ok(())
+    }
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        *self = Self::construct_from_with_opts(slice, SERDE_OPTS_EMPTY)?;
+        Ok(())
+    }
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
-        Ok(Self::with_cell(slice.checked_drain_reference()?))
+        Self::construct_from_with_opts(slice, SERDE_OPTS_EMPTY)
     }
 }
 

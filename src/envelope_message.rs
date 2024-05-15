@@ -12,12 +12,13 @@
 */
 
 use crate::{
+    common_message::CommonMessage,
     error::BlockError,
     shard::{AccountIdPrefixFull, ShardIdent},
     messages::Message,
     types::{AddSub, ChildCell, Grams},
     Serializable, Deserializable,
-    error, fail, Result,
+    error, fail, Result, SERDE_OPTS_EMPTY, SERDE_OPTS_COMMON_MESSAGE,
     BuilderData, Cell, IBitstring, SliceData, UInt256,
 };
 
@@ -337,18 +338,17 @@ impl Deserializable for IntermediateAddressExt {
     }
 }
 
-// msg_envelope#4 
-//   cur_addr:IntermediateAddress 
-//   next_addr:IntermediateAddress
-//   fwd_fee_remaining:Grams 
-//   msg:^(Message Any) 
-// = MsgEnvelope; 
+const MSG_ENVELOPE_TAG: usize = 0x4;
+const MSG_ENVELOPE_TAG_2: usize = 0x5;
+
+// msg_envelope#4
+//   cur_addr:IntnveloMsgEnvelope; 
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct MsgEnvelope {
     cur_addr: IntermediateAddress,
     next_addr: IntermediateAddress,
     fwd_fee_remaining: Grams,
-    msg: ChildCell<Message>,
+    msg: ChildCell<CommonMessage>,
 }
 
 impl MsgEnvelope {
@@ -357,25 +357,39 @@ impl MsgEnvelope {
     ///
     pub fn with_message_and_fee(msg: &Message, fwd_fee_remaining: Grams) -> Result<Self> {
         if !msg.is_internal() {
-            fail!("MsgEnvelope can be made only for internal messages")
+            fail!("MsgEnvelope can be made only for internal messages");
         }
+        let opts = SERDE_OPTS_EMPTY;
         Ok(Self::with_routing(
-            msg.serialize()?,
+            ChildCell::with_struct_and_opts(&CommonMessage::Std(msg.clone()), opts)?,
             fwd_fee_remaining,
             IntermediateAddress::full_dest(),
-            IntermediateAddress::full_dest()
+            IntermediateAddress::full_dest(),
+        ))
+    }
+
+    pub fn with_common_msg_support(msg: &CommonMessage, fwd_fee_remaining: Grams) -> Result<Self> {
+        if !msg.is_internal() {
+            fail!("MsgEnvelope can be made only for internal messages");
+        }
+        let opts = SERDE_OPTS_COMMON_MESSAGE;
+        Ok(Self::with_routing(
+            ChildCell::with_struct_and_opts(msg, opts)?,
+            fwd_fee_remaining,
+            IntermediateAddress::full_dest(),
+            IntermediateAddress::full_dest(),
         ))
     }
 
     ///
     /// Create Envelope with message cell and remainig_fee
-    ///
+    /// TODO should be marked as deprecated and removed if possible
     pub fn with_message_cell_and_fee(msg_cell: Cell, fwd_fee_remaining: Grams) -> Self {
         Self::with_routing(
-            msg_cell,
+            ChildCell::with_cell_and_opts(msg_cell, SERDE_OPTS_EMPTY),
             fwd_fee_remaining,
             IntermediateAddress::full_dest(),
-            IntermediateAddress::full_dest()
+            IntermediateAddress::full_dest(),
         )
     }
 
@@ -383,16 +397,16 @@ impl MsgEnvelope {
     /// Create Envelope with message and remainig_fee and routing settings
     ///
     pub fn with_routing(
-        msg_cell: Cell,
+        msg: ChildCell<CommonMessage>,
         fwd_fee_remaining: Grams,
         cur_addr: IntermediateAddress,
-        next_addr: IntermediateAddress
+        next_addr: IntermediateAddress,
     ) -> Self {
         MsgEnvelope {
             cur_addr,
             next_addr,
             fwd_fee_remaining,
-            msg: ChildCell::with_cell(msg_cell),
+            msg,
         }
     }
 
@@ -432,6 +446,17 @@ impl MsgEnvelope {
     /// Read message struct from envelope
     ///
     pub fn read_message(&self) -> Result<Message> {
+        let msg = self.msg.read_struct()?;
+        match msg {
+            CommonMessage::Std(msg) => Ok(msg),
+            _ => fail!(BlockError::UnexpectedStructVariant(
+                "CommonMessage::Std".to_string(), 
+                msg.get_type_name()
+            )),
+        }
+    }
+
+    pub fn read_common_message(&self) -> Result<CommonMessage> {
         self.msg.read_struct()
     }
 
@@ -439,7 +464,7 @@ impl MsgEnvelope {
     /// Write message struct to envelope
     ///
     pub fn write_message(&mut self, value: &Message) -> Result<()> {
-        self.msg.write_struct(value)
+        self.msg.write_struct(&CommonMessage::Std(value.clone()))
     }
 
     ///
@@ -447,6 +472,10 @@ impl MsgEnvelope {
     ///
     pub fn message_cell(&self)-> Cell {
         self.msg.cell()
+    }
+
+    pub fn msg_cell(&self)-> ChildCell<CommonMessage> {
+        self.msg.clone()
     }
 
     ///
@@ -511,25 +540,39 @@ impl MsgEnvelope {
         fail!("Message with hash {:x} has wrong type of src/dst address",
             self.message_cell().repr_hash())
     }
+
+    pub fn serde_opts(&self) -> u8 {
+        self.msg.serde_opts()
+    }
 }
 
-const MSG_ENVELOPE_TAG : usize = 0x4;
+fn serialize_msgenvelope(x: &MsgEnvelope, cell: &mut BuilderData, opts: u8) -> Result<()> {
+    let tag = if opts & SERDE_OPTS_COMMON_MESSAGE != 0 {
+        MSG_ENVELOPE_TAG_2
+    } else {
+        MSG_ENVELOPE_TAG
+    };
+    cell.append_bits(tag, 4)?;
+    x.cur_addr.write_with_opts(cell, opts)?;
+    x.next_addr.write_with_opts(cell, opts)?;
+    x.fwd_fee_remaining.write_with_opts(cell, opts)?;
+    cell.checked_append_reference(x.msg.cell())?;
+    Ok(())
+}
 
 impl Serializable for MsgEnvelope {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_bits(MSG_ENVELOPE_TAG, 4)?;
-        self.cur_addr.write_to(cell)?;
-        self.next_addr.write_to(cell)?;
-        self.fwd_fee_remaining.write_to(cell)?;
-        self.msg.write_to(cell)?;
-        Ok(())
+        serialize_msgenvelope(self, cell, SERDE_OPTS_EMPTY)
+    }
+    fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
+        serialize_msgenvelope(self, cell, opts)
     }
 }
 
 impl Deserializable for MsgEnvelope {
     fn read_from(&mut self, cell: &mut SliceData) -> Result<()>{
         let tag = cell.get_next_int(4)? as usize;
-        if tag != MSG_ENVELOPE_TAG {
+        if tag != MSG_ENVELOPE_TAG && tag != MSG_ENVELOPE_TAG_2 {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
@@ -537,10 +580,15 @@ impl Deserializable for MsgEnvelope {
                 }
             )
         }
-        self.cur_addr.read_from(cell)?;
-        self.next_addr.read_from(cell)?;
-        self.fwd_fee_remaining.read_from(cell)?;
-        self.msg.read_from(cell)?;
+        let opts = match tag {
+            MSG_ENVELOPE_TAG_2 => SERDE_OPTS_COMMON_MESSAGE,
+            _ => SERDE_OPTS_EMPTY,
+        };
+        self.cur_addr.read_from_with_opts(cell, opts)?;
+        self.next_addr.read_from_with_opts(cell, opts)?;
+        self.fwd_fee_remaining.read_from_with_opts(cell, opts)?;
+        let msg_cell = cell.checked_drain_reference()?;
+        self.msg = ChildCell::with_cell_and_opts(msg_cell, opts);
         Ok(())
     }
 }

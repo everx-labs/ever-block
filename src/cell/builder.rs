@@ -11,18 +11,14 @@
 * limitations under the License.
 */
 
-use std::convert::From;
-use std::fmt;
-
-use smallvec::SmallVec;
-pub(super) type SmallData = SmallVec<[u8; 128]>;
-
+use crate::{fail, types::{ExceptionCode, Result}};
 use crate::cell::{
     append_tag, find_tag, Cell, CellType, DataCell, LevelMask, SliceData, MAX_DATA_BITS,
     MAX_SAFE_DEPTH,
 };
-use crate::types::{ExceptionCode, Result};
-use crate::{error, fail};
+
+use std::{convert::From, fmt};
+pub(super) type SmallData = smallvec::SmallVec<[u8; 128]>;
 
 const EXACT_CAPACITY: usize = 128;
 
@@ -30,7 +26,7 @@ const EXACT_CAPACITY: usize = 128;
 pub struct BuilderData {
     data: SmallData,
     length_in_bits: usize,
-    pub(super) references: SmallVec<[Cell; 4]>,
+    pub(super) references: smallvec::SmallVec<[Cell; 4]>,
     pub(super) cell_type: CellType,
 }
 
@@ -40,9 +36,9 @@ impl BuilderData {
     }
     pub const fn new() -> Self {
         BuilderData {
-            data: SmallVec::new_const(),
+            data: smallvec::SmallVec::new_const(),
             length_in_bits: 0,
-            references: SmallVec::new_const(),
+            references: smallvec::SmallVec::new_const(),
             cell_type: CellType::Ordinary,
         }
     }
@@ -70,7 +66,7 @@ impl BuilderData {
         Ok(BuilderData {
             data,
             length_in_bits,
-            references: SmallVec::new(),
+            references: smallvec::SmallVec::new(),
             cell_type: CellType::Ordinary,
         })
     }
@@ -173,7 +169,7 @@ impl BuilderData {
         if cell.cell_type() == CellType::Big {
             fail!("Can't create a builder from a big cell");
         }
-        let data = SmallVec::from_slice(cell.data());
+        let data = smallvec::SmallVec::from_slice(cell.data());
         let mut builder = BuilderData::with_raw(data, cell.bit_length())?;
         builder.references = cell.clone_references();
         builder.cell_type = cell.cell_type();
@@ -195,7 +191,7 @@ impl BuilderData {
 
     pub fn prepend_raw(&mut self, slice: &[u8], bits: usize) -> Result<&mut Self> {
         if bits != 0 {
-            let mut buffer = BuilderData::with_raw(SmallVec::from_slice(slice), bits)?;
+            let mut buffer = BuilderData::with_raw(smallvec::SmallVec::from_slice(slice), bits)?;
             buffer.append_raw(self.data(), self.length_in_bits())?;
             self.length_in_bits = buffer.length_in_bits;
             self.data = buffer.data;

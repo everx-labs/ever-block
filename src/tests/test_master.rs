@@ -13,9 +13,11 @@
 
 use super::*;
 use crate::{
-    write_read_and_assert, Block,
-    BlockExtra, Deserializable, ExtBlkRef, HashmapType, HashmapAugType, MsgAddressInt, ShardStateUnsplit,
-    BASE_WORKCHAIN_ID, read_single_root_boc, HashmapE,
+    read_single_root_boc, write_read_and_assert, write_read_and_assert_with_opts, Block, BlockExtra,
+    Deserializable, ExtBlkRef, HashmapAugType, MsgAddressInt, ShardStateUnsplit, 
+    BASE_WORKCHAIN_ID, SERDE_OPTS_EMPTY, CommonMessage, Transaction, BlockInfo, ValueFlow,
+    MerkleUpdate, transactions::tests::generate_test_shard_account_block,
+    HashmapType, HashmapE, InMsgFinal,
 };
 use std::collections::{HashMap, HashSet};
 use rand::Rng;
@@ -86,8 +88,6 @@ fn test_shard_descr_with_copyleft() {
 
 #[test]
 fn test_shard_descr_fast_finality() {
-    std::env::set_var("RUST_BACKTRACE", "full");
-
     let mut descr_none = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::None);
     descr_none.collators = Some(ShardCollators {
         prev: gen_collator(),
@@ -121,6 +121,47 @@ fn test_shard_descr_fast_finality() {
     write_read_and_assert(descr_none);
     write_read_and_assert(descr_split);
     write_read_and_assert(descr_merge);
+
+}
+
+fn build_mesh_queue_descr() -> ConnectedNwOutDescr {
+    ConnectedNwOutDescr {
+        out_queue_update: HashUpdate::with_hashes(UInt256::rand(), UInt256::rand()),
+        exported: 1234567890.into(),
+    }
+}
+
+fn build_mesh_descr() -> ConnectedNwDescrExt {
+    let mut descr = ConnectedNwDescrExt::default();
+    descr.queue_descr = build_mesh_queue_descr();
+    descr.descr = Some(ConnectedNwDescr {
+        seq_no: 34,
+        root_hash: UInt256::rand(),
+        file_hash: UInt256::rand(),
+        imported: 1234567890.into(),
+        gen_utime: 1234567890,
+    });
+    descr
+}
+
+#[test]
+fn test_shard_descr_mesh() {
+    let mut descr = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::None);
+    descr.collators = Some(ShardCollators {
+        prev: gen_collator(),
+        prev2: None,
+        current: gen_collator(),
+        next: gen_collator(),
+        next2: None,
+        updated_at: 0x12345678,
+    });
+    let mesh_descr = build_mesh_queue_descr();
+    descr.mesh_msg_queues.set(&12345678, &mesh_descr).unwrap();
+    write_read_and_assert(descr);
+
+    let mut descr = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::None);
+    descr.mesh_msg_queues.set(&12345678, &mesh_descr).unwrap();
+    write_read_and_assert(descr);
 
 }
 
@@ -165,14 +206,21 @@ fn test_mc_state_extra() {
         max_end_lt: 1000002
     }).unwrap();
 
-   write_read_and_assert(extra);
+   write_read_and_assert(extra.clone());
+
+   extra.mesh.set(&1, &ConnectedNwDescr::default()).unwrap();
+   extra.mesh.set(&2, &ConnectedNwDescr::default()).unwrap();
+
+   write_read_and_assert(extra.clone());
+
 }
 
-#[test]
-fn test_mc_block_extra() {
-    std::env::set_var("RUST_BACKTRACE", "full");
-
-    let mut extra = McBlockExtra::default();
+fn build_mc_block_extra(serde_opts: u8) -> McBlockExtra {
+    let mut extra = if serde_opts & SERDE_OPTS_COMMON_MESSAGE != 0{
+        McBlockExtra::with_common_message_support()
+    } else {
+        McBlockExtra::default()
+    };
     let shard1 = ShardDescr::with_params(23, 77, 234, UInt256::from([131; 32]), FutureSplitMerge::None);
     let shard1_1 = ShardDescr::with_params(25, 177, 230, UInt256::from([131; 32]), FutureSplitMerge::None);
     let shard2 = ShardDescr::with_params(15, 78, 235, UInt256::from([77; 32]), FutureSplitMerge::Split{split_utime: 0x12345678, interval: 0x87654321});
@@ -185,11 +233,17 @@ fn test_mc_block_extra() {
     extra.shards.add_workchain(22, 135, UInt256::default(), UInt256::default(), None).unwrap();
     extra.fees.store_shard_fees(&ident, CurrencyCollection::with_grams(1), CurrencyCollection::with_grams(1)).unwrap();
     extra.shards.split_shard(&ident, |_| Ok((shard2, shard2_2))).unwrap();
+    extra.write_recover_create_msg(Some(&InMsg::Final(InMsgFinal::default()))).unwrap();
+    extra
+}
 
+#[test]
+fn test_mc_block_extra() {
+    let extra = build_mc_block_extra(0);
     let extra = write_read_and_assert(extra);
 
     let mut block_extra = BlockExtra::default();
-    block_extra.write_account_blocks(&crate::generate_test_shard_account_block()).unwrap();
+    block_extra.write_account_blocks(&generate_test_shard_account_block(SERDE_OPTS_EMPTY)).unwrap();
     block_extra.write_custom(Some(&extra)).unwrap();
 
     write_read_and_assert(block_extra);
@@ -206,24 +260,58 @@ fn test_mc_block_extra() {
 }
 
 #[test]
+fn test_common_msg_mcblockextra() {
+    let extra: McBlockExtra = McBlockExtra::with_common_message_support();
+    let _extra = write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE);
+    let mut extra = McBlockExtra::with_common_message_support();
+    let opts = SERDE_OPTS_COMMON_MESSAGE;
+    let in_msg = InMsg::external(
+        ChildCell::with_struct_and_opts(&CommonMessage::default(), opts).unwrap(),
+        ChildCell::with_struct_and_opts(&Transaction::with_common_msg_support(AccountId::from([0;32])), opts).unwrap()
+    );
+    extra.write_recover_create_msg(Some(&in_msg)).unwrap();
+    extra.write_mint_msg(Some(&in_msg)).unwrap();
+    // extra.write_copyleft_msgs(&[in_msg]).unwrap();
+    let _extra = write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+}
+
+#[test]
+fn test_mcblockextra_mesh() {
+
+    let mut mc_extra = build_mc_block_extra(SERDE_OPTS_COMMON_MESSAGE);
+    mc_extra.mesh_descr_mut().set(&7, &build_mesh_descr()).unwrap();
+    mc_extra.mesh_descr().get(&7).unwrap().unwrap();
+    let mc_extra2 = write_read_and_assert_with_opts(mc_extra.clone(), SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    mc_extra2.mesh_descr().get(&7).unwrap().unwrap();
+
+    let mut extra = BlockExtra::with_common_msg_support();
+    extra.write_custom(Some(&mc_extra)).unwrap();
+    let extra2 = write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    let mc_extra3 = extra2.read_custom().unwrap().unwrap();
+    mc_extra3.mesh_descr().get(&7).unwrap();
+
+    let block = Block::with_common_msg_support(
+        34, &BlockInfo::default(), &ValueFlow::default(), &MerkleUpdate::default(), None, &extra2
+    ).unwrap();
+    let block2 = write_read_and_assert_with_opts(block, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+
+    let mc_extra4 = block2.read_extra().unwrap().read_custom().unwrap().expect("need mc block extra");
+    mc_extra4.mesh_descr().get(&7).unwrap();
+}
+
+#[test]
 fn test_mc_block_extra_2() {
-    let mut extra = McBlockExtra::default();
-    let shard1 = ShardDescr::with_params(23, 77, 234, UInt256::from([131; 32]), FutureSplitMerge::None);
-    let shard1_1 = ShardDescr::with_params(25, 177, 230, UInt256::from([131; 32]), FutureSplitMerge::None);
-    let shard2 = ShardDescr::with_params(15, 78, 235, UInt256::from([77; 32]), FutureSplitMerge::Split { split_utime: 0x12345678, interval: 0x87654321 });
-    let shard2_2 = ShardDescr::with_params(115, 8, 35, UInt256::from([77; 32]), FutureSplitMerge::Split { split_utime: 0x12345678, interval: 0x87654321 });
-    let ident = ShardIdent::with_workchain_id(11).unwrap();
-    extra.shards.add_workchain(11, 134, UInt256::default(), UInt256::default(), None).unwrap();
-    extra.fees.store_shard_fees(&ident, CurrencyCollection::with_grams(1), CurrencyCollection::with_grams(1)).unwrap();
-    extra.shards.split_shard(&ident, |_| Ok((shard1, shard1_1))).unwrap();
-    let ident = ShardIdent::with_workchain_id(22).unwrap();
-    extra.shards.add_workchain(22, 135, UInt256::default(), UInt256::default(), None).unwrap();
-    extra.fees.store_shard_fees(&ident, CurrencyCollection::with_grams(1), CurrencyCollection::with_grams(1)).unwrap();
-    extra.shards.split_shard(&ident, |_| Ok((shard2, shard2_2))).unwrap();
-
+    let mut extra = build_mc_block_extra(0);
     extra.write_copyleft_msgs(&[InMsg::default(), InMsg::default()]).unwrap();
-
     write_read_and_assert(extra);
+}
+
+#[test]
+fn test_mc_block_extra_3() {
+    let mut extra = build_mc_block_extra(SERDE_OPTS_COMMON_MESSAGE);
+    extra.mesh_descr_mut().set(&12345678, &build_mesh_descr()).unwrap();
+    let extra2 = write_read_and_assert_with_opts(extra, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+    extra2.read_recover_create_msg().unwrap();
 }
 
 #[test]
@@ -668,4 +756,16 @@ fn test_shard_descr_ref_shard_blocks() {
     let rsb = RefShardBlocks::with_ids(ids.iter()).unwrap();
     assert_eq!(rsb.collect_ref_shard_blocks().unwrap(), ids);
 
+}
+
+#[test]
+fn test_connected_network_descr() {
+    let cnd = ConnectedNwDescr {
+        seq_no: 34,
+        root_hash: UInt256::rand(),
+        file_hash: UInt256::rand(),
+        imported: 1234567890.into(),
+        gen_utime: 1234567890,
+    };
+    write_read_and_assert(cnd);
 }

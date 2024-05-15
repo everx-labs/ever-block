@@ -273,7 +273,7 @@ fn test_check_message_output() {
         dst: c4_:5:3737373737373737373737373737373737373737373737373737373737373737}, \
         init: StateInit { split_depth: Some(Number5(23)), special: Some(TickTock { tick: false, tock: true }), \
         code: Some(7a0b957a15e93cca3ce96ccb4aecf275a3718a263c8aeca2ab14fe6e1e62172c), data: None, \
-        library: StateInitLib(HashmapE { bit_len: 256, data: Some(c39760fbba54774b6c7fa76bfd46d6fb89d1fe0b19570bef3c4d08decc8b4566) }) }, \
+        library: StateInitLib(HashmapE { bit_len: 256, data: Some(c39760fbba54774b6c7fa76bfd46d6fb89d1fe0b19570bef3c4d08decc8b4566) }, 0) }, \
         body: 5555}");
 }
 

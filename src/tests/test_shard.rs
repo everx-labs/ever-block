@@ -11,7 +11,10 @@
 * limitations under the License.
 */
 #![allow(clippy::inconsistent_digit_grouping, clippy::unusual_byte_groupings)]
-use crate::{AccountIdPrefixFull, BlockIdExt, read_single_root_boc, SliceData, HashmapType};
+use crate::{
+    read_single_root_boc, write_read_and_assert_with_opts, AccountIdPrefixFull, BlockIdExt, 
+    InRefValue, MeshMsgQueuesInfo, SliceData, HashmapType
+};
 use super::*;
 
 use std::{collections::HashSet, str::FromStr};
@@ -149,6 +152,40 @@ fn test_shard_state_unsplit_serialize_fast_finality() {
         }
     }
 }
+
+
+#[test]
+fn test_shard_state_unsplit_serialize_mesh() {
+    let in_path = "src/tests/data/shard_state.boc";
+    let bytes = std::fs::read(in_path).unwrap();
+    let root_cell = read_single_root_boc(&bytes).unwrap();
+
+    let ss = ShardState::construct_from_cell(root_cell).unwrap();
+
+    match ss {
+        ShardState::UnsplitState(mut ss) => {
+            *ss.shard_mut() = ShardIdent::with_tagged_prefix(0, SHARD_FULL).unwrap();
+            ss.write_custom(None).unwrap();
+
+            let local = ss.read_out_msg_queue_info().unwrap();
+            let mut mesh = MeshMsgQueuesInfo::default();
+            mesh.set(&123, &InRefValue(local.clone())).unwrap();
+            ss.set_gen_lt(100500);
+
+            ss.write_out_msg_queues_info(local, mesh).unwrap();
+
+            let ss2 = write_read_and_assert_with_opts(ss, SERDE_OPTS_COMMON_MESSAGE).unwrap();
+
+            assert_eq!(ss2.gen_lt(), 100500);
+
+            assert!(ss2.read_out_msg_queues_info().unwrap().1.len().unwrap() > 0);
+        },
+        ShardState::SplitState(_) => {
+            unreachable!()
+        }
+    }
+}
+
 
 #[test]
 fn test_shard_prefix_as_str_with_tag() {
