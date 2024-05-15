@@ -133,16 +133,75 @@ pub fn aggregate_and_verify(
         fail!("Vector of messages can not be empty!");
     }
 
-    let mut pks: Vec<blst::min_pk::PublicKey> = Vec::new();
-    for bls_pk in bls_pks_bytes {
-        pks.push(convert_public_key_bytes_to_public_key(bls_pk)?);
+    #[cfg(feature = "std")] {
+        let mut pks: Vec<blst::min_pk::PublicKey> = Vec::new();
+        for bls_pk in bls_pks_bytes {
+            pks.push(convert_public_key_bytes_to_public_key(bls_pk)?);
+        }
+        let pk_refs: Vec<&blst::min_pk::PublicKey> = pks.iter().collect();
+
+        let sig = convert_signature_bytes_to_signature(sig_bytes)?;
+
+        let res = sig.aggregate_verify(true, msgs, &DST, &pk_refs, true);
+        Ok(res == blst::BLST_ERROR::BLST_SUCCESS)
     }
-    let pk_refs: Vec<&blst::min_pk::PublicKey> = pks.iter().collect();
+    #[cfg(not(feature = "std"))] {
+        let sig = P2Affine::new(sig_bytes)?;
+        let mut pks = Vec::with_capacity(bls_pks_bytes.len());
+        for bls_pk in bls_pks_bytes {
+            pks.push(P1Affine::new(bls_pk)?);
+        }
+        let res = aggregate_verify_nostd(&sig, true, msgs, &DST, &pks, true);
+        Ok(res == blst::BLST_ERROR::BLST_SUCCESS)
+    }
+}
 
-    let sig = convert_signature_bytes_to_signature(sig_bytes)?;
-    let res = sig.aggregate_verify(true, msgs, &DST, &pk_refs, true);
+// The following code is a modified version of the `aggregate_verify` function from the `blst` crate.
+// The original function is not available in the `no_std` environment, 
+// so we had to copy the code here and change treadpool calculations to a simple loop.
+// Originally it returns only BLST_SUCCESS or BLST_VERIFY_FAIL, so we do the same here.
+#[allow(dead_code)]
+fn aggregate_verify_nostd(
+    sig: &P2Affine,
+    sig_groupcheck: bool,
+    msgs: &[&[u8]],
+    dst: &[u8],
+    pks: &[P1Affine],
+    pks_validate: bool,
+) -> blst::BLST_ERROR {
+    if sig_groupcheck && !sig.is_in_group() {
+        return blst::BLST_ERROR::BLST_VERIFY_FAIL;
+    }
 
-    Ok(res == blst::BLST_ERROR::BLST_SUCCESS)
+    let mut acc = Option::<blst::Pairing>::None;
+    for (msg, pk) in msgs.iter().zip(pks.iter()) {
+        let mut pairing = blst::Pairing::new(true, dst);
+        if pairing.aggregate(
+            &pk.point,
+            pks_validate,
+            &unsafe { core::ptr::null::<blst::blst_p2_affine>().as_ref() },
+            false,
+            msg,
+            &[],
+        ) != blst::BLST_ERROR::BLST_SUCCESS {
+            return blst::BLST_ERROR::BLST_VERIFY_FAIL;
+        }
+        pairing.commit();
+        if let Some(acc) = acc.as_mut() {
+            acc.merge(&pairing);
+        } else {
+            acc = Some(pairing);
+        }
+    }
+
+    let mut gtsig = blst::blst_fp12::default();
+    blst::Pairing::aggregated(&mut gtsig, &sig.point);
+
+    if acc.map(|acc| acc.finalverify(Some(&gtsig))).unwrap_or(false) {
+        blst::BLST_ERROR::BLST_SUCCESS
+    } else {
+        blst::BLST_ERROR::BLST_VERIFY_FAIL
+    }
 }
 
 pub fn aggregate_public_keys_based_on_nodes_info(
@@ -934,6 +993,11 @@ impl P2Affine {
             }
         }
         Ok(Self { point })
+    }
+    pub fn is_in_group(&self) -> bool {
+        unsafe {
+            blst::blst_p2_affine_in_g2(&self.point)
+        }
     }
 }
 
