@@ -20,8 +20,8 @@ use crate::{
     config_params::CatchainConfig,
     shard::{SHARD_FULL, MASTERCHAIN_ID},
     fail, BuilderData, ByteOrderRead, Cell, Crc32, 
-    IBitstring, Result, sha512_digest, SliceData, UInt256, 
-    bls::BLS_PUBLIC_KEY_LEN 
+    IBitstring, Result, sha512_digest, SliceData, UInt256,
+    bls::BLS_PUBLIC_KEY_LEN
 };
 
 use std::{

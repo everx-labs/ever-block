@@ -190,8 +190,16 @@ fn test_aggregate_and_verify() {
     assert!(aggregate_and_verify(
         &sig_bytes,
         &msgs_refs,
-        &keys_refs
+        &keys_refs,
     ).unwrap());
+
+    let sig = P2Affine::new(&sig_bytes).unwrap();
+    let mut pks = Vec::with_capacity(keys_refs.len());
+    for bls_pk in keys_refs {
+        pks.push(P1Affine::new(bls_pk).unwrap());
+    }
+    assert_eq!(aggregate_verify_nostd(&sig, true, &msgs_refs, &DST, &pks, true), blst::BLST_ERROR::BLST_SUCCESS)
+
 }
 
 #[test]
