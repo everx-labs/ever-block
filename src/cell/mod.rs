@@ -880,7 +880,7 @@ fn build_big_cell_buf(
     level_mask: u8,
     refs: usize,
     store_hashes: bool,
-    hashes: Option<[UInt256; 4]>,
+    hashes: Option<&[UInt256; 4]>,
     depths: Option<[u16; 4]>
 ) -> Result<Vec<u8>> {
     if level_mask != 0 {
@@ -911,7 +911,7 @@ fn build_cell_buf(
     level_mask: u8,
     refs: usize,
     store_hashes: bool,
-    hashes: Option<[UInt256; 4]>,
+    hashes: Option<&[UInt256; 4]>,
     depths: Option<[u16; 4]>
 ) -> Result<Vec<u8>> {
     if cell_type == CellType::Big {
@@ -1105,9 +1105,9 @@ impl CellData {
         depths: Option<[u16; 4]>
     ) -> Result<Self> {
         let buffer = if cell_type == CellType::Big {
-            build_big_cell_buf(data, level_mask, refs as usize, store_hashes, hashes.clone(), depths)?
+            build_big_cell_buf(data, level_mask, refs as usize, store_hashes, hashes.as_ref(), depths)?
         } else {
-            build_cell_buf(cell_type, data, level_mask, refs as usize, store_hashes, hashes.clone(), depths)?
+            build_cell_buf(cell_type, data, level_mask, refs as usize, store_hashes, hashes.as_ref(), depths)?
         };
         #[cfg(test)]
         check_cell_buf(&buffer[..], false)?;

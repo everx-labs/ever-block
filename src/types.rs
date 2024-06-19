@@ -31,7 +31,7 @@ use std::{
 };
 use smallvec::SmallVec;
 
-pub type Error = failure::Error;
+pub type Error = anyhow::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type Failure = Option<Error>;
 pub type Status = Result<()>;
@@ -39,20 +39,20 @@ pub type Status = Result<()>;
 #[macro_export]
 macro_rules! error {
     ($error:literal) => {
-        failure::err_msg(format!("{} {}:{}", $error, file!(), line!()))
+        anyhow::format_err!("{} {}:{}", $error, file!(), line!())
     };
     ($error:expr) => {
-        failure::Error::from($error)
+        anyhow::Error::from($error)
     };
     ($fmt:expr, $($arg:tt)+) => {
-        failure::err_msg(format!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!()))
+        anyhow::format_err!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!())
     };
 }
 
 #[macro_export]
 macro_rules! fail {
     ($error:literal) => {
-        return Err(failure::err_msg(format!("{} {}:{}", $error, file!(), line!())))
+        return Err(anyhow::format_err!("{} {}:{}", $error, file!(), line!()))
     };
     // uncomment to explicit panic for any ExceptionCode
     // (ExceptionCode::CellUnderflow) => {
@@ -62,7 +62,7 @@ macro_rules! fail {
         return Err($crate::error!($error))
     };
     ($fmt:expr, $($arg:tt)*) => {
-        return Err(failure::err_msg(format!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!())))
+        return Err(anyhow::format_err!("{} {}:{}", format!($fmt, $($arg)*), file!(), line!()))
     };
 }
 
@@ -305,41 +305,41 @@ impl FromStr for AccountId {
 
 // Exceptions *****************************************************************
 
-#[derive(Clone, Copy, Debug, num_derive::FromPrimitive, PartialEq, Eq, failure::Fail)]
+#[derive(Clone, Copy, Debug, num_derive::FromPrimitive, PartialEq, Eq, thiserror::Error)]
 pub enum ExceptionCode {
-    #[fail(display = "normal termination")]
+    #[error("normal termination")]
     NormalTermination = 0,
-    #[fail(display = "alternative termination")]
+    #[error("alternative termination")]
     AlternativeTermination = 1,
-    #[fail(display = "stack underflow")]
+    #[error("stack underflow")]
     StackUnderflow = 2,
-    #[fail(display = "stack overflow")]
+    #[error("stack overflow")]
     StackOverflow = 3,
-    #[fail(display = "integer overflow")]
+    #[error("integer overflow")]
     IntegerOverflow = 4,
-    #[fail(display = "range check error")]
+    #[error("range check error")]
     RangeCheckError = 5,
-    #[fail(display = "invalid opcode")]
+    #[error("invalid opcode")]
     InvalidOpcode = 6,
-    #[fail(display = "type check error")]
+    #[error("type check error")]
     TypeCheckError = 7,
-    #[fail(display = "cell overflow")]
+    #[error("cell overflow")]
     CellOverflow = 8,
-    #[fail(display = "cell underflow")]
+    #[error("cell underflow")]
     CellUnderflow = 9,
-    #[fail(display = "dictionaty error")]
+    #[error("dictionaty error")]
     DictionaryError = 10,
-    #[fail(display = "unknown error")]
+    #[error("unknown error")]
     UnknownError = 11,
-    #[fail(display = "fatal error")]
+    #[error("fatal error")]
     FatalError = 12,
-    #[fail(display = "out of gas")]
+    #[error("out of gas")]
     OutOfGas = 13,
-    #[fail(display = "illegal instruction")]
+    #[error("illegal instruction")]
     IllegalInstruction = 14,
-    #[fail(display = "pruned cell")]
+    #[error("pruned cell")]
     PrunedCellAccess = 15,
-    #[fail(display = "big cell")]
+    #[error("big cell")]
     BigCellAccess = 16
 }
 
