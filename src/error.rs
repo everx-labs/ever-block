@@ -11,53 +11,53 @@
 * limitations under the License.
 */
 
-#[derive(Debug, failure::Fail)]
+#[derive(Debug, thiserror::Error)]
 pub enum BlockError {
     /// Fatal error.
-    #[fail(display = "Fatal error: {}", 0)]
+    #[error("Fatal error: {0}")]
     FatalError(String),
     /// Invalid argument.
-    #[fail(display = "Invalid argument: {}", 0)]
+    #[error("Invalid argument: {0}")]
     InvalidArg(String),
     /// Invalid TL-B constructor tag.
-    #[fail(display = "Invalid TL-B constructor tag `#{:x}` while parsing `{}` struct", t, s)]
+    #[error("Invalid TL-B constructor tag `#{:x}` while parsing `{}` struct", .t, .s)]
     InvalidConstructorTag {
         t: u32,
         s: String,
     },
     /// Invalid data.
-    #[fail(display = "Invalid data: {}", 0)]
+    #[error("Invalid data: {0}")]
     InvalidData(String),
     /// Invalid index.
-    #[fail(display = "Invalid index: {}", 0)]
+    #[error("Invalid index: {0}")]
     InvalidIndex(usize),
     /// Invalid operation.
-    #[fail(display = "Invalid operation: {}", 0)]
+    #[error("Invalid operation: {0}")]
     InvalidOperation(String),
     /// Item is not found.
-    #[fail(display = "{} is not found", 0)]
+    #[error("{0} is not found")]
     NotFound(String),
     /// Other error.
-    #[fail(display = "{}", 0)]
+    #[error("{0}")]
     Other(String),
     /// Attempting to read data from pruned branch cell.
-    #[fail(display = "Attempting to read {} from pruned branch cell", 0)]
+    #[error("Attempting to read {0} from pruned branch cell")]
     PrunedCellAccess(String),
     /// Wrong hash.
-    #[fail(display = "Wrong hash")]
+    #[error("Wrong hash")]
     WrongHash,
     /// Wrong merkle proof.
-    #[fail(display = "Wrong merkle proof: {}", 0)]
+    #[error("Wrong merkle proof: {0}")]
     WrongMerkleProof(String),
     /// Wrong merkle update.
-    #[fail(display = "Wrong merkle update: {}", 0)]
+    #[error("Wrong merkle update: {0}")]
     WrongMerkleUpdate(String),
-    #[fail(display = "Bad signature")]
+    #[error("Bad signature")]
     BadSignature,
-    #[fail(display = "Unexpected struct variant: exp={} real={}", 0, 1)]
+    #[error("Unexpected struct variant: exp={0} real={1}")]
     UnexpectedStructVariant(String, String),
-    #[fail(display = "Unsupported serde opts: {} {:x}", 0, 1)]
+    #[error("Unsupported serde opts: {0} {:x}", .1)]
     UnsupportedSerdeOptions(String, usize),
-    #[fail(display = "Mismatched serde options: {} exp={} real={}", 0, 1, 2)]
+    #[error("Mismatched serde options: {0} exp={1} real={2}")]
     MismatchedSerdeOptions(String, usize, usize),
 }

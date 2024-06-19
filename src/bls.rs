@@ -12,6 +12,7 @@
 */
 
 use crate::{fail, Result};
+use rand::{Rng, RngCore};
 use std::collections::HashMap;
 
 /*
@@ -423,7 +424,7 @@ impl BlsKeyPair {
 
     pub fn gen_key_pair() -> Result<KeyPair> {
         let mut ikm = [0u8; BLS_KEY_MATERIAL_LEN];
-        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut ikm);
+        rand::thread_rng().fill_bytes(&mut ikm);
         BlsKeyPair::gen_key_pair_based_on_key_material(&ikm)
     }
 
@@ -580,15 +581,15 @@ impl NodesInfo {
 */
 
 pub fn generate_random_msg() -> Vec<u8> {
-    let msg_len = rand::Rng::gen_range(&mut rand::thread_rng(), 2..100);
+    let msg_len = rand::thread_rng().gen_range(2..100);
     let mut msg = vec![0u8; msg_len as usize];
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut msg);
+    rand::thread_rng().fill_bytes(&mut msg);
     msg
 }
 
 pub fn generate_random_msg_of_fixed_len( msg_len: i32) -> Vec<u8> {
     let mut msg = vec![0u8; msg_len as usize];
-    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut msg);
+    rand::thread_rng().fill_bytes(&mut msg);
     msg
 }
 
@@ -599,7 +600,7 @@ pub fn gen_signer_indexes(n: u16, k: u16) -> Vec<u16> {
         let mut indexes = Vec::new();
 
         for _i in 0..k {
-            indexes.push(rand::Rng::gen_range(&mut rng, 0..n));
+            indexes.push(rng.gen_range(0..n));
         }
 
         if indexes.len() == (k as usize) {
@@ -609,8 +610,7 @@ pub fn gen_signer_indexes(n: u16, k: u16) -> Vec<u16> {
 }
 
 pub fn gen_random_index(n: u16) -> u16 {
-    let mut rng = rand::thread_rng();
-    rand::Rng::gen_range(&mut rng, 0..n)
+    rand::thread_rng().gen_range(0..n)
 }
 
 pub fn create_random_nodes_info(total_num_of_nodes: u16, attempts: u16) -> NodesInfo{
