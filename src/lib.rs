@@ -224,6 +224,7 @@ impl Deserializable for HashmapE {
 
 pub const SERDE_OPTS_EMPTY: u8 = 0b0000_0000;
 pub const SERDE_OPTS_COMMON_MESSAGE: u8 = 0b0000_0001;
+pub const SERDE_OPTS_MEMPOOL_NODES: u8 = 0b0000_0010;
 
 pub trait Serializable {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()>;
@@ -378,9 +379,12 @@ impl Serializable for SliceData {
 
 impl<T: Serializable> Serializable for Option<T> {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.write_with_opts(cell, SERDE_OPTS_EMPTY)
+    }
+    fn write_with_opts(&self, cell: &mut BuilderData, opts: u8) -> Result<()> {
         if let Some(x) = self {
             cell.append_bit_one()?;
-            x.write_to(cell)?;
+            x.write_with_opts(cell, opts)?;
         } else {
             cell.append_bit_zero()?;
         }

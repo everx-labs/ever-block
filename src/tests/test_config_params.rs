@@ -877,3 +877,31 @@ fn test_real_ton_config_params() {
     config2.config_params.remove(key).unwrap();
     assert!(!config2.valid_config_data(true, None).unwrap());
 }
+
+#[test]
+fn test_fast_finality_config() {
+    let config = FastFinalityConfig {
+        split_merge_interval: 1280,
+        collator_range_len: 500,
+        lost_collator_timeout: 600,
+        mempool_validators_count: 5,
+        unreliability_fine: 10,
+        unreliability_weak_fading: 67,
+        unreliability_strong_fading: 1,
+        unreliability_max: 10054,
+        unreliability_weight: 145,
+        familiarity_collator_fine: 34,
+        familiarity_msgpool_fine: 31,
+        familiarity_fading: 10,
+        familiarity_max: 10,
+        familiarity_weight: 6,
+        busyness_weight: 4,
+        candidates_percentile: 100,
+        busyness_collator_fine: 34,
+        busyness_msgpool_fine: 3,
+
+    };
+    let cell = config.write_to_new_cell().unwrap().into_cell().unwrap();
+    let config2 = FastFinalityConfig::construct_from_cell(cell).unwrap();
+    assert_eq!(config, config2);
+}

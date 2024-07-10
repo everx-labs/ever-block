@@ -19,16 +19,15 @@ use crate::{
     Serializable, Deserializable,
     config_params::CatchainConfig,
     shard::{SHARD_FULL, MASTERCHAIN_ID},
-    fail, BuilderData, ByteOrderRead, Cell, Crc32, 
-    IBitstring, Result, sha512_digest, SliceData, UInt256,
-    bls::BLS_PUBLIC_KEY_LEN
+    fail, error, BuilderData, ByteOrderRead, Cell, Crc32, 
+    IBitstring, Result, sha512_digest, SliceData, UInt256, ShardDescr,
+    bls::BLS_PUBLIC_KEY_LEN, MAX_DATA_BITS, ShardIdent, ShardHashes,
+    FastFinalityConfig, MEMPOOL_MAX_LEN
 };
 
 use std::{
-    io::{Write, Cursor},
-    convert::TryInto,
-    cmp::{min, Ordering},
-    borrow::Cow,
+    borrow::Cow, cmp::{min, Ordering}, convert::TryInto, io::{Cursor, Write},
+    ops::Range, collections::{HashMap, HashSet},
 };
 
 /*
@@ -718,6 +717,283 @@ impl ValidatorSetPRNG {
         ((range as u128 * val as u128) >> 64) as u64
     }
 }
+
+const VALIDATORS_SHARD_STAT_TAG: u8 = 0x1; // 4 bits
+const VALIDATORS_STAT_EXPECTED_MAX: usize = 256;
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct ValidatorsStat { 
+    // Single u16 value for each validator.
+    // VALIDATORS_STAT_EXPECTED_MAX values are stored inplace, 
+    // if more - SmallVec just reallocates memory using heap.
+    values: smallvec::SmallVec::<[u16; VALIDATORS_STAT_EXPECTED_MAX]>
+}
+
+impl ValidatorsStat {
+    
+    pub fn new(validators_count: u16) -> Self {
+        ValidatorsStat { values: smallvec::smallvec![0; validators_count as usize] }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    pub fn update<F>(&mut self, validator_index: u16, updater: F) -> Result<()>
+    where F: FnOnce(u16) -> u16 {
+        if self.values.len() <= validator_index as usize {
+            fail!("Invalid validator index: {} (max is {})", validator_index, self.values.len() - 1)
+        }
+        self.values[validator_index as usize] = updater(self.values[validator_index as usize]);
+        Ok(())
+    }
+
+    pub fn get(&self, validator_index: u16) -> Result<u16> {
+        if self.values.is_empty() {
+            fail!("ValidatorsStat is empty")
+        }
+        self.values.get(validator_index as usize).copied().ok_or_else(|| 
+            error!("Invalid validator index: {} (max is {})", validator_index, self.values.len() - 1)
+        )
+    }
+
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+}
+
+impl Serializable for ValidatorsStat {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_bits(VALIDATORS_SHARD_STAT_TAG as usize, 4)?;
+
+        // Items are wrote one by one into cell. If the cell is full, 
+        // the rest of the items are wrote into the child cell, etc.
+
+        let mut remaining_len = self.values.len();
+        if remaining_len == 0 {
+            return Ok(());
+        }
+        let mut stack = vec![builder.clone()];
+        loop {
+            // Calculate how many items can be written to the current builder
+            let builder_fits = stack.last()
+                .ok_or_else(|| error!("INTERNAL ERROR: stack is empty"))?
+                .bits_free() / 16;
+
+            // If the current builder can fit all remaining items - finish
+            if builder_fits >= remaining_len {
+                break;
+            } else {
+                // If not - create one more builder and push it to the stack
+                remaining_len = remaining_len.saturating_sub(builder_fits);
+                stack.push(BuilderData::new());
+            }
+        }
+
+        // Write items to the builders from the last (deeper) cell to the first.
+        let mut start = self.values.len().saturating_sub(remaining_len);
+        while let Some(mut last_builder) = stack.pop() {
+            // Fill a builder
+            let builder_fits = last_builder.bits_free() / 16;
+            for i in start..min(start + builder_fits, self.values.len()) {
+                last_builder.append_u16(self.values[i])?;
+            }
+
+            // Move start to the start of the next builder (minus one cell of items)
+            start = start.saturating_sub(MAX_DATA_BITS / 16);
+
+            if let Some(prev_builder) = stack.last_mut() {
+                prev_builder.checked_append_reference(last_builder.into_cell()?)?;
+            } else {
+                *builder = last_builder;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl Deserializable for ValidatorsStat {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_int(4)? as u8;
+        if tag != VALIDATORS_SHARD_STAT_TAG {
+            fail!("Invalid tag for ValidatorsShardStat: {}", tag)
+        }
+        self.values.clear();
+        while slice.remaining_bits() > 0 {
+            self.values.push(u16::construct_from(slice)?);
+        }
+        let mut next_cell_opt = slice.checked_drain_reference().ok();
+        while let Some(next_cell) = next_cell_opt {
+            let mut slice = SliceData::load_cell(next_cell)?;
+            while slice.remaining_bits() > 0 {
+                self.values.push(u16::construct_from(&mut slice)?);
+            }
+            next_cell_opt = slice.checked_drain_reference().ok();
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FastFinalityRole {
+    Collator,
+    MessageProducer,
+}
+
+pub fn find_validators(
+    shard: &ShardIdent,
+    block_range: Range<u32>,
+    shards: &ShardHashes,
+    common_stat: &ValidatorsStat,
+    config: &FastFinalityConfig,
+    black_list: &[u16],
+    salt: &[u8],
+) -> Result<(u16, smallvec::SmallVec<[u16; MEMPOOL_MAX_LEN]>)> {
+
+    fn intersection(range1: &Range<u32>, range2: &Range<u32>) -> u32 {
+        if range1.start >= range2.end || range1.end <= range2.start {
+            0
+        } else {
+            range1.end.min(range2.end).saturating_sub(range1.start.max(range2.start))
+        }
+    }
+
+    let calc_busyness_fine_for_shard = |shard: &ShardDescr, desired_range: &Range<u32>, validator: u16| -> u32 {
+        let mut fine = 0 as u32;
+        if let Some(collators) = shard.collators.as_ref() {
+            for range in [Some(&collators.current), Some(&collators.next), collators.next2.as_ref()] { 
+                if let Some(range) = range {
+                    let relative_range = range.start.saturating_sub(shard.seq_no)..
+                        range.finish.saturating_sub(shard.seq_no);
+                    if validator == range.collator {
+                        fine += intersection(&desired_range, &relative_range) * config.busyness_collator_fine as u32;
+                    }
+                    for i in &range.mempool {
+                        if validator == *i {
+                            fine += intersection(&desired_range, &relative_range) * config.busyness_msgpool_fine as u32;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        fine
+    };
+
+        // Instead of deserializing ShardDescr many times we will cache them
+        let mut shards_cache = HashMap::new();
+        shards.iterate_shards(|shard, descr| {
+            shards_cache.insert(shard.clone(), descr.clone());
+            Ok(true)
+        })?;
+        let shards = shards_cache;
+
+    // Calculate indexes for each validator
+
+    let mut indexes = HashMap::new();
+    for (validator, unreliability) in common_stat.values.iter().enumerate().map(|(v, u)| (v as u16, u)) {
+
+        // Find our shard's descr
+        let (descr, descr2) = if let Some(descr) = shards.get(shard) {
+            (descr, None)
+        } else if let Ok(Some(parent)) = shard.merge().map(|s| shards.get(&s)) {
+            (parent, None)
+        } else {
+            let (child_shard1, child_shard2) = shard.split()?;
+            let child1 = shards.get(&child_shard1)
+                .ok_or_else(|| error!("Shard descr {} is not found", child_shard1))?;
+            let child2 = shards.get(&child_shard2)
+                .ok_or_else(|| error!("Shard descr {} is not found", child_shard2))?;
+            (child1, Some(child2))
+        };
+
+        // Familiarity index
+        let mut familiarity = 0;
+        let mut cur_seqno = 0;
+        if descr.collators.is_some() {
+            if let Some(descr2) = descr2 {
+                let f1 = descr.collators()?.stat.get(validator)? as u32;
+                let f2 = descr2.collators()?.stat.get(validator)? as u32;
+                familiarity = (f1 + f2) / 2 * config.familiarity_weight as u32;
+                cur_seqno = descr.seq_no.max(descr2.seq_no);
+            } else {
+                familiarity = descr.collators()?.stat.get(validator)? as u32 *
+                    config.familiarity_weight as u32;
+                cur_seqno = descr.seq_no;
+            }
+        }
+
+        if cur_seqno > block_range.start {
+            fail!("The start of the desired range {} must be greater than last commited seqno {}",
+                block_range.start, cur_seqno);
+        }
+
+        // Busyness index
+        let mut busyness = 0 as u32;
+        let relative_block_range = block_range.start - cur_seqno..block_range.end - cur_seqno;
+        for (other_shard, other_descr) in shards.iter() {
+            if !other_shard.intersect_with(shard) {
+                busyness += calc_busyness_fine_for_shard(other_descr, &relative_block_range, validator);
+            }
+        }
+        busyness *= config.busyness_weight as u32;
+
+        // Unreliability - just take the value from the stat
+        let unreliability = *unreliability as u32 * config.unreliability_weight as u32;
+
+        // println!("Validator #{}, familiarity: {}, busyness: {}, unreliability: {}", validator, familiarity, busyness, unreliability);
+        indexes.insert(validator, familiarity + busyness + unreliability);
+    }
+
+    // Choose candidates
+    
+    let mut black_list = HashSet::<u16>::from_iter(black_list.iter().cloned());
+    let mut get_next = || -> Result<u16> {
+
+        // max index is 100%, min - 0%
+        // Choose indexes that are in 0..config.candidates_percentile percent
+        let mut min_index = u32::MAX;
+        let mut max_index = 0;
+        for (validator, index) in indexes.iter() {
+            if !black_list.contains(validator) {
+                min_index = min_index.min(*index);
+                max_index = max_index.max(*index);
+            }
+        }
+        let trashhold = (max_index - min_index) * config.candidates_percentile as u32;
+        let mut candidates = vec!();
+        for (validator, index) in &indexes {
+            if !black_list.contains(validator) && (index - min_index) * 100 <= trashhold {
+                candidates.push(*validator);
+            }
+        }
+        candidates.sort();
+
+        if candidates.is_empty() {
+            fail!("No candidates found")
+        } else if candidates.len() == 1 {
+            black_list.insert(candidates[0]);
+            return Ok(candidates[0])
+        } else {
+            let mut s = 0;
+            for i in 0..salt.len() {
+                s ^= salt[i];
+            }
+            let i = s as usize % candidates.len();
+            black_list.insert(candidates[i]);
+            return Ok(candidates[i])
+        }
+    };
+
+    let collator = get_next()?;
+    let mut mempool = smallvec::SmallVec::<[u16; MEMPOOL_MAX_LEN]>::new();
+    for _ in 0..config.mempool_validators_count {
+        mempool.push(get_next()?);
+    }
+    Ok((collator, mempool))
+}
+
 
 #[cfg(test)]
 #[path = "tests/test_validators.rs"]
