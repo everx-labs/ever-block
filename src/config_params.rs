@@ -357,6 +357,12 @@ impl ConfigParams {
             .get(&nw_id)?
             .ok_or_else(|| error!("no mesh config for {}", nw_id))
     }
+    pub fn fast_finality_config(&self) -> Result<FastFinalityConfig> {
+        match self.config(61)? {
+            Some(ConfigParamEnum::ConfigParam61(ff)) => Ok(ff),
+            _ => fail!("no fast finality config")
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -405,6 +411,7 @@ pub enum GlobalCapabilities {
     CapTvmV20                 = 0x0020_0000_0000, // BLS instructions
     CapDuePaymentFix          = 0x0040_0000_0000, // No due payments on credit phase and add payed dues to storage fee in TVM 
     CapCommonMessage          = 0x0080_0000_0000,
+    CapPipeline               = 0x0100_0000_0000,
 }
 
 impl ConfigParams {
@@ -578,6 +585,7 @@ pub enum ConfigParamEnum {
     ConfigParam42(ConfigCopyleft),
     ConfigParam44(SuspendedAddresses),
     ConfigParam58(MeshConfig),
+    ConfigParam61(FastFinalityConfig),
     ConfigParamAny(u32, SliceData),
 }
 
@@ -639,6 +647,7 @@ impl ConfigParamEnum {
             42 => { read_config!(ConfigParam42, ConfigCopyleft, slice) },
             44 => { read_config!(ConfigParam44, SuspendedAddresses, slice) },
             58 => { read_config!(ConfigParam58, MeshConfig, slice) },
+            61 => { read_config!(ConfigParam61, FastFinalityConfig, slice) },
             index => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
         }
     }
@@ -686,6 +695,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam42(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(42)},
             ConfigParamEnum::ConfigParam44(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(44)},
             ConfigParamEnum::ConfigParam58(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(58)},
+            ConfigParamEnum::ConfigParam61(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(61)},
             ConfigParamEnum::ConfigParamAny(index, slice) => { 
                 cell.checked_append_reference(slice.clone().into_cell())?; 
                 Ok(*index)
@@ -3363,4 +3373,103 @@ pub(crate) fn dump_config(params: &HashmapE) {
         }
         Ok(true)
     }).unwrap();
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FastFinalityConfig {
+    pub split_merge_interval: u32,
+    pub collator_range_len: u32,
+    pub lost_collator_timeout: u32,
+    pub mempool_validators_count: u32,
+
+    pub unreliability_fine: u16,
+    pub unreliability_weak_fading: u16,
+    pub unreliability_strong_fading: u16,
+    pub unreliability_max: u16,
+    pub unreliability_weight: u16,
+
+    pub familiarity_collator_fine: u16,
+    pub familiarity_msgpool_fine: u16,
+    pub familiarity_fading: u16,
+    pub familiarity_max: u16,
+    pub familiarity_weight: u16,
+
+    pub busyness_collator_fine: u16,
+    pub busyness_msgpool_fine: u16,
+    pub busyness_weight: u16,
+
+    pub candidates_percentile: u8,
+}
+
+impl Default for FastFinalityConfig {
+    fn default() -> Self {
+        Self {
+            split_merge_interval: 128,
+            collator_range_len: 5000,
+            lost_collator_timeout: 60,
+            mempool_validators_count: 3,
+            unreliability_fine: 100,
+            unreliability_weak_fading: 1,
+            unreliability_strong_fading: 10,
+            unreliability_max: u16::MAX,
+            unreliability_weight: 1,
+            familiarity_collator_fine: 2,
+            familiarity_msgpool_fine: 1,
+            familiarity_fading: 1,
+            familiarity_max: u16::MAX,
+            familiarity_weight: 2,
+            busyness_collator_fine: 4,
+            busyness_msgpool_fine: 1,
+            busyness_weight: 1,
+            candidates_percentile: 5,
+        }
+    }
+}
+
+impl Serializable for FastFinalityConfig {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.split_merge_interval.write_to(cell)?;
+        self.collator_range_len.write_to(cell)?;
+        self.lost_collator_timeout.write_to(cell)?;
+        self.mempool_validators_count.write_to(cell)?;
+        self.unreliability_fine.write_to(cell)?;
+        self.unreliability_weak_fading.write_to(cell)?;
+        self.unreliability_strong_fading.write_to(cell)?;
+        self.unreliability_max.write_to(cell)?;
+        self.unreliability_weight.write_to(cell)?;
+        self.familiarity_collator_fine.write_to(cell)?;
+        self.familiarity_msgpool_fine.write_to(cell)?;
+        self.familiarity_fading.write_to(cell)?;
+        self.familiarity_max.write_to(cell)?;
+        self.familiarity_weight.write_to(cell)?;
+        self.busyness_collator_fine.write_to(cell)?;
+        self.busyness_msgpool_fine.write_to(cell)?;
+        self.busyness_weight.write_to(cell)?;
+        self.candidates_percentile.write_to(cell)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for FastFinalityConfig {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        self.split_merge_interval.read_from(slice)?;
+        self.collator_range_len.read_from(slice)?;
+        self.lost_collator_timeout.read_from(slice)?;
+        self.mempool_validators_count.read_from(slice)?;
+        self.unreliability_fine.read_from(slice)?;
+        self.unreliability_weak_fading.read_from(slice)?;
+        self.unreliability_strong_fading.read_from(slice)?;
+        self.unreliability_max.read_from(slice)?;
+        self.unreliability_weight.read_from(slice)?;
+        self.familiarity_collator_fine.read_from(slice)?;
+        self.familiarity_msgpool_fine.read_from(slice)?;
+        self.familiarity_fading.read_from(slice)?;
+        self.familiarity_max.read_from(slice)?;
+        self.familiarity_weight.read_from(slice)?;
+        self.busyness_collator_fine.read_from(slice)?;
+        self.busyness_msgpool_fine.read_from(slice)?;
+        self.busyness_weight.read_from(slice)?;
+        self.candidates_percentile.read_from(slice)?;
+        Ok(())
+    }
 }

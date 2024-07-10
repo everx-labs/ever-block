@@ -22,12 +22,12 @@ use crate::{
     shard::{AccountIdPrefixFull, ShardIdent, SHARD_FULL},
     signature::CryptoSignaturePair,
     types::{ChildCell, CurrencyCollection, InRefValue},
-    validators::ValidatorInfo, VarUInteger32,
+    validators::{ValidatorInfo, ValidatorsStat}, VarUInteger32,
     CopyleftRewards, Deserializable, Serializable, U15, Augmentation,
     error, fail, hm_label, AccountId, BuilderData, Cell, IBitstring, Result,
-    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, SliceData, UInt256,
+    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, SERDE_OPTS_MEMPOOL_NODES, SliceData, UInt256,
 };
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, ops::Range};
 
 #[cfg(test)]
 #[path = "tests/test_master.rs"]
@@ -429,6 +429,7 @@ pub struct McBlockExtra {
     mint_msg: Option<ChildCell<InMsg>>,
     mesh: MeshHashesExt,
     config: Option<ConfigParams>,
+    validators_stat: ValidatorsStat,
     serde_opts: u8,
 }
 
@@ -1160,17 +1161,16 @@ pub struct McStateExtra {
     pub block_create_stats: Option<BlockCreateStats>,
     pub global_balance: CurrencyCollection,
     pub state_copyleft_rewards: CopyleftRewards,
+    pub validators_stat: ValidatorsStat,
 }
 
 const MC_STATE_EXTRA_TAG: u16 = 0xcc26;
-const MC_STATE_CREATE_STATS_FLAG: u16 = 0b001;
-const MC_STATE_COPYLEFT_FLAG: u16 = 0b010;
-const MC_STATE_MESH_FLAG: u16 = 0b100;
+const MC_STATE_CREATE_STATS_FLAG: u16 = 0b0001;
+const MC_STATE_COPYLEFT_FLAG: u16 = 0b0010;
+const MC_STATE_MESH_FLAG: u16 = 0b0100;
+const MC_STATE_VAL_STAT_FLAG: u16 = 0b1000;
 
 impl McStateExtra {
-    pub fn tag() -> u16 {
-        0xcc26
-    }
 
     /// Adds new workchain
     pub fn add_workchain(&mut self, workchain_id: i32, descr: &ShardDescr) -> Result<ShardIdent> {
@@ -1234,7 +1234,7 @@ impl Deserializable for McStateExtra {
         let cell1 = &mut SliceData::load_cell(cell.checked_drain_reference()?)?;
         let mut flags = 0u16;
         flags.read_from(cell1)?; // 16 + 0
-        if flags > 7 {
+        if flags > 15 {
             fail!(
                 BlockError::InvalidData(
                     format!("Invalid flags value ({}). Must be <= 7.", flags)
@@ -1250,11 +1250,19 @@ impl Deserializable for McStateExtra {
         } else {
             Some(BlockCreateStats::construct_from(cell1)?) // 1 + 1
         };
-        if flags & MC_STATE_COPYLEFT_FLAG != 0 {
+        let flag_copileft = flags & MC_STATE_COPYLEFT_FLAG != 0;
+        let flag_val_stat = flags & MC_STATE_VAL_STAT_FLAG != 0;
+        if flag_copileft && flag_val_stat {
+            fail!("state_copyleft_rewards and validators_stats is not supported together");
+        }
+        if flag_copileft {
             self.state_copyleft_rewards.read_from(cell1)?; // 1 + 1
         }
         if flags & MC_STATE_MESH_FLAG != 0 {
             self.mesh.read_from(cell1)?;
+        }
+        if flag_val_stat {
+            self.validators_stat.read_from(cell1)?;
         }
         self.global_balance.read_from(cell)?;
         Ok(())
@@ -1263,6 +1271,9 @@ impl Deserializable for McStateExtra {
 
 impl Serializable for McStateExtra {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        if !self.state_copyleft_rewards.is_empty() && !self.validators_stat.is_empty() {
+            fail!("state_copyleft_rewards and validators_stats is not supported together");
+        }
         builder.append_u16(MC_STATE_EXTRA_TAG)?;
         self.shards.write_to(builder)?;
         self.config.write_to(builder)?;
@@ -1278,6 +1289,9 @@ impl Serializable for McStateExtra {
         if !self.mesh.is_empty() {
             flags |= MC_STATE_MESH_FLAG;
         }
+        if !self.validators_stat.is_empty() {
+            flags |= MC_STATE_VAL_STAT_FLAG;
+        }
         flags.write_to(&mut builder1)?;
         self.validator_info.write_to(&mut builder1)?;
         self.prev_blocks.write_to(&mut builder1)?;
@@ -1291,6 +1305,9 @@ impl Serializable for McStateExtra {
         }
         if !self.mesh.is_empty() {
             self.mesh.write_to(&mut builder1)?;
+        }
+        if !self.validators_stat.is_empty() {
+            self.validators_stat.write_to(&mut builder1)?;
         }
         builder.checked_append_reference(builder1.into_cell()?)?;
 
@@ -1368,11 +1385,22 @@ impl Serializable for FutureSplitMerge {
     }
 }
 
+// Current ser/de implementation for CollatorRange allows up to 9 validators in mempool 
+// because all ranges are stored in one cell
+pub const MEMPOOL_MAX_LEN: usize = 9;
+
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct CollatorRange {
     pub collator: u16,
+    pub mempool: smallvec::SmallVec<[u16; MEMPOOL_MAX_LEN]>,
     pub start: u32,
     pub finish: u32,
+}
+
+impl CollatorRange {
+    pub fn range(&self) -> Range<u32> {
+        self.start..self.finish
+    }
 }
 
 impl fmt::Display for CollatorRange {
@@ -1382,21 +1410,53 @@ impl fmt::Display for CollatorRange {
 }
 
 impl Serializable for CollatorRange {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        self.collator.write_to(cell)?;
-        self.start.write_to(cell)?;
-        self.finish.write_to(cell)?;
+    fn write_with_opts(&self, builder: &mut BuilderData, opts: u8) -> Result<()> {
+        if self.mempool.len() > MEMPOOL_MAX_LEN {
+            fail!("Too many validators in mempool");
+        }
+        self.collator.write_to(builder)?;
+        if opts & SERDE_OPTS_MEMPOOL_NODES != 0 {
+            if self.mempool.len() > u8::MAX as usize {
+                fail!("Too many validators in mempool");
+            }
+            builder.append_u8(self.mempool.len() as u8)?;
+            for v in &self.mempool {
+                v.write_to(builder)?;
+            }
+        }
+        self.start.write_to(builder)?;
+        self.finish.write_to(builder)?;
         Ok(())
+    }
+
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        self.write_with_opts(cell, 0)
     }
 }
 
 impl Deserializable for CollatorRange {
+    fn construct_from_with_opts(slice: &mut SliceData, opts: u8) -> Result<Self> {
+        let collator = u16::construct_from(slice)?;
+        let mempool = if opts & SERDE_OPTS_MEMPOOL_NODES != 0 {
+            let len = slice.get_next_byte()? as usize;
+            if len > MEMPOOL_MAX_LEN {
+                fail!("Too many validators in mempool");
+            }
+            let mut vec = smallvec::SmallVec::<[u16; MEMPOOL_MAX_LEN]>::new();
+            for _ in 0..len {
+                vec.push(u16::construct_from(slice)?);
+            }
+            vec
+        } else {
+            smallvec::SmallVec::<[u16; MEMPOOL_MAX_LEN]>::new()
+        };
+        let start = slice.get_next_u32()?;
+        let finish = slice.get_next_u32()?;
+        Ok(Self {collator, mempool, start, finish})
+    }
+
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
-        Ok(Self {
-            collator: u16::construct_from(slice)?,
-            start: slice.get_next_u32()?,
-            finish: slice.get_next_u32()?,
-        })
+        Self::construct_from_with_opts(slice, 0)
     }
 }
 
@@ -1408,6 +1468,7 @@ pub struct ShardCollators {
     pub next: CollatorRange,
     pub next2: Option<CollatorRange>,
     pub updated_at: u32,
+    pub stat: ValidatorsStat
 }
 
 impl fmt::Display for ShardCollators {
@@ -1431,16 +1492,25 @@ impl fmt::Display for ShardCollators {
 }
 
 const SHARD_COLLATORS_TAG: u8 = 0x1; // 4 bits
+const SHARD_COLLATORS_TAG_2: u8 = 0x2; // 4 bits
 
 impl Serializable for ShardCollators {
-    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
-        cell.append_bits(SHARD_COLLATORS_TAG as usize, 4)?;
-        self.prev.write_to(cell)?;
-        self.prev2.write_to(cell)?;
-        self.current.write_to(cell)?;
-        self.next.write_to(cell)?;
-        self.next2.write_to(cell)?;
-        self.updated_at.write_to(cell)?;
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        let (tag, opts) = if self.stat.is_empty() {
+            (SHARD_COLLATORS_TAG, SERDE_OPTS_EMPTY)
+        } else {
+            (SHARD_COLLATORS_TAG_2, SERDE_OPTS_MEMPOOL_NODES)
+        };
+        builder.append_bits(tag as usize, 4)?;
+        self.prev.write_with_opts(builder, opts)?;
+        self.prev2.write_with_opts(builder, opts)?;
+        self.current.write_with_opts(builder, opts)?;
+        self.next.write_with_opts(builder, opts)?;
+        self.next2.write_with_opts(builder, opts)?;
+        self.updated_at.write_with_opts(builder, opts)?;
+        if !self.stat.is_empty() {
+            self.stat.write_to_new_cell()?.into_cell()?.write_to(builder)?;
+        }
         Ok(())
     }
 }
@@ -1448,7 +1518,7 @@ impl Serializable for ShardCollators {
 impl Deserializable for ShardCollators {
     fn construct_from(slice: &mut SliceData) -> Result<Self> {
         let tag = slice.get_next_int(4)? as u8;
-        if tag != SHARD_COLLATORS_TAG {
+        if tag != SHARD_COLLATORS_TAG && tag != SHARD_COLLATORS_TAG_2 {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
@@ -1456,13 +1526,24 @@ impl Deserializable for ShardCollators {
                 }
             )
         }
+        let opts = if tag == SHARD_COLLATORS_TAG_2 {
+            SERDE_OPTS_MEMPOOL_NODES
+        } else {
+            0
+        };
         Ok(Self {
-            prev: Deserializable::construct_from(slice)?,
-            prev2: Deserializable::construct_maybe_from(slice)?,
-            current: Deserializable::construct_from(slice)?,
-            next: Deserializable::construct_from(slice)?,
-            next2: Deserializable::construct_maybe_from(slice)?,
-            updated_at: Deserializable::construct_from(slice)?,
+            prev: Deserializable::construct_from_with_opts(slice, opts)?,
+            prev2: Deserializable::construct_from_with_opts(slice, opts)?,
+            current: Deserializable::construct_from_with_opts(slice, opts)?,
+            next: Deserializable::construct_from_with_opts(slice, opts)?,
+            next2: Deserializable::construct_from_with_opts(slice, opts)?,
+            updated_at: Deserializable::construct_from_with_opts(slice, opts)?,
+            stat: if tag == SHARD_COLLATORS_TAG_2 {
+                ValidatorsStat::construct_from(
+                    &mut SliceData::load_cell(slice.checked_drain_reference()?)?)?
+            } else {
+                ValidatorsStat::default()
+            }
         })
     }
 }
@@ -1760,6 +1841,12 @@ impl ShardDescr {
             FutureSplitMerge::Merge{merge_utime: _, interval} => interval,
             _ => 0
         }
+    }
+    pub fn collators(&self) -> Result<&ShardCollators> {
+        self.collators.as_ref().ok_or_else(|| error!("collators field is None"))
+    }
+    pub fn collators_mut(&mut self) -> Result<&mut ShardCollators> {
+        self.collators.as_mut().ok_or_else(|| error!("collators field is None"))
     }
 }
 

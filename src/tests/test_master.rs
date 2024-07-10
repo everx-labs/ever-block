@@ -96,6 +96,7 @@ fn test_shard_descr_fast_finality() {
         next: gen_collator(),
         next2: None,
         updated_at: 0x12345678,
+        ..Default::default()
     });
 
     let mut descr_split = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::Split{split_utime: 0x12345678, interval: 0x87654321});
@@ -106,6 +107,7 @@ fn test_shard_descr_fast_finality() {
         next: gen_collator(),
         next2: Some(gen_collator()),
         updated_at: 0x12345678,
+        ..Default::default()
     });
 
     let mut descr_merge = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::Merge{merge_utime: 0x12345678, interval: 0x87654321});
@@ -116,6 +118,7 @@ fn test_shard_descr_fast_finality() {
         next: gen_collator(),
         next2: None,
         updated_at: 0x12345678,
+        ..Default::default()
     });
 
     write_read_and_assert(descr_none);
@@ -123,6 +126,60 @@ fn test_shard_descr_fast_finality() {
     write_read_and_assert(descr_merge);
 
 }
+
+#[test]
+fn test_shard_descr_true_fast_finality() {
+
+    std::env::set_var("RUST_BACKTRACE", "full");
+
+    let mut stat = ValidatorsStat::new(13);
+    stat.update(0, |_| 123).unwrap();
+    stat.update(1, |_| 3).unwrap();
+    stat.update(2, |_| 345).unwrap();
+    stat.update(12, |_| 1345).unwrap();
+    assert!(stat.update(13, |_| 123).is_err());
+    assert!(stat.update(30, |_| 123).is_err());
+
+    let mempool_size = 9;
+
+    let mut descr_none = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::None);
+    descr_none.collators = Some(ShardCollators {
+        prev: gen_collator_with_mempool(mempool_size),
+        prev2: None,
+        current: gen_collator_with_mempool(mempool_size),
+        next: gen_collator_with_mempool(mempool_size),
+        next2: None,
+        updated_at: 0x12345678,
+        stat: stat.clone(),
+    });
+
+    let mut descr_split = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::Split{split_utime: 0x12345678, interval: 0x87654321});
+    descr_split.collators = Some(ShardCollators {
+        prev: gen_collator_with_mempool(mempool_size),
+        prev2: None,
+        current: gen_collator_with_mempool(mempool_size),
+        next: gen_collator_with_mempool(mempool_size),
+        next2: Some(gen_collator_with_mempool(mempool_size)),
+        updated_at: 0x12345678,
+        stat: stat.clone(),
+    });
+
+    let mut descr_merge = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::Merge{merge_utime: 0x12345678, interval: 0x87654321});
+    descr_merge.collators = Some(ShardCollators {
+        prev: gen_collator_with_mempool(mempool_size),
+        prev2: Some(gen_collator_with_mempool(mempool_size)),
+        current: gen_collator_with_mempool(mempool_size),
+        next: gen_collator_with_mempool(mempool_size),
+        next2: None,
+        updated_at: 0x12345678,
+        stat: stat.clone(),
+    });
+
+    // write_read_and_assert(descr_none);
+    write_read_and_assert(descr_split);
+    // write_read_and_assert(descr_merge);
+}
+
 
 fn build_mesh_queue_descr() -> ConnectedNwOutDescr {
     ConnectedNwOutDescr {
@@ -154,6 +211,7 @@ fn test_shard_descr_mesh() {
         next: gen_collator(),
         next2: None,
         updated_at: 0x12345678,
+        ..Default::default()
     });
     let mesh_descr = build_mesh_queue_descr();
     descr.mesh_msg_queues.set(&12345678, &mesh_descr).unwrap();
@@ -210,6 +268,12 @@ fn test_mc_state_extra() {
 
    extra.mesh.set(&1, &ConnectedNwDescr::default()).unwrap();
    extra.mesh.set(&2, &ConnectedNwDescr::default()).unwrap();
+
+   write_read_and_assert(extra.clone());
+
+   extra.validators_stat = ValidatorsStat::new(3);
+   extra.validators_stat.update(1, |_| 123).unwrap();
+   extra.validators_stat.update(2, |_| 456).unwrap();
 
    write_read_and_assert(extra.clone());
 
@@ -545,6 +609,24 @@ fn gen_collator() -> CollatorRange {
         collator,
         start,
         finish,
+        mempool: Default::default(),
+    }
+}
+
+fn gen_collator_with_mempool(mempool_size: usize) -> CollatorRange {
+    let mut rng = rand::thread_rng();
+    let collator = rng.gen_range(0..100);
+    let start = rng.gen_range(0..100);
+    let finish = rng.gen_range(start..100);
+    let mut mempool = smallvec::SmallVec::<[u16; MEMPOOL_MAX_LEN]>::new();
+    for _ in 0..mempool_size {
+        mempool.push(rng.gen_range(0..100));
+    }
+    CollatorRange {
+        collator,
+        start,
+        finish,
+        mempool,
     }
 }
 
@@ -558,6 +640,7 @@ fn test_shard_collators() {
         next: gen_collator(),
         next2: Some(gen_collator()),
         updated_at: 0x12345678,
+        ..Default::default()
     };
     write_read_and_assert(collators);
 
@@ -568,6 +651,7 @@ fn test_shard_collators() {
         next: gen_collator(),
         next2: None,
         updated_at: 0x12345678,
+        ..Default::default()
     };
     write_read_and_assert(collators);
 
@@ -578,6 +662,7 @@ fn test_shard_collators() {
         next: gen_collator(),
         next2: Some(gen_collator()),
         updated_at: 0x12345678,
+        ..Default::default()
     };
     write_read_and_assert(collators);
 
@@ -588,6 +673,7 @@ fn test_shard_collators() {
         next: gen_collator(),
         next2: None,
         updated_at: 0x12345678,
+        ..Default::default()
     };
     write_read_and_assert(collators);
 
