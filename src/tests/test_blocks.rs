@@ -181,6 +181,33 @@ fn test_blockinfo_some_some_none() {
 }
 
 #[test]
+fn test_blockinfo_with_pack() {
+    let mut info = BlockInfo::new();
+    info.set_shard(ShardIdent::with_workchain_id(0x22222222).unwrap());
+    info.set_seq_no(std::u32::MAX - 22).unwrap();
+    info.set_prev_stuff(
+        false,
+        &BlkPrevInfo::Block {
+            prev: ExtBlkRef {
+                end_lt: 1,
+                seq_no: 1000,
+                root_hash: UInt256::from([10;32]),
+                file_hash: UInt256::from([10;32])
+            }
+        }
+    ).unwrap();
+    info.write_pack_info(Some(&PackInfo { 
+        last_seq_no: 1234789234,
+        last_root_hash: UInt256::rand(),
+        last_partially_included: Some(UInt256::rand())
+     })).unwrap();
+    test_blockinfo(info.clone());
+
+    info.write_pack_info(None).unwrap();
+    test_blockinfo(info);
+}
+
+#[test]
 fn test_currency_collection() {
     let mut cc = CurrencyCollection::from_grams(Grams::one());
     cc.set_other(500,     9_000_000+777).unwrap();

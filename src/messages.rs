@@ -11,18 +11,13 @@
 * limitations under the License.
 */
 
-use crate::{GetRepresentationHash, SERDE_OPTS_EMPTY};
 use crate::{
-    blocks::Block,
-    define_HashmapE,
-    error::BlockError,
-    dictionary::hashmapaug::HashmapAugType,
-    merkle_proof::MerkleProof,
-    shard::MASTERCHAIN_ID,
+    blocks::Block, define_HashmapE, dictionary::hashmapaug::HashmapAugType, error, fail, 
+    error::BlockError, merkle_proof::MerkleProof, shard::MASTERCHAIN_ID, 
     types::{AddSub, CurrencyCollection, Grams, Number5, Number9, UnixTime32},
-    Deserializable, Serializable,
-    error, fail, AccountId, BuilderData, Cell, IBitstring, Result,
-    SliceData, UInt256, UsageTree, MAX_DATA_BITS, MAX_REFERENCES_COUNT,
+    AccountId, BuilderData, Cell, CommonMessage, CryptoSignature,
+    Deserializable, GetRepresentationHash, IBitstring, Result, Serializable, ShardIdent, SliceData, 
+    UInt256, UsageTree, ValidatorDescr, MAX_DATA_BITS, MAX_REFERENCES_COUNT, SERDE_OPTS_EMPTY
 };
 use std::{fmt, str::FromStr};
 
@@ -1946,6 +1941,159 @@ impl Deserializable for MsgAddress {
         Ok(())
     }
 }
+
+pub const MSG_PACK_INFO_TAG: u8 = 0x1; // 4 bits
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct MsgPackInfo {
+    pub seqno: u64,
+    pub shard: ShardIdent,
+    pub round: u64,
+    pub gen_utime_ms: u64,
+    pub prev: UInt256,
+    pub prev_2: Option<UInt256>,
+    pub mc_block: u32,
+}
+
+impl Serializable for MsgPackInfo {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_bits(MSG_PACK_INFO_TAG as usize, 4)?;
+        self.seqno.write_to(builder)?;
+        self.shard.write_to(builder)?;
+        self.round.write_to(builder)?;
+        self.gen_utime_ms.write_to(builder)?;
+        self.prev.write_to(builder)?;
+        self.prev_2.write_to(builder)?;
+        self.mc_block.write_to(builder)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for MsgPackInfo {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_int(4)? as u8;
+        if tag != MSG_PACK_INFO_TAG {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: std::any::type_name::<Self>().to_string()
+                }
+            )
+        }
+        self.seqno.read_from(slice)?;
+        self.shard.read_from(slice)?;
+        self.round.read_from(slice)?;
+        self.gen_utime_ms.read_from(slice)?;
+        self.prev.read_from(slice)?;
+        self.prev_2.read_from(slice)?;
+        self.mc_block.read_from(slice)?;
+        Ok(())
+    }
+}
+
+define_HashmapE!(ExtMsgMap, 256, CommonMessage);
+
+pub const MSG_PACK_TAG: u8 = 0x1; // 4 bits
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct MsgPack {
+    pub info: MsgPackInfo,
+    pub messages: ExtMsgMap,
+}
+
+impl Serializable for MsgPack {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_bits(MSG_PACK_TAG as usize, 4)?;
+        self.info.write_to(builder)?;
+        self.messages.write_to(builder)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for MsgPack {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_int(4)? as u8;
+        if tag != MSG_PACK_TAG {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: std::any::type_name::<Self>().to_string()
+                }
+            )
+        }
+        self.info.read_from(slice)?;
+        self.messages.read_from(slice)?;
+        Ok(())
+    }
+}
+
+define_HashmapE!(MsgPackSignatures, 16, CryptoSignature);
+
+pub const MSG_PACK_PROOF_TAG: u8 = 0x1; // 4 bits
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct MsgPackProof {
+    pub proof: MerkleProof,
+    pub signatures: MsgPackSignatures,
+}
+impl MsgPackProof {
+    pub fn new(pack_root: &Cell, signatures: MsgPackSignatures) -> Result<Self> {
+        let usage_tree = UsageTree::with_root(pack_root.clone());
+        let _pack = MsgPack::construct_from_cell(usage_tree.root_cell())?;
+        let proof = MerkleProof::create_by_usage_tree(pack_root, usage_tree)?;
+        Ok(MsgPackProof { proof, signatures, })
+    }
+    pub fn virtualize(&self) -> Result<MsgPack> {
+        self.proof.virtualize()
+    }
+    pub fn check(&self, seqno: u64, hash: &UInt256, validators_list: &[ValidatorDescr]) -> Result<u16> {
+        if hash != &self.proof.hash {
+            fail!("Invalid root hash")
+        }
+        if seqno != self.virtualize()?.info.seqno {
+            fail!("Invalid seqno")
+        }
+
+        let mut valid_signatures = 0;
+        self.signatures.iterate_with_keys(|key: u16, sign| {
+            if let Some(vd) = validators_list.get(key as usize) {
+                if !vd.verify_signature(hash.as_slice(), &sign) {
+                    fail!(BlockError::BadSignature)
+                }
+                valid_signatures += 1;
+            }
+            Ok(true)
+        })?;
+
+        Ok(valid_signatures)
+    }
+}
+impl Serializable for MsgPackProof {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_bits(MSG_PACK_PROOF_TAG as usize, 4)?;
+        builder.checked_append_reference(self.proof.write_to_new_cell()?.into_cell()?)?;
+        self.signatures.write_to(builder)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for MsgPackProof {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_int(4)? as u8;
+        if tag != MSG_PACK_PROOF_TAG {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: std::any::type_name::<Self>().to_string()
+                }
+            )
+        }
+        self.proof.read_from_cell(slice.checked_drain_reference()?)?;
+        self.signatures.read_from(slice)?;
+        Ok(())
+    }
+}
+
 
 #[allow(dead_code)]
 pub fn generate_big_msg() -> Message {

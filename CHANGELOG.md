@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.2
+
+- Added `MsgPack` and related data types
+
 ## Version 1.11.1
 
 - Added data types for new fast finality roles mechanism

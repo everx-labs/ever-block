@@ -143,6 +143,11 @@ fn test_shard_descr_true_fast_finality() {
     let mempool_size = 9;
 
     let mut descr_none = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::None);
+    descr_none.pack_info = Some(PackInfo {
+        last_seq_no: 64443,
+        last_root_hash: UInt256::rand(),
+        last_partially_included: None,
+    });
     descr_none.collators = Some(ShardCollators {
         prev: gen_collator_with_mempool(mempool_size),
         prev2: None,
@@ -154,6 +159,11 @@ fn test_shard_descr_true_fast_finality() {
     });
 
     let mut descr_split = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::Split{split_utime: 0x12345678, interval: 0x87654321});
+    descr_split.pack_info = Some(PackInfo {
+        last_seq_no: 64343443,
+        last_root_hash: UInt256::rand(),
+        last_partially_included: Some(UInt256::rand()),
+    });
     descr_split.collators = Some(ShardCollators {
         prev: gen_collator_with_mempool(mempool_size),
         prev2: None,
@@ -175,11 +185,10 @@ fn test_shard_descr_true_fast_finality() {
         stat: stat.clone(),
     });
 
-    // write_read_and_assert(descr_none);
+    write_read_and_assert(descr_none);
     write_read_and_assert(descr_split);
-    // write_read_and_assert(descr_merge);
+    write_read_and_assert(descr_merge);
 }
-
 
 fn build_mesh_queue_descr() -> ConnectedNwOutDescr {
     ConnectedNwOutDescr {

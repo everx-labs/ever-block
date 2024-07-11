@@ -343,9 +343,7 @@ impl McShardRecord {
                     fees_collected: value_flow.fees_collected,
                     funds_created: value_flow.created,
                     copyleft_rewards: value_flow.copyleft_rewards,
-                    proof_chain: None,
-                    collators: None,
-                    mesh_msg_queues: MeshOutDescr::default(),
+                    ..Default::default()
                 },
                 block_id,
             }
@@ -1750,6 +1748,43 @@ impl Serializable for ConnectedNwOutDescr {
     }
 }
 
+const PACK_INFO_TAG: u8 = 1; // 4 bits
+
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct PackInfo {
+    pub last_seq_no: u64,
+    pub last_root_hash: UInt256,
+    pub last_partially_included: Option<UInt256>, // last included message hash, None if all messages were included
+}
+
+impl Serializable for PackInfo {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        builder.append_bits(PACK_INFO_TAG as usize, 4)?;
+        self.last_seq_no.write_to(builder)?;
+        self.last_root_hash.write_to(builder)?;
+        self.last_partially_included.write_to(builder)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for PackInfo {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        let tag = slice.get_next_int(4)? as u8;
+        if tag != PACK_INFO_TAG {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: std::any::type_name::<Self>().to_string()
+                }
+            )
+        }
+        self.last_seq_no.read_from(slice)?;
+        self.last_root_hash.read_from(slice)?;
+        self.last_partially_included.read_from(slice)?;
+        Ok(())
+    }
+}
+
 // Shard description (header)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ShardDescr {
@@ -1776,6 +1811,7 @@ pub struct ShardDescr {
     pub proof_chain: Option<ProofChain>, // Some when CapWc2WcQueueUpdates is set
     pub collators: Option<ShardCollators>,
     pub mesh_msg_queues: MeshOutDescr,
+    pub pack_info: Option<PackInfo>,
 }
 
 impl ShardDescr {
@@ -1807,6 +1843,7 @@ impl ShardDescr {
             proof_chain: None,
             collators: None,
             mesh_msg_queues: MeshOutDescr::default(),
+            pack_info: None,
         }
     }
     pub fn fsm_equal(&self, other: &Self) -> bool {
@@ -1856,13 +1893,23 @@ const SHARD_IDENT_TAG_C: u8 = 0xc; // 4 bit
 const SHARD_IDENT_TAG_D: u8 = 0xd; // 4 bit // with all previous and proof chain
 const SHARD_IDENT_TAG_E: u8 = 0xe; // 4 bit // with proof chain & collators & base shard blocks, without copyleft
 const SHARD_IDENT_TAG_F: u8 = 0xf; // 4 bit // TAG_E + mesh_msg_queues
+const SHARD_IDENT_TAG_G: u8 = 0x9; // 4 bit // TAG_F + pack_info
 const SHARD_IDENT_TAG_LEN: usize = 4;
+
+const SHARD_IDENT_TAGS: [u8; 7] = [
+    SHARD_IDENT_TAG_A,
+    SHARD_IDENT_TAG_B,
+    SHARD_IDENT_TAG_C,
+    SHARD_IDENT_TAG_D,
+    SHARD_IDENT_TAG_E,
+    SHARD_IDENT_TAG_F,
+    SHARD_IDENT_TAG_G,
+];
 
 impl Deserializable for ShardDescr {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(SHARD_IDENT_TAG_LEN)? as u8;
-        let wrong_tag = !(SHARD_IDENT_TAG_A..=SHARD_IDENT_TAG_F).contains(&tag);
-        if wrong_tag {
+        if !SHARD_IDENT_TAGS.contains(&tag) {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag as u32,
@@ -1920,12 +1967,16 @@ impl Deserializable for ShardDescr {
                 let proof_chain = ProofChain::construct_from(&mut slice1)?;
                 self.proof_chain = Some(proof_chain);
             }
-            SHARD_IDENT_TAG_E | SHARD_IDENT_TAG_F => {
+            SHARD_IDENT_TAG_E | SHARD_IDENT_TAG_F | SHARD_IDENT_TAG_G => {
                 let mut slice1 = SliceData::load_cell(slice.checked_drain_reference()?)?;
                 self.fees_collected.read_from(&mut slice1)?;
                 self.funds_created.read_from(&mut slice1)?;
                 self.proof_chain.read_from(&mut slice1)?;
                 self.collators.read_from(&mut slice1)?;
+                if tag == SHARD_IDENT_TAG_G {
+                    let mut slice2 = SliceData::load_cell(slice1.checked_drain_reference()?)?;
+                    self.pack_info.read_from(&mut slice2)?;
+                }
             }
             _ => ()
         }
@@ -1941,7 +1992,9 @@ impl Serializable for ShardDescr {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
         let mut tag = SHARD_IDENT_TAG_A; // TAG_B is not used at all.
         
-        if !self.mesh_msg_queues.is_empty() {
+        if self.pack_info.is_some() {
+            tag = SHARD_IDENT_TAG_G;
+        } else if !self.mesh_msg_queues.is_empty() {
             tag = SHARD_IDENT_TAG_F;
         } else if self.collators.is_some() {
             tag = SHARD_IDENT_TAG_E;
@@ -1992,12 +2045,17 @@ impl Serializable for ShardDescr {
         self.fees_collected.write_to(&mut child)?;
         self.funds_created.write_to(&mut child)?;
         match tag {
-            SHARD_IDENT_TAG_E | SHARD_IDENT_TAG_F => {
+            SHARD_IDENT_TAG_E | SHARD_IDENT_TAG_F | SHARD_IDENT_TAG_G => {
                 if !self.copyleft_rewards.is_empty() {
                     fail!("copyleft_rewards is not supported with 'collators' or 'mesh_msg_queues'")
                 }
                 self.proof_chain.write_to(&mut child)?;
                 self.collators.write_to(&mut child)?;
+                if tag == SHARD_IDENT_TAG_G {
+                    let mut child2 = BuilderData::new();
+                    self.pack_info.write_to(&mut child2)?;
+                    child.checked_append_reference(child2.into_cell()?)?;
+                }
             }
             SHARD_IDENT_TAG_D => {
                 let proof_chain = self.proof_chain.as_ref()

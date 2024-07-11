@@ -29,7 +29,7 @@ use crate::{
     Deserializable, Serializable,
     error, fail, AccountId, BuilderData, Cell, ExceptionCode, IBitstring,
     RefShardBlocks, Result, SliceData, UInt256,
-    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY
+    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, PackInfo,
 };
 use std::{
     borrow::Cow, cmp::Ordering, fmt::{self, Display, Formatter}, io::{Cursor, Write},
@@ -251,6 +251,7 @@ pub struct BlockInfo {
     master_ref: Option<ChildCell<BlkMasterInfo>>,
     prev_ref: ChildCell<BlkPrevInfo>,
     prev_vert_ref: Option<ChildCell<BlkPrevInfo>>,
+    pack_info: Option<ChildCell<PackInfo>>,
 }
 
 impl Default for BlockInfo {
@@ -280,6 +281,7 @@ impl Default for BlockInfo {
             master_ref: None,
             prev_ref: ChildCell::default(),
             prev_vert_ref: None,
+            pack_info: None,
         }
     }
 }
@@ -439,9 +441,17 @@ impl BlockInfo {
         Ok(())
     }
 
+    pub fn read_pack_info(&self) -> Result<Option<PackInfo>> {
+        self.pack_info.as_ref().map(|mr| mr.read_struct()).transpose()
+    }
+    pub fn write_pack_info(&mut self, value: Option<&PackInfo>) -> Result<()> {
+        self.pack_info = value.map(ChildCell::with_struct).transpose()?;
+        Ok(())
+    }
+
     pub fn read_from_ex(&mut self, slice: &mut SliceData, allow_v2: bool) -> Result<()> {
         let tag = slice.get_next_u32()?;
-        if tag != BLOCK_INFO_TAG_1 && (!allow_v2 || tag != BLOCK_INFO_TAG_2) {
+        if tag != BLOCK_INFO_TAG_1 && (!allow_v2 || (tag != BLOCK_INFO_TAG_2 && tag != BLOCK_INFO_TAG_3)) {
             fail!(
                 BlockError::InvalidConstructorTag {
                     t: tag,
@@ -503,6 +513,12 @@ impl BlockInfo {
             Some(BlkPrevInfo::construct_from_reference(slice)?)
         };
         self.set_vertical_stuff(vert_seqno_incr, vert_seq_no, prev_vert_ref)?;
+
+        if tag == BLOCK_INFO_TAG_3 {
+            self.pack_info.read_from(slice)?;
+        } else {
+            self.pack_info = None
+        }
 
         Ok(())
     }
@@ -1328,6 +1344,7 @@ const BLOCK_TAG_3: u32 = 0x31ef55bb;
 
 const BLOCK_INFO_TAG_1: u32 = 0x9bc7a987;
 const BLOCK_INFO_TAG_2: u32 = 0x9bc7a988;
+const BLOCK_INFO_TAG_3: u32 = 0x9bc7a989;
 
 impl Serializable for BlockInfo {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -1358,10 +1375,12 @@ impl Serializable for BlockInfo {
             byte |= 1;
         }
 
-        let tag = if self.gen_utime_ms_part == 0 {
-            BLOCK_INFO_TAG_1
-        } else {
+        let tag = if self.pack_info.is_some() {
+            BLOCK_INFO_TAG_3
+        } else if self.gen_utime_ms_part != 0 {
             BLOCK_INFO_TAG_2
+        } else {
+            BLOCK_INFO_TAG_1
         };
 
         cell.append_u32(tag)?
@@ -1405,6 +1424,10 @@ impl Serializable for BlockInfo {
         self.prev_ref.write_to(cell)?;
         if let Some(prev_vert_ref) = &self.prev_vert_ref {
             prev_vert_ref.write_to(cell)?;
+        }
+
+        if tag == BLOCK_INFO_TAG_3 {
+            self.pack_info.write_to(cell)?;
         }
 
         Ok(())
