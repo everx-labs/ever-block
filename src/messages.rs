@@ -15,8 +15,8 @@ use crate::{
     blocks::Block, define_HashmapE, dictionary::hashmapaug::HashmapAugType, error, fail, 
     error::BlockError, merkle_proof::MerkleProof, shard::MASTERCHAIN_ID, 
     types::{AddSub, CurrencyCollection, Grams, Number5, Number9, UnixTime32},
-    AccountId, BuilderData, Cell, CommonMessage, CryptoSignature,
-    Deserializable, GetRepresentationHash, IBitstring, Result, Serializable, ShardIdent, SliceData, 
+    AccountId, BuilderData, Cell, CommonMessage, CryptoSignature, Deserializable,
+    GetRepresentationHash, IBitstring, InRefValue, Result, Serializable, ShardIdent, SliceData,
     UInt256, UsageTree, ValidatorDescr, MAX_DATA_BITS, MAX_REFERENCES_COUNT, SERDE_OPTS_EMPTY
 };
 use std::{fmt, str::FromStr};
@@ -1991,7 +1991,7 @@ impl Deserializable for MsgPackInfo {
     }
 }
 
-define_HashmapE!(ExtMsgMap, 256, CommonMessage);
+define_HashmapE!(ExtMsgMap, 256, InRefValue<CommonMessage>);
 
 pub const MSG_PACK_TAG: u8 = 0x1; // 4 bits
 
