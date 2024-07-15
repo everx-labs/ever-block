@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.3
+
+- Fix for external messages dictionary
+
 ## Version 1.11.2
 
 - Added `MsgPack` and related data types

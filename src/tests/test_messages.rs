@@ -405,7 +405,7 @@ fn test_msg_pack() -> Result<()> {
     msg_pack.info.mc_block = 1234;
     for _ in 0..128 {
         let (hash, msg) = create_rnd_external_message();
-        msg_pack.messages.set(&hash, &msg)?;
+        msg_pack.messages.set(&hash, &InRefValue::new(msg))?;
     }
     write_read_and_assert(msg_pack);
 
@@ -447,7 +447,7 @@ fn test_msg_pack_proof() -> Result<()> {
     msg_pack.info.mc_block = 1234;
     for _ in 0..128 {
         let (hash, msg) = create_rnd_external_message();
-        msg_pack.messages.set(&hash, &msg)?;
+        msg_pack.messages.set(&hash, &InRefValue::new(msg))?;
     }
 
 
