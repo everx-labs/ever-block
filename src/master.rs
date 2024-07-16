@@ -24,7 +24,7 @@ use crate::{
     types::{ChildCell, CurrencyCollection, InRefValue},
     validators::{ValidatorInfo, ValidatorsStat}, VarUInteger32,
     CopyleftRewards, Deserializable, Serializable, U15, Augmentation,
-    error, fail, hm_label, AccountId, BuilderData, Cell, IBitstring, Result,
+    error, fail, hm_label, AccountId, BuilderData, Cell, IBitstring, Result, MsgPackId,
     SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, SERDE_OPTS_MEMPOOL_NODES, SliceData, UInt256,
 };
 use std::{collections::HashMap, fmt, ops::Range};
@@ -343,6 +343,7 @@ impl McShardRecord {
                     fees_collected: value_flow.fees_collected,
                     funds_created: value_flow.created,
                     copyleft_rewards: value_flow.copyleft_rewards,
+                    pack_info: info.read_pack_info()?,
                     ..Default::default()
                 },
                 block_id,
@@ -1751,23 +1752,21 @@ impl Serializable for ConnectedNwOutDescr {
 const PACK_INFO_TAG: u8 = 1; // 4 bits
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct PackInfo {
-    pub last_seq_no: u64,
-    pub last_root_hash: UInt256,
+pub struct MsgPackProcessingInfo {
+    pub last_id: MsgPackId,
     pub last_partially_included: Option<UInt256>, // last included message hash, None if all messages were included
 }
 
-impl Serializable for PackInfo {
+impl Serializable for MsgPackProcessingInfo {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_bits(PACK_INFO_TAG as usize, 4)?;
-        self.last_seq_no.write_to(builder)?;
-        self.last_root_hash.write_to(builder)?;
+        self.last_id.write_to(builder)?;
         self.last_partially_included.write_to(builder)?;
         Ok(())
     }
 }
 
-impl Deserializable for PackInfo {
+impl Deserializable for MsgPackProcessingInfo {
     fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
         let tag = slice.get_next_int(4)? as u8;
         if tag != PACK_INFO_TAG {
@@ -1778,8 +1777,7 @@ impl Deserializable for PackInfo {
                 }
             )
         }
-        self.last_seq_no.read_from(slice)?;
-        self.last_root_hash.read_from(slice)?;
+        self.last_id.read_from(slice)?;
         self.last_partially_included.read_from(slice)?;
         Ok(())
     }
@@ -1811,7 +1809,7 @@ pub struct ShardDescr {
     pub proof_chain: Option<ProofChain>, // Some when CapWc2WcQueueUpdates is set
     pub collators: Option<ShardCollators>,
     pub mesh_msg_queues: MeshOutDescr,
-    pub pack_info: Option<PackInfo>,
+    pub pack_info: Option<MsgPackProcessingInfo>,
 }
 
 impl ShardDescr {

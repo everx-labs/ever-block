@@ -143,9 +143,8 @@ fn test_shard_descr_true_fast_finality() {
     let mempool_size = 9;
 
     let mut descr_none = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::None);
-    descr_none.pack_info = Some(PackInfo {
-        last_seq_no: 64443,
-        last_root_hash: UInt256::rand(),
+    descr_none.pack_info = Some(MsgPackProcessingInfo {
+        last_id: MsgPackId::new(ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), 2339488, UInt256::rand()),
         last_partially_included: None,
     });
     descr_none.collators = Some(ShardCollators {
@@ -159,9 +158,8 @@ fn test_shard_descr_true_fast_finality() {
     });
 
     let mut descr_split = ShardDescr::with_params(42, 17, 25, UInt256::from([70; 32]), FutureSplitMerge::Split{split_utime: 0x12345678, interval: 0x87654321});
-    descr_split.pack_info = Some(PackInfo {
-        last_seq_no: 64343443,
-        last_root_hash: UInt256::rand(),
+    descr_split.pack_info = Some(MsgPackProcessingInfo {
+        last_id: MsgPackId::new(ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), 2339488, UInt256::rand()),
         last_partially_included: Some(UInt256::rand()),
     });
     descr_split.collators = Some(ShardCollators {

@@ -32,6 +32,13 @@ impl CommonMessage {
         }
     }
 
+    pub fn withdraw_std(self) -> Result<Message> {
+        match self {
+            Self::Std(msg) => Ok(msg),
+            _ => Err(self.unexpected_variant_error("CommonMessage::Std")),
+        }
+    }
+
     pub fn get_std_mut(&mut self) -> Result<&mut Message> {
         match self {
             Self::Std(msg) => Ok(msg),
