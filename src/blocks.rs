@@ -29,7 +29,7 @@ use crate::{
     Deserializable, Serializable,
     error, fail, AccountId, BuilderData, Cell, ExceptionCode, IBitstring,
     RefShardBlocks, Result, SliceData, UInt256,
-    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, PackInfo,
+    SERDE_OPTS_COMMON_MESSAGE, SERDE_OPTS_EMPTY, MsgPackProcessingInfo,
 };
 use std::{
     borrow::Cow, cmp::Ordering, fmt::{self, Display, Formatter}, io::{Cursor, Write},
@@ -251,7 +251,7 @@ pub struct BlockInfo {
     master_ref: Option<ChildCell<BlkMasterInfo>>,
     prev_ref: ChildCell<BlkPrevInfo>,
     prev_vert_ref: Option<ChildCell<BlkPrevInfo>>,
-    pack_info: Option<ChildCell<PackInfo>>,
+    pack_info: Option<ChildCell<MsgPackProcessingInfo>>,
 }
 
 impl Default for BlockInfo {
@@ -441,10 +441,10 @@ impl BlockInfo {
         Ok(())
     }
 
-    pub fn read_pack_info(&self) -> Result<Option<PackInfo>> {
+    pub fn read_pack_info(&self) -> Result<Option<MsgPackProcessingInfo>> {
         self.pack_info.as_ref().map(|mr| mr.read_struct()).transpose()
     }
-    pub fn write_pack_info(&mut self, value: Option<&PackInfo>) -> Result<()> {
+    pub fn write_pack_info(&mut self, value: Option<&MsgPackProcessingInfo>) -> Result<()> {
         self.pack_info = value.map(ChildCell::with_struct).transpose()?;
         Ok(())
     }

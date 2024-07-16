@@ -20,7 +20,7 @@ use crate::{
     AccountBlock, Message, TickTock, write_read_and_assert,
     bintree::BinTreeType, CommonMessage, Transaction,
     types::{AddSub, Grams}, OutMsg, UsageTree,
-    AccountId, Cell, read_boc,
+    AccountId, Cell, read_boc, MsgPackId,
     read_single_root_boc, MsgEnvelope,
     transactions::tests::{generate_test_shard_account_block, create_test_transaction_set},
 };
@@ -196,9 +196,8 @@ fn test_blockinfo_with_pack() {
             }
         }
     ).unwrap();
-    info.write_pack_info(Some(&PackInfo { 
-        last_seq_no: 1234789234,
-        last_root_hash: UInt256::rand(),
+    info.write_pack_info(Some(&MsgPackProcessingInfo { 
+        last_id: MsgPackId::new(ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), 2339488, UInt256::rand()),
         last_partially_included: Some(UInt256::rand())
      })).unwrap();
     test_blockinfo(info.clone());

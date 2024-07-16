@@ -2094,6 +2094,36 @@ impl Deserializable for MsgPackProof {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct MsgPackId {
+    pub shard: ShardIdent,
+    pub seqno: u64,
+    pub hash: UInt256,
+}
+
+impl MsgPackId {
+    pub fn new(shard: ShardIdent, seqno: u64, hash: UInt256) -> Self {
+        Self { shard, seqno, hash }
+    }
+}
+
+impl Serializable for MsgPackId {
+    fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
+        self.shard.write_to(builder)?;
+        self.seqno.write_to(builder)?;
+        self.hash.write_to(builder)?;
+        Ok(())
+    }
+}
+
+impl Deserializable for MsgPackId {
+    fn read_from(&mut self, slice: &mut SliceData) -> Result<()> {
+        self.shard.read_from(slice)?;
+        self.seqno.read_from(slice)?;
+        self.hash.read_from(slice)?;
+        Ok(())
+    }
+}
 
 #[allow(dead_code)]
 pub fn generate_big_msg() -> Message {
