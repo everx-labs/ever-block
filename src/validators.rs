@@ -19,7 +19,7 @@ use crate::{
     Serializable, Deserializable,
     config_params::CatchainConfig,
     shard::{SHARD_FULL, MASTERCHAIN_ID},
-    fail, error, BuilderData, ByteOrderRead, Cell, Crc32, 
+    fail, error, BuilderData, ByteOrderRead, Cell, Crc32, KeyId,
     IBitstring, Result, sha512_digest, SliceData, UInt256, ShardDescr,
     bls::BLS_PUBLIC_KEY_LEN, MAX_DATA_BITS, ShardIdent, ShardHashes,
     FastFinalityConfig, MEMPOOL_MAX_LEN
@@ -27,7 +27,7 @@ use crate::{
 
 use std::{
     borrow::Cow, cmp::{min, Ordering}, convert::TryInto, io::{Cursor, Write},
-    ops::Range, collections::{HashMap, HashSet},
+    ops::Range, collections::{HashMap, HashSet}, sync::Arc,
 };
 
 /*
@@ -196,6 +196,13 @@ impl ValidatorDescr {
 
     pub fn verify_signature(&self, data: &[u8], signature: &CryptoSignature) -> bool {
         self.public_key.verify_signature(data, signature)
+    }
+
+    pub fn adnl_addr(&self) -> Arc<KeyId> {
+        match &self.adnl_addr {
+            Some(addr) => KeyId::from_data(addr.as_array().clone()),
+            None => self.public_key.pub_key().id().clone()
+        }
     }
 
 }
