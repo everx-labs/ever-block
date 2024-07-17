@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.5
+
+- Add adnl_addr interface for ValidatorDescr
+
 ## Version 1.11.4
 
 - Addons for `MsgPack` and related data types
