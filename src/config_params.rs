@@ -3381,6 +3381,8 @@ pub struct FastFinalityConfig {
     pub collator_range_len: u32,
     pub lost_collator_timeout: u32,
     pub mempool_validators_count: u32,
+    pub mempool_rotated_count: u32, // How many validators are changed beetween sessions.
+                                   // Must be <= mempool_validators_count.
 
     pub unreliability_fine: u16,
     pub unreliability_weak_fading: u16,
@@ -3408,6 +3410,7 @@ impl Default for FastFinalityConfig {
             collator_range_len: 5000,
             lost_collator_timeout: 60,
             mempool_validators_count: 3,
+            mempool_rotated_count: 1,
             unreliability_fine: 100,
             unreliability_weak_fading: 1,
             unreliability_strong_fading: 10,
@@ -3432,6 +3435,7 @@ impl Serializable for FastFinalityConfig {
         self.collator_range_len.write_to(cell)?;
         self.lost_collator_timeout.write_to(cell)?;
         self.mempool_validators_count.write_to(cell)?;
+        self.mempool_rotated_count.write_to(cell)?;
         self.unreliability_fine.write_to(cell)?;
         self.unreliability_weak_fading.write_to(cell)?;
         self.unreliability_strong_fading.write_to(cell)?;
@@ -3456,6 +3460,11 @@ impl Deserializable for FastFinalityConfig {
         self.collator_range_len.read_from(slice)?;
         self.lost_collator_timeout.read_from(slice)?;
         self.mempool_validators_count.read_from(slice)?;
+        self.mempool_rotated_count.read_from(slice)?;
+        if self.mempool_rotated_count > self.mempool_validators_count {
+            fail!(BlockError::InvalidData(
+                "mempool_rotated_count must be less or equal to mempool_validators_count".to_string()))
+        }
         self.unreliability_fine.read_from(slice)?;
         self.unreliability_weak_fading.read_from(slice)?;
         self.unreliability_strong_fading.read_from(slice)?;

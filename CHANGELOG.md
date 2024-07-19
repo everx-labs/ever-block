@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.6
+
+- To function find_validators added the ability to change mempool partially. Added related parameter to FastFinalityConfig
+
 ## Version 1.11.5
 
 - Add adnl_addr interface for ValidatorDescr

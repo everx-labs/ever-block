@@ -344,6 +344,7 @@ fn test_fast_finality_roles() {
                     &ff_config,
                     &black_list,
                     UInt256::rand().as_slice(),
+                    if init { None } else { Some(&collators.current.mempool) },
                 ).unwrap();
                 // println!("find_validator_for_role time: {}micros", now.elapsed().as_micros());
                 total_collator_times[new_collator as usize] += 1;
@@ -450,6 +451,7 @@ fn test_fast_finality_roles_2() -> Result<()> {
             &ff_config,
             &[],
             prev_id.as_slice(),
+            None,
         )?;
 
         let result = crate::CollatorRange {

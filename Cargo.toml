@@ -2,7 +2,7 @@
 build = 'build.rs'
 edition = '2021'
 name = 'ever_block'
-version = '1.11.5'
+version = '1.11.6'
 
 [dependencies]
 aes-ctr = '0.6'
