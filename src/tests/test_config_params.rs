@@ -885,6 +885,7 @@ fn test_fast_finality_config() {
         collator_range_len: 500,
         lost_collator_timeout: 600,
         mempool_validators_count: 5,
+        mempool_rotated_count: 2,
         unreliability_fine: 10,
         unreliability_weak_fading: 67,
         unreliability_strong_fading: 1,

@@ -848,6 +848,8 @@ pub enum FastFinalityRole {
     MessageProducer,
 }
 
+type MempoolSmallVec = smallvec::SmallVec<[u16; MEMPOOL_MAX_LEN]>;
+
 pub fn find_validators(
     shard: &ShardIdent,
     block_range: Range<u32>,
@@ -856,7 +858,8 @@ pub fn find_validators(
     config: &FastFinalityConfig,
     black_list: &[u16],
     salt: &[u8],
-) -> Result<(u16, smallvec::SmallVec<[u16; MEMPOOL_MAX_LEN]>)> {
+    mempool: Option<&[u16]>, // Mempool nodes to partial change, None for full change
+) -> Result<(u16, MempoolSmallVec)> {
 
     fn intersection(range1: &Range<u32>, range2: &Range<u32>) -> u32 {
         if range1.start >= range2.end || range1.end <= range2.start {
@@ -888,13 +891,13 @@ pub fn find_validators(
         fine
     };
 
-        // Instead of deserializing ShardDescr many times we will cache them
-        let mut shards_cache = HashMap::new();
-        shards.iterate_shards(|shard, descr| {
-            shards_cache.insert(shard.clone(), descr.clone());
-            Ok(true)
-        })?;
-        let shards = shards_cache;
+    // Instead of deserializing ShardDescr many times we will cache them
+    let mut shards_cache = HashMap::new();
+    shards.iterate_shards(|shard, descr| {
+        shards_cache.insert(shard.clone(), descr.clone());
+        Ok(true)
+    })?;
+    let shards = shards_cache;
 
     // Calculate indexes for each validator
 
@@ -956,7 +959,7 @@ pub fn find_validators(
     // Choose candidates
     
     let mut black_list = HashSet::<u16>::from_iter(black_list.iter().cloned());
-    let mut get_next = || -> Result<u16> {
+    let get_next = |black_list: &mut HashSet<u16>| -> Result<u16> {
 
         // max index is 100%, min - 0%
         // Choose indexes that are in 0..config.candidates_percentile percent
@@ -993,12 +996,30 @@ pub fn find_validators(
         }
     };
 
-    let collator = get_next()?;
-    let mut mempool = smallvec::SmallVec::<[u16; MEMPOOL_MAX_LEN]>::new();
-    for _ in 0..config.mempool_validators_count {
-        mempool.push(get_next()?);
+    let collator = get_next(&mut black_list)?;
+    let mut new_mempool = MempoolSmallVec::new();
+
+    if let Some(mempool) = mempool {
+        if mempool.len() != config.mempool_validators_count as usize {
+            fail!("Can't change mempool partially - Old mempool size is not equal to the new one")
+        }
+
+        // delete old mempool nodes from the begin, add new nodes to the end
+
+        for i in config.mempool_rotated_count..config.mempool_validators_count {
+            new_mempool.push(mempool[i as usize]);
+            black_list.insert(mempool[i as usize]);
+        }
+        for _ in 0..config.mempool_rotated_count {
+            new_mempool.push(get_next(&mut black_list)?);
+        }
+    } else {
+        for _ in 0..config.mempool_validators_count {
+            new_mempool.push(get_next(&mut black_list)?);
+        }
     }
-    Ok((collator, mempool))
+
+    Ok((collator, new_mempool))
 }
 
 
