@@ -1305,6 +1305,8 @@ pub trait HashmapRemover: HashmapType + Clone + Sized {
     }
     // removes items from hashamp in one pass
     // closure must return decision for item to accept it or to remove it
+    // be careful using it because of serde_opts
+    // better use filter instead
     fn hashmap_filter<F>(&mut self, mut func: F) -> Result<()>
     where F: FnMut(&BuilderData, SliceData) -> Result<HashmapFilterResult> {
         self.hashmap_filter_with_root(|key, data, _root| func(key, data))
@@ -1327,6 +1329,8 @@ pub trait HashmapRemover: HashmapType + Clone + Sized {
     // splits hashmap in one pass with creating new one
     // closure must return decision for item to stay or to move to other hashmap
     // no creation of tree only removing
+    // be careful using it because of serde_opts
+    // better use hashmap_filter_with_split instead
     fn hashmap_filter_split<F>(&mut self, mut func: F) -> Result<Self>
     where F: FnMut(&BuilderData, SliceData) -> Result<HashmapFilterSplitResult> {
         let mut new_map = self.clone();

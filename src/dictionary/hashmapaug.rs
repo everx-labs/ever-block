@@ -15,7 +15,7 @@ use crate::{
     error::BlockError,
     Serializable, Deserializable,
     fail, Result, IBitstring, BuilderData, Cell, SliceData, LabelReader,
-    ExceptionCode, HashmapType, Leaf, HashmapFilterResult, HashmapRemover,
+    ExceptionCode, HashmapType, Leaf,
 };
 use std::cmp::Ordering;
 
@@ -66,10 +66,6 @@ macro_rules! define_HashmapAugE {
                     Ok(true)
                 }).unwrap();
             }
-            #[cfg(test)]
-            pub fn serde_opts(&self) -> u8 {
-                self.opts
-            }
             /// Constructs new HashmapAugE for bit_len keys
             pub fn new() -> Self { Self::default() }
             pub fn with_serde_opts(opts: u8) -> Self {
@@ -108,6 +104,39 @@ macro_rules! define_HashmapAugE {
                     self.extra.calc(&other.extra)?;
                     $crate::HashmapType::hashmap_merge(self, other, key)?;
                 }
+                Ok(())
+            }
+            /// split hashmap by decision function
+            pub fn filter_with_split<F>(&mut self, mut func: F) -> Result<Self>
+            where
+                F: FnMut(&$crate::BuilderData, $x_type, $y_type) -> Result<$crate::HashmapFilterSplitResult>
+            {
+                let serde_opts = $crate::HashmapAugType::serde_opts(self);
+                $crate::HashmapRemover::hashmap_filter_split(self, |key, mut value| {
+                    let aug = $crate::Deserializable::construct_from_with_opts(&mut value, serde_opts)?;
+                    let value = $crate::Deserializable::construct_from_with_opts(&mut value, serde_opts)?;
+                    func(key, value, aug)
+                })
+            }
+
+            // removes items from hashamp in one pass
+            // closure must return decision for item to accept it or to remove it
+            pub fn filter<F>(&mut self, mut func: F) -> Result<()>
+            where
+                F: FnMut(&$crate::BuilderData, $x_type, $y_type) -> Result<$crate::HashmapFilterResult>
+            {
+                let serde_opts = $crate::HashmapAugType::serde_opts(self);
+                $crate::HashmapRemover::hashmap_filter(self, |key, mut value| {
+                    let aug = $crate::Deserializable::construct_from_with_opts(&mut value, serde_opts)?;
+                    let value = $crate::Deserializable::construct_from_with_opts(&mut value, serde_opts)?;
+                    func(key, value, aug)
+                })
+            }
+
+            pub fn del(&mut self, key: &$k_type) -> Result<()> {
+                let serde_opts = $crate::HashmapAugType::serde_opts(self);
+                let key = $crate::Serializable::write_to_bitstring_with_opts(key, serde_opts)?;
+                $crate::HashmapRemover::hashmap_remove(self, key, &mut 0)?;
                 Ok(())
             }
         }
@@ -827,28 +856,6 @@ pub trait HashmapAugType<
             _ => fail!(BlockError::InvalidData("label_length > bit_len".to_string()))
         }
         Ok(None)
-    }
-}
-
-// TODO: move private operations here
-// trait HashmapAugOperations {}
-
-pub trait HashmapAugRemover<
-    K: Deserializable + Serializable,
-    X: Deserializable + Serializable + Augmentation<Y>,
-    Y: Augmentable
->: HashmapAugType<K, X, Y> + HashmapRemover {
-    fn filter<F: FnMut(K, X, Y) -> Result<HashmapFilterResult>> (&mut self, mut func: F) -> Result<()> {
-        let opts = self.serde_opts();
-        Self::hashmap_filter(self, |key, mut aug_val| {
-            let key = K::construct_from_cell_with_opts(key.clone().into_cell()?, opts)?;
-            let (val, aug) = Self::value_aug(opts, &mut aug_val)?;
-            func(key, val, aug)
-        })
-    }
-    fn del(&mut self, key: &Y) -> Result<()> {
-        self.remove(key.write_to_bitstring_with_opts(self.serde_opts())?)?;
-        Ok(())
     }
 }
 

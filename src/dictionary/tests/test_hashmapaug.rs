@@ -15,7 +15,11 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::vec_init_then_push)]
 use super::*;
-use crate::{error, define_HashmapAugE, IBitstring, hm_label, HashmapSubtree, AddSub, Grams};
+use crate::{
+    define_HashmapAugE,
+    error, hm_label,
+    AddSub, Grams, HashmapFilterResult, HashmapSubtree, IBitstring,
+};
 use std::fmt;
 
 #[derive(Eq, Clone, Debug, Default, PartialEq)]
@@ -271,7 +275,6 @@ fn test_hashmap_merge() {
 }
 
 define_HashmapAugE!(SimpleAugDict, 8, u8, u8, GramStruct);
-impl HashmapAugRemover<u8, u8, GramStruct> for SimpleAugDict {}
 
 impl Augmentation<GramStruct> for u8 {
     fn aug(&self) -> Result<GramStruct> {
@@ -403,6 +406,7 @@ fn test_filter_simple() {
     tree_2.set(&0b11110000u8, &0b11110000, &GramStruct::with_value(2)).unwrap();
     tree_2.set(&0b11001100u8, &0b11001101, &GramStruct::with_value(3)).unwrap();
     tree_1.filter(|key, _value, _aug| { 
+        let key = key.data()[0];
         if key == 0b11001100u8 { 
            Ok(HashmapFilterResult::Remove)
         } else {
@@ -460,6 +464,7 @@ fn test_filter() {
     assert!(diff_vec == correct_dif);
 
     tree_1.filter(|key, _value, _aug| { 
+        let key = key.data()[0];
         if key % 8 == 0 { 
            Ok(HashmapFilterResult::Remove)
         } else {
@@ -544,7 +549,6 @@ fn test_traverse() {
 }
 
 define_HashmapAugE!(MyHashmap, 8, u8, u8, u8);
-impl HashmapAugRemover<u8, u8, u8> for MyHashmap {}
 
 impl Augmentation<u8> for u8 {
     fn aug(&self) -> Result<u8> {
@@ -580,6 +584,7 @@ fn check_hashmap_fill_and_filter(mut keys: Vec<u8>, remove: &[u8], stop: usize, 
     // println!("{:#.3}", queue1.data().cloned().unwrap());
 
     queue1.filter(|key, _val, _aug| {
+        let key = key.data()[0];
         if cancel < keys.len() && keys[cancel] == key {
             Ok(HashmapFilterResult::Cancel)
         } else if stop < keys.len() && keys[stop] == key {

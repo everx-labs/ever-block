@@ -428,22 +428,13 @@ impl ConfigParams {
         (prev_block_lt / self.get_lt_align() + 1) * self.get_lt_align()
     }
     pub fn has_capabilities(&self) -> bool {
-        match self.get_global_version() {
-            Ok(gb) => gb.capabilities != 0,
-            Err(_) => false
-        }
+        self.get_global_version().map_or(false, |gb| gb.capabilities != 0)
     }
     pub fn has_capability(&self, capability: GlobalCapabilities) -> bool {
-        match self.get_global_version() {
-            Ok(gb) => gb.has_capability(capability),
-            Err(_) => false
-        }
+        self.get_global_version().map_or(false, |gb| gb.has_capability(capability))
     }
     pub fn capabilities(&self) -> u64 {
-        match self.get_global_version() {
-            Ok(gb) => gb.capabilities,
-            Err(_) => 0
-        }
+        self.get_global_version().map_or(0, |gb| gb.capabilities)
     }
     pub fn global_version(&self) -> u32 {
         self.get_global_version().map_or(0, |gb| gb.version)
