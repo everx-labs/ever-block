@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.8
+
+- Add filtering interfaces to hashmaps for encapsulation of serde_opts
+
 ## Version 1.11.7
 
 - Changed serialization of ShardStateUnsplit: now it is possible to serialize/deserialize pack info without SERDE_OPTS_COMMON_MESSAGE enabled.
