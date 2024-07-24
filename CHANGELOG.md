@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.7
+
+- Changed serialization of ShardStateUnsplit: now it is possible to serialize/deserialize pack info without SERDE_OPTS_COMMON_MESSAGE enabled.
+
 ## Version 1.11.6
 
 - To function find_validators added the ability to change mempool partially. Added related parameter to FastFinalityConfig

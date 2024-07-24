@@ -721,9 +721,9 @@ impl Deserializable for ShardState {
 
 const SHARD_STATE_SPLIT_PFX: u32 = 0x5f327da5;
 const SHARD_STATE_UNSPLIT_PFX: u32 = 0x9023afe2;
-const SHARD_STATE_UNSPLIT_PFX_2: u32 = 0x9023aeee;
-const SHARD_STATE_UNSPLIT_PFX_3: u32 = 0x9023afff;
-const SHARD_STATE_UNSPLIT_PFX_4: u32 = 0x9023aaaa;
+const SHARD_STATE_UNSPLIT_PFX_2: u32 = 0x9023aeee; // gen_time_tail_ms and ref_shard_blocks
+const SHARD_STATE_UNSPLIT_PFX_3: u32 = 0x9023afff; // 2 + pack_info
+const SHARD_STATE_UNSPLIT_PFX_4: u32 = 0x9023aaaa; // 3 + common_message
 
 impl Serializable for ShardState {
     fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
@@ -1200,12 +1200,12 @@ impl Deserializable for ShardStateUnsplit {
         self.seq_no.read_from(cell)?;
         self.vert_seq_no.read_from(cell)?;
         self.gen_time.read_from(cell)?;
-        if tag == SHARD_STATE_UNSPLIT_PFX_2 || tag == SHARD_STATE_UNSPLIT_PFX_3 {
+        if tag == SHARD_STATE_UNSPLIT_PFX_2 || tag == SHARD_STATE_UNSPLIT_PFX_3 || tag == SHARD_STATE_UNSPLIT_PFX_4 {
             self.gen_time_tail_ms.read_from(cell)?;
         }
         self.gen_lt.read_from(cell)?;
         self.min_ref_mc_seqno.read_from(cell)?;
-        let opts = if tag == SHARD_STATE_UNSPLIT_PFX_3 || tag == SHARD_STATE_UNSPLIT_PFX_4 {
+        let opts = if tag == SHARD_STATE_UNSPLIT_PFX_4 {
             SERDE_OPTS_COMMON_MESSAGE
         } else {
             SERDE_OPTS_EMPTY
@@ -1221,7 +1221,7 @@ impl Deserializable for ShardStateUnsplit {
         self.total_validator_fees.read_from(slice1)?;
         self.libraries.read_from(slice1)?;
         self.master_ref.read_from(slice1)?;
-        if tag == SHARD_STATE_UNSPLIT_PFX_4 {
+        if tag == SHARD_STATE_UNSPLIT_PFX_3 || tag == SHARD_STATE_UNSPLIT_PFX_4 {
             self.pack_info.read_from(slice1)?;
         } else {
             self.pack_info = None;
@@ -1246,12 +1246,9 @@ impl Deserializable for ShardStateUnsplit {
 impl Serializable for ShardStateUnsplit {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         let common_message = self.out_msg_queues_info.serde_opts() & SERDE_OPTS_COMMON_MESSAGE != 0;
-        let tag = if self.pack_info.is_some() {
-            if !common_message {
-                fail!("'pack_info' field must be present only with enabled SERDE_OPTS_COMMON_MESSAGE");
-            }
+        let tag = if common_message {
             SHARD_STATE_UNSPLIT_PFX_4
-        } else if common_message {
+        } else if self.pack_info.is_some() {
             SHARD_STATE_UNSPLIT_PFX_3
         } else if self.ref_shard_blocks.is_some() || self.gen_time_tail_ms != 0 {
             SHARD_STATE_UNSPLIT_PFX_2
@@ -1264,7 +1261,7 @@ impl Serializable for ShardStateUnsplit {
         self.seq_no.write_to(builder)?;
         self.vert_seq_no.write_to(builder)?;
         self.gen_time.write_to(builder)?;
-        if tag == SHARD_STATE_UNSPLIT_PFX_2 || tag == SHARD_STATE_UNSPLIT_PFX_3 {
+        if tag == SHARD_STATE_UNSPLIT_PFX_2 || tag == SHARD_STATE_UNSPLIT_PFX_3 || tag == SHARD_STATE_UNSPLIT_PFX_4 {
             self.gen_time_tail_ms.write_to(builder)?;
         }
         self.gen_lt.write_to(builder)?;
@@ -1281,7 +1278,7 @@ impl Serializable for ShardStateUnsplit {
         self.total_validator_fees.write_to(&mut b2)?;
         self.libraries.write_to(&mut b2)?;
         self.master_ref.write_to(&mut b2)?;
-        if tag == SHARD_STATE_UNSPLIT_PFX_4 {
+        if tag == SHARD_STATE_UNSPLIT_PFX_4 || tag == SHARD_STATE_UNSPLIT_PFX_3 {
             self.pack_info.write_to(&mut b2)?;
         }
         builder.checked_append_reference(b2.into_cell()?)?;
