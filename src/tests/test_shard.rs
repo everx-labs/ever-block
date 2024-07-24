@@ -13,7 +13,7 @@
 #![allow(clippy::inconsistent_digit_grouping, clippy::unusual_byte_groupings)]
 use crate::{
     read_single_root_boc, write_read_and_assert_with_opts, AccountIdPrefixFull, BlockIdExt, 
-    InRefValue, MeshMsgQueuesInfo, SliceData, HashmapType, MsgPackId,
+    InRefValue, MeshMsgQueuesInfo, SliceData, HashmapType, MsgPackId, write_read_and_assert,
 };
 use super::*;
 
@@ -115,7 +115,6 @@ fn test_shard_state_unsplit_serialize() {
 
 #[test]
 fn test_shard_state_unsplit_serialize_fast_finality() {
-    use crate::write_read_and_assert;
 
     
     let in_path = "src/tests/data/shard_state.boc";
@@ -200,14 +199,18 @@ fn test_shard_state_unsplit_serialize_pack() {
             *ss.shard_mut() = ShardIdent::with_tagged_prefix(0, SHARD_FULL).unwrap();
             ss.write_custom(None).unwrap();
 
-            let local = ss.read_out_msg_queue_info().unwrap();
-            let mesh = MeshMsgQueuesInfo::default();
-            ss.write_out_msg_queues_info(local, mesh).unwrap();
-
             ss.write_pack_info(Some(&MsgPackProcessingInfo { 
                 last_id: MsgPackId::new(ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), 2339488, UInt256::rand()),
                 last_partially_included: Some(UInt256::rand()),
             })).unwrap();
+
+            write_read_and_assert(ss.clone());
+
+            let local = ss.read_out_msg_queue_info().unwrap();
+            let mut mesh = MeshMsgQueuesInfo::default();
+            mesh.set(&123, &InRefValue(local.clone())).unwrap();
+            ss.set_gen_lt(100500);
+            ss.write_out_msg_queues_info(local, mesh).unwrap();
 
             write_read_and_assert_with_opts(ss, SERDE_OPTS_COMMON_MESSAGE).unwrap();
         },
