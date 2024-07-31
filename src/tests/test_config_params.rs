@@ -906,3 +906,24 @@ fn test_fast_finality_config() {
     let config2 = FastFinalityConfig::construct_from_cell(cell).unwrap();
     assert_eq!(config, config2);
 }
+
+#[test]
+fn test_smft_config() {
+    let config = SmftParams {
+        min_forwarding_neighbours_count: 10,
+        max_forwarding_neighbours_count: 100,
+        min_far_neighbours_count: 7,
+        max_far_neighbours_count: 20,
+        min_block_sync_period_ms: 100,
+        max_block_sync_period_ms: 300,
+        min_far_neighbours_sync_period_ms: 1000,
+        max_far_neighbours_sync_period_ms: 2000,
+        far_neighbours_resync_period_ms: 500,
+        block_sync_lifetime_period_ms: 15000,
+        block_lifetime_period_ms: 20000,
+        verification_obligation_cutoff: 35,
+    };
+    let cell = config.write_to_new_cell().unwrap().into_cell().unwrap();
+    let config2 = SmftParams::construct_from_cell(cell).unwrap();
+    assert_eq!(config, config2);
+}

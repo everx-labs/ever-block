@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.9
+
+- SMFT config parameters
+
 ## Version 1.11.8
 
 - Add filtering interfaces to hashmaps for encapsulation of serde_opts

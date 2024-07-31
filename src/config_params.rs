@@ -363,6 +363,14 @@ impl ConfigParams {
             _ => fail!("no fast finality config")
         }
     }
+
+    // ConfigParam62(SmftConfig)
+    pub fn smft_parameters(&self) -> Result<SmftParams> {
+        match self.config(62)? {
+            Some(ConfigParamEnum::ConfigParam62(param)) => Ok(param),
+            _ => fail!("smft parameters not found in config")
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -577,6 +585,7 @@ pub enum ConfigParamEnum {
     ConfigParam44(SuspendedAddresses),
     ConfigParam58(MeshConfig),
     ConfigParam61(FastFinalityConfig),
+    ConfigParam62(SmftParams),
     ConfigParamAny(u32, SliceData),
 }
 
@@ -639,6 +648,7 @@ impl ConfigParamEnum {
             44 => { read_config!(ConfigParam44, SuspendedAddresses, slice) },
             58 => { read_config!(ConfigParam58, MeshConfig, slice) },
             61 => { read_config!(ConfigParam61, FastFinalityConfig, slice) },
+            62 => { read_config!(ConfigParam62, SmftParams, slice) },
             index => Ok(ConfigParamEnum::ConfigParamAny(index, slice.clone())),
         }
     }
@@ -687,6 +697,7 @@ impl ConfigParamEnum {
             ConfigParamEnum::ConfigParam44(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(44)},
             ConfigParamEnum::ConfigParam58(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(58)},
             ConfigParamEnum::ConfigParam61(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(61)},
+            ConfigParamEnum::ConfigParam62(ref c) => { cell.checked_append_reference(c.serialize()?)?; Ok(62)},
             ConfigParamEnum::ConfigParamAny(index, slice) => { 
                 cell.checked_append_reference(slice.clone().into_cell())?; 
                 Ok(*index)
@@ -3470,6 +3481,112 @@ impl Deserializable for FastFinalityConfig {
         self.busyness_msgpool_fine.read_from(slice)?;
         self.busyness_weight.read_from(slice)?;
         self.candidates_percentile.read_from(slice)?;
+        Ok(())
+    }
+}
+
+///
+/// ConfigParam 62;
+///
+
+const SMFT_PARAMS_TAG: u8 = 0x1;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SmftParams {
+    pub min_forwarding_neighbours_count: u32,
+    pub max_forwarding_neighbours_count: u32,
+    pub min_far_neighbours_count: u32,
+    pub max_far_neighbours_count: u32,
+    pub min_block_sync_period_ms: u32,
+    pub max_block_sync_period_ms: u32,
+    pub min_far_neighbours_sync_period_ms: u32,
+    pub max_far_neighbours_sync_period_ms: u32,
+    pub far_neighbours_resync_period_ms: u32,
+    pub block_sync_lifetime_period_ms: u32,
+    pub block_lifetime_period_ms: u32,
+    pub verification_obligation_cutoff: u32,
+}
+
+impl SmftParams {
+    pub const fn new() -> Self {
+        Self {
+            min_forwarding_neighbours_count: 5,
+            max_forwarding_neighbours_count: 32,
+            min_far_neighbours_count: 2,
+            max_far_neighbours_count: 5,
+            min_block_sync_period_ms: 300,
+            max_block_sync_period_ms: 600,
+            min_far_neighbours_sync_period_ms: 1000,
+            max_far_neighbours_sync_period_ms: 2000,
+            far_neighbours_resync_period_ms: 1000,
+            block_sync_lifetime_period_ms: 10000,
+            block_lifetime_period_ms: 240000,
+            verification_obligation_cutoff: 20,
+        }
+    }
+}
+
+impl Default for SmftParams {
+    fn default() -> SmftParams {
+        Self::new()
+    }
+}
+
+impl Deserializable for SmftParams {
+    fn construct_from(slice: &mut SliceData) -> Result<Self> {
+        let tag = slice.get_next_byte()?;
+        if tag != SMFT_PARAMS_TAG {
+            fail!(
+                BlockError::InvalidConstructorTag {
+                    t: tag as u32,
+                    s: std::any::type_name::<Self>().to_string()
+                }
+            )
+        }
+        let min_forwarding_neighbours_count = Deserializable::construct_from(slice)?;
+        let max_forwarding_neighbours_count = Deserializable::construct_from(slice)?;
+        let min_far_neighbours_count = Deserializable::construct_from(slice)?;
+        let max_far_neighbours_count = Deserializable::construct_from(slice)?;
+        let min_block_sync_period_ms = Deserializable::construct_from(slice)?;
+        let max_block_sync_period_ms = Deserializable::construct_from(slice)?;
+        let min_far_neighbours_sync_period_ms = Deserializable::construct_from(slice)?;
+        let max_far_neighbours_sync_period_ms = Deserializable::construct_from(slice)?;
+        let far_neighbours_resync_period_ms = Deserializable::construct_from(slice)?;
+        let block_sync_lifetime_period_ms = Deserializable::construct_from(slice)?;
+        let block_lifetime_period_ms = Deserializable::construct_from(slice)?;
+        let verification_obligation_cutoff = Deserializable::construct_from(slice)?;
+
+        Ok(Self {
+            min_forwarding_neighbours_count,
+            max_forwarding_neighbours_count,
+            min_far_neighbours_count,
+            max_far_neighbours_count,
+            min_block_sync_period_ms,
+            max_block_sync_period_ms,
+            min_far_neighbours_sync_period_ms,
+            max_far_neighbours_sync_period_ms,
+            far_neighbours_resync_period_ms,
+            block_sync_lifetime_period_ms,
+            block_lifetime_period_ms,
+            verification_obligation_cutoff,
+        })
+    }
+}
+
+impl Serializable for SmftParams {
+    fn write_to(&self, cell: &mut BuilderData) -> Result<()> {
+        SMFT_PARAMS_TAG.write_to(cell)?; // tag
+        self.min_forwarding_neighbours_count.write_to(cell)?;
+        self.max_forwarding_neighbours_count.write_to(cell)?;
+        self.min_far_neighbours_count.write_to(cell)?;
+        self.max_far_neighbours_count.write_to(cell)?;
+        self.min_block_sync_period_ms.write_to(cell)?;
+        self.max_block_sync_period_ms.write_to(cell)?;
+        self.min_far_neighbours_sync_period_ms.write_to(cell)?;
+        self.max_far_neighbours_sync_period_ms.write_to(cell)?;
+        self.far_neighbours_resync_period_ms.write_to(cell)?;
+        self.block_sync_lifetime_period_ms.write_to(cell)?;
+        self.block_lifetime_period_ms.write_to(cell)?;
+        self.verification_obligation_cutoff.write_to(cell)?;
         Ok(())
     }
 }
