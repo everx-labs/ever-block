@@ -12,22 +12,27 @@
 */
 
 use crate::{
-    define_HashmapE,
+    bls::BLS_PUBLIC_KEY_LEN,
+    config_params::CatchainConfig,
+    define_HashmapE, error,
     error::BlockError,
+    fail, sha512_digest,
+    shard::{MASTERCHAIN_ID, SHARD_FULL},
     signature::{CryptoSignature, SigPubKey},
     types::{Number16, UnixTime32},
-    Serializable, Deserializable,
-    config_params::CatchainConfig,
-    shard::{SHARD_FULL, MASTERCHAIN_ID},
-    fail, error, BuilderData, ByteOrderRead, Cell, Crc32, KeyId,
-    IBitstring, Result, sha512_digest, SliceData, UInt256, ShardDescr,
-    bls::BLS_PUBLIC_KEY_LEN, MAX_DATA_BITS, ShardIdent, ShardHashes,
-    FastFinalityConfig, MEMPOOL_MAX_LEN
+    BuilderData, ByteOrderRead, Cell, Crc32, Deserializable, FastFinalityConfig, IBitstring, KeyId,
+    Result, Serializable, ShardDescr, ShardHashes, ShardIdent, SliceData, UInt256,
+    MAX_DATA_BITS, MEMPOOL_MAX_LEN,
 };
 
 use std::{
-    borrow::Cow, cmp::{min, Ordering}, convert::TryInto, io::{Cursor, Write},
-    ops::Range, collections::{HashMap, HashSet}, sync::Arc,
+    borrow::Cow,
+    cmp::{min, Ordering},
+    collections::{HashMap, HashSet},
+    convert::TryInto,
+    io::{Cursor, Write},
+    ops::Range,
+    sync::Arc,
 };
 
 /*
@@ -147,11 +152,14 @@ validator#93
 
 ///
 /// ValidatorDescr
+/// Has two keys: public_key and adnl_addr
+/// Before first election adnl_addr is None and it is calculated from the public key
 /// 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct ValidatorDescr {
-    pub public_key: SigPubKey, 
     pub weight: u64,
+    pub public_key: SigPubKey,
+    /// before first election this filed is None
     pub adnl_addr: Option<UInt256>,
     pub mc_seq_no_since: u32,
     pub bls_public_key: Option<[u8; BLS_PUBLIC_KEY_LEN]>,
@@ -198,13 +206,13 @@ impl ValidatorDescr {
         self.public_key.verify_signature(data, signature)
     }
 
+    /// returns adnl_addr or calc it from the public key
     pub fn adnl_addr(&self) -> Arc<KeyId> {
         match &self.adnl_addr {
-            Some(addr) => KeyId::from_data(addr.as_array().clone()),
+            Some(addr) => KeyId::from_data(*addr.as_array()),
             None => self.public_key.pub_key().id().clone()
         }
     }
-
 }
 
 const VALIDATOR_DESC_TAG: u8 = 0x53;
@@ -870,20 +878,19 @@ pub fn find_validators(
     }
 
     let calc_busyness_fine_for_shard = |shard: &ShardDescr, desired_range: &Range<u32>, validator: u16| -> u32 {
-        let mut fine = 0 as u32;
+        let mut fine = 0u32;
         if let Some(collators) = shard.collators.as_ref() {
-            for range in [Some(&collators.current), Some(&collators.next), collators.next2.as_ref()] { 
-                if let Some(range) = range {
-                    let relative_range = range.start.saturating_sub(shard.seq_no)..
-                        range.finish.saturating_sub(shard.seq_no);
-                    if validator == range.collator {
-                        fine += intersection(&desired_range, &relative_range) * config.busyness_collator_fine as u32;
-                    }
-                    for i in &range.mempool {
-                        if validator == *i {
-                            fine += intersection(&desired_range, &relative_range) * config.busyness_msgpool_fine as u32;
-                            break;
-                        }
+            let ranges = [Some(&collators.current), Some(&collators.next), collators.next2.as_ref()];
+            for range in ranges.into_iter().flatten() { 
+                let relative_range = range.start.saturating_sub(shard.seq_no)..
+                    range.finish.saturating_sub(shard.seq_no);
+                if validator == range.collator {
+                    fine += intersection(desired_range, &relative_range) * config.busyness_collator_fine as u32;
+                }
+                for i in &range.mempool {
+                    if validator == *i {
+                        fine += intersection(desired_range, &relative_range) * config.busyness_msgpool_fine as u32;
+                        break;
                     }
                 }
             }
@@ -940,7 +947,7 @@ pub fn find_validators(
         }
 
         // Busyness index
-        let mut busyness = 0 as u32;
+        let mut busyness = 0u32;
         let relative_block_range = block_range.start - cur_seqno..block_range.end - cur_seqno;
         for (other_shard, other_descr) in shards.iter() {
             if !other_shard.intersect_with(shard) {
@@ -971,7 +978,7 @@ pub fn find_validators(
                 max_index = max_index.max(*index);
             }
         }
-        let trashhold = (max_index - min_index) * config.candidates_percentile as u32;
+        let trashhold = max_index.saturating_sub(min_index) * (config.candidates_percentile as u32);
         let mut candidates = vec!();
         for (validator, index) in &indexes {
             if !black_list.contains(validator) && (index - min_index) * 100 <= trashhold {
@@ -986,10 +993,7 @@ pub fn find_validators(
             black_list.insert(candidates[0]);
             return Ok(candidates[0])
         } else {
-            let mut s = 0;
-            for i in 0..salt.len() {
-                s ^= salt[i];
-            }
+            let s = salt.iter().fold(0, |acc, x| acc ^ *x);
             let i = s as usize % candidates.len();
             black_list.insert(candidates[i]);
             return Ok(candidates[i])

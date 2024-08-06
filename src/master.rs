@@ -1392,8 +1392,8 @@ pub const MEMPOOL_MAX_LEN: usize = 9;
 pub struct CollatorRange {
     pub collator: u16,
     pub mempool: smallvec::SmallVec<[u16; MEMPOOL_MAX_LEN]>,
-    pub start: u32,
-    pub finish: u32,
+    pub start: u32, // first block number which to collate
+    pub finish: u32, // last block number which to callate
 }
 
 impl CollatorRange {
