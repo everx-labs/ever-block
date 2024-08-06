@@ -323,6 +323,14 @@ pub trait Deserializable: Default {
             Err(err) => fail!("failed to read from file {}: {}", file_name.as_ref().display(), err)
         }
     }
+    /// adapter for builder without refs
+    fn construct_from_bitstring(builder: BuilderData) -> Result<Self> {
+        if builder.references_used() != 0 {
+            fail!("references are used in bitstring")
+        } else {
+            Self::construct_from(&mut SliceData::load_bitstring(builder)?)
+        }
+    }
     /// adapter for tests
     fn construct_from_base64(string: &str) -> Result<Self> {
         let bytes = base64_decode(string)?;

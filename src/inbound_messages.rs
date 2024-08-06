@@ -165,6 +165,9 @@ impl InMsg {
     ) -> InMsg {
         InMsg::External(InMsgExternal::with_cells(msg_cell, tr_cell))
     }
+    pub fn is_external(&self) -> bool {
+        matches!(self, InMsg::External(_))
+    }
     /// Create IHR
     pub fn ihr(
         msg_cell: ChildCell<CommonMessage>,

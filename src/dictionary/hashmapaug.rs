@@ -722,9 +722,10 @@ pub trait HashmapAugType<
         result
     }
     // Slices the edge and put new leaf
+    #[allow(clippy::too_many_arguments)]
     fn slice_edge(
         &self,
-        mut slice: SliceData, // leftover data after label reading - we don't know if it is lead or fork
+        mut slice: SliceData, // leftover data after label reading - we don't know if it is leaf or fork
         mut label: SliceData, // label of the leftover
         prefix: SliceData,    // label for new fork
         bit_len: usize,       // total length of key on this level

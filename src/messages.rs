@@ -2098,7 +2098,7 @@ impl Deserializable for MsgPackProof {
 pub struct MsgPackId {
     pub shard: ShardIdent,
     pub seqno: u64,
-    pub hash: UInt256,
+    pub hash: UInt256, // hash of root cell with ExtMsgMap
 }
 
 impl MsgPackId {
