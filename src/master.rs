@@ -1753,6 +1753,7 @@ const PACK_INFO_TAG: u8 = 1; // 4 bits
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct MsgPackProcessingInfo {
+    pub round: u64,
     pub last_id: MsgPackId,
     pub last_partially_included: Option<UInt256>, // last included message hash, None if all messages were included
 }
@@ -1760,6 +1761,7 @@ pub struct MsgPackProcessingInfo {
 impl Serializable for MsgPackProcessingInfo {
     fn write_to(&self, builder: &mut BuilderData) -> Result<()> {
         builder.append_bits(PACK_INFO_TAG as usize, 4)?;
+        self.round.write_to(builder)?;
         self.last_id.write_to(builder)?;
         self.last_partially_included.write_to(builder)?;
         Ok(())
@@ -1777,6 +1779,7 @@ impl Deserializable for MsgPackProcessingInfo {
                 }
             )
         }
+        self.round.read_from(slice)?;
         self.last_id.read_from(slice)?;
         self.last_partially_included.read_from(slice)?;
         Ok(())

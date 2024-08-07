@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.11
+
+- Add round to MsgPackProcessingInfo
+
 ## Version 1.11.10
 
 - Add construct_from_bitstring adapter
