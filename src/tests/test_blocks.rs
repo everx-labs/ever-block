@@ -197,9 +197,14 @@ fn test_blockinfo_with_pack() {
         }
     ).unwrap();
     info.write_pack_info(Some(&MsgPackProcessingInfo { 
-        last_id: MsgPackId::new(ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(), 2339488, UInt256::rand()),
+        round: 2456789,
+        last_id: MsgPackId {
+            shard: ShardIdent::with_tagged_prefix(0, 0x4000_0000_0000_0000_u64).unwrap(),
+            seqno: 2339488,
+            hash: UInt256::rand()
+        },
         last_partially_included: Some(UInt256::rand())
-     })).unwrap();
+    })).unwrap();
     test_blockinfo(info.clone());
 
     info.write_pack_info(None).unwrap();
