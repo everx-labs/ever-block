@@ -346,6 +346,11 @@ fn test_fast_finality_roles() {
                     UInt256::rand().as_slice(),
                     if init { None } else { Some(&collators.current.mempool) },
                 ).unwrap();
+
+                assert!(!new_mp.contains(&new_collator));
+                assert!(new_mp[0] != new_mp[1]);
+                assert!(new_mp[1] != new_mp[2]);
+                assert!(new_mp[2] != new_mp[0]);
                 // println!("find_validator_for_role time: {}micros", now.elapsed().as_micros());
                 total_collator_times[new_collator as usize] += 1;
                 collators.current.collator = new_collator;

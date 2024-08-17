@@ -965,7 +965,6 @@ pub fn find_validators(
 
     // Choose candidates
     
-    let mut black_list = HashSet::<u16>::from_iter(black_list.iter().cloned());
     let get_next = |black_list: &mut HashSet<u16>| -> Result<u16> {
 
         // max index is 100%, min - 0%
@@ -1000,7 +999,7 @@ pub fn find_validators(
         }
     };
 
-    let collator = get_next(&mut black_list)?;
+    let mut black_list = HashSet::<u16>::from_iter(black_list.iter().cloned());
     let mut new_mempool = MempoolSmallVec::new();
 
     if let Some(mempool) = mempool {
@@ -1008,12 +1007,17 @@ pub fn find_validators(
             fail!("Can't change mempool partially - Old mempool size is not equal to the new one")
         }
 
-        // delete old mempool nodes from the begin, add new nodes to the end
-
+        // delete old mempool nodes from the begin
         for i in config.mempool_rotated_count..config.mempool_validators_count {
             new_mempool.push(mempool[i as usize]);
             black_list.insert(mempool[i as usize]);
         }
+    }
+
+    let collator = get_next(&mut black_list)?;
+
+    if mempool.is_some() {
+        // add new nodes to the end
         for _ in 0..config.mempool_rotated_count {
             new_mempool.push(get_next(&mut black_list)?);
         }
