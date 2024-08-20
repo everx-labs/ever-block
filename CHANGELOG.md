@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.13
+
+- SMFT configuration parameters
+
 ## Version 1.11.12
 
 - Fixed partial change of mempool nodes. There was possible to get collator and mempool node with same number.

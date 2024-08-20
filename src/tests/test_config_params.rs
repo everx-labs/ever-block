@@ -921,7 +921,16 @@ fn test_smft_config() {
         far_neighbours_resync_period_ms: 500,
         block_sync_lifetime_period_ms: 15000,
         block_lifetime_period_ms: 20000,
-        verification_obligation_cutoff: 35,
+        verification_obligation_cutoff_numerator: 35,
+        verification_obligation_cutoff_denominator: 100,
+        delivery_cutoff_numerator: 51,
+        delivery_cutoff_denominator: 100,
+        manual_candidate_loading_delay_ms: 2000,
+        mc_allowed_force_delivery_delay_ms: 3000,
+        mc_force_delivery_duplication_factor_numerator: 3,
+        mc_force_delivery_duplication_factor_denominator: 2,
+        mc_max_delivery_waiting_timeout_ms: 2000,
+        use_debug_bls_keys: true,
     };
     let cell = config.write_to_new_cell().unwrap().into_cell().unwrap();
     let config2 = SmftParams::construct_from_cell(cell).unwrap();

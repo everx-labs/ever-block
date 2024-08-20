@@ -3489,7 +3489,7 @@ impl Deserializable for FastFinalityConfig {
 /// ConfigParam 62;
 ///
 
-const SMFT_PARAMS_TAG: u8 = 0x1;
+const SMFT_PARAMS_TAG: u8 = 0x2;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SmftParams {
     pub min_forwarding_neighbours_count: u32,
@@ -3503,7 +3503,16 @@ pub struct SmftParams {
     pub far_neighbours_resync_period_ms: u32,
     pub block_sync_lifetime_period_ms: u32,
     pub block_lifetime_period_ms: u32,
-    pub verification_obligation_cutoff: u32,
+    pub verification_obligation_cutoff_numerator: u32,
+    pub verification_obligation_cutoff_denominator: u32,
+    pub delivery_cutoff_numerator: u32,
+    pub delivery_cutoff_denominator: u32,
+    pub manual_candidate_loading_delay_ms: u32,
+    pub mc_allowed_force_delivery_delay_ms: u32,
+    pub mc_force_delivery_duplication_factor_numerator: u32,
+    pub mc_force_delivery_duplication_factor_denominator: u32,
+    pub mc_max_delivery_waiting_timeout_ms: u32, //0 - shadow mode
+    pub use_debug_bls_keys: bool, //true by default for insecure SMFT testing
 }
 
 impl SmftParams {
@@ -3520,7 +3529,16 @@ impl SmftParams {
             far_neighbours_resync_period_ms: 1000,
             block_sync_lifetime_period_ms: 10000,
             block_lifetime_period_ms: 240000,
-            verification_obligation_cutoff: 20,
+            verification_obligation_cutoff_numerator: 1,
+            verification_obligation_cutoff_denominator: 5,
+            delivery_cutoff_numerator: 1,
+            delivery_cutoff_denominator: 2,
+            manual_candidate_loading_delay_ms: 4000,
+            mc_allowed_force_delivery_delay_ms: 4000,
+            mc_force_delivery_duplication_factor_numerator: 3,
+            mc_force_delivery_duplication_factor_denominator: 1,
+            mc_max_delivery_waiting_timeout_ms: 0, //by default network is working in shadow SMFT mode
+            use_debug_bls_keys: true,
         }
     }
 }
@@ -3553,7 +3571,16 @@ impl Deserializable for SmftParams {
         let far_neighbours_resync_period_ms = Deserializable::construct_from(slice)?;
         let block_sync_lifetime_period_ms = Deserializable::construct_from(slice)?;
         let block_lifetime_period_ms = Deserializable::construct_from(slice)?;
-        let verification_obligation_cutoff = Deserializable::construct_from(slice)?;
+        let verification_obligation_cutoff_numerator = Deserializable::construct_from(slice)?;
+        let verification_obligation_cutoff_denominator = Deserializable::construct_from(slice)?;
+        let delivery_cutoff_numerator = Deserializable::construct_from(slice)?;
+        let delivery_cutoff_denominator = Deserializable::construct_from(slice)?;
+        let manual_candidate_loading_delay_ms = Deserializable::construct_from(slice)?;
+        let mc_allowed_force_delivery_delay_ms = Deserializable::construct_from(slice)?;
+        let mc_force_delivery_duplication_factor_numerator = Deserializable::construct_from(slice)?;
+        let mc_force_delivery_duplication_factor_denominator = Deserializable::construct_from(slice)?;
+        let mc_max_delivery_waiting_timeout_ms = Deserializable::construct_from(slice)?;
+        let use_debug_bls_keys = Deserializable::construct_from(slice)?;
 
         Ok(Self {
             min_forwarding_neighbours_count,
@@ -3567,7 +3594,16 @@ impl Deserializable for SmftParams {
             far_neighbours_resync_period_ms,
             block_sync_lifetime_period_ms,
             block_lifetime_period_ms,
-            verification_obligation_cutoff,
+            verification_obligation_cutoff_numerator,
+            verification_obligation_cutoff_denominator,
+            delivery_cutoff_numerator,
+            delivery_cutoff_denominator,
+            manual_candidate_loading_delay_ms,
+            mc_allowed_force_delivery_delay_ms,
+            mc_force_delivery_duplication_factor_numerator,
+            mc_force_delivery_duplication_factor_denominator,
+            mc_max_delivery_waiting_timeout_ms,
+            use_debug_bls_keys,
         })
     }
 }
@@ -3586,7 +3622,16 @@ impl Serializable for SmftParams {
         self.far_neighbours_resync_period_ms.write_to(cell)?;
         self.block_sync_lifetime_period_ms.write_to(cell)?;
         self.block_lifetime_period_ms.write_to(cell)?;
-        self.verification_obligation_cutoff.write_to(cell)?;
+        self.verification_obligation_cutoff_numerator.write_to(cell)?;
+        self.verification_obligation_cutoff_denominator.write_to(cell)?;
+        self.delivery_cutoff_numerator.write_to(cell)?;
+        self.delivery_cutoff_denominator.write_to(cell)?;
+        self.manual_candidate_loading_delay_ms.write_to(cell)?;
+        self.mc_allowed_force_delivery_delay_ms.write_to(cell)?;
+        self.mc_force_delivery_duplication_factor_numerator.write_to(cell)?;
+        self.mc_force_delivery_duplication_factor_denominator.write_to(cell)?;
+        self.mc_max_delivery_waiting_timeout_ms.write_to(cell)?;
+        self.use_debug_bls_keys.write_to(cell)?;
         Ok(())
     }
 }
