@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.14
+
+- Fixed ser/deserialization of `AccountBlock` with mesh transactions
+
 ## Version 1.11.13
 
 - SMFT configuration parameters

@@ -129,6 +129,37 @@ fn test_account_block_serde_mesh() {
     assert!(matches!(write_read_and_assert_with_opts(account_block, SERDE_OPTS_EMPTY), Err(_)));
 }
 
+
+
+#[test]
+fn test_account_block_serde_max() {
+
+    std::env::set_var("RUST_BACKTRACE", "full");
+
+    let opts = SERDE_OPTS_COMMON_MESSAGE; // it can't be SERDE_OPTS_EMPTY because of mesh
+    let address = AccountId::from([1; 32]);
+    let mut acc_block = AccountBlock::with_address_and_opts(address.clone(), opts);
+    let s_status_update = HashUpdate::default();
+    acc_block.write_state_update(&s_status_update).unwrap();
+
+    let mut transaction = generate_transaction_with_opts(address, opts);
+    let mut fees = CurrencyCollection::with_grams(u64::MAX);
+    fees.set_other(1, 111).unwrap();
+    transaction.set_total_fees(fees);
+    acc_block.add_transaction(&transaction).unwrap();
+
+    transaction.set_logical_time(transaction.logical_time() + 1);
+    acc_block.add_transaction(&transaction).unwrap();
+
+    let mut acc_block = write_read_and_assert_with_opts(acc_block, opts).unwrap();
+
+    acc_block.add_mesh_transaction(42, &transaction).unwrap();
+    acc_block.add_mesh_transaction(43, &transaction).unwrap();
+    write_read_and_assert_with_opts(acc_block, opts).unwrap();
+}
+
+
+
 #[test]
 fn test_shard_account_blocks_serde_empty() {
     let shard_block = generate_test_shard_account_block(SERDE_OPTS_EMPTY);

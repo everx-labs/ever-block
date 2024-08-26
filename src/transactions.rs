@@ -1963,10 +1963,14 @@ impl Serializable for AccountBlock {
 
         cell.append_bits(tag, 4)?;
         self.account_addr.write_to(cell)?;
-        self.transactions.write_hashmap_root(cell)?;
+        if tag == ACCOUNT_BLOCK_TAG_2 {
+            self.transactions.write_with_opts(cell, opts)?;
+        } else {
+            self.transactions.write_hashmap_root(cell)?;
+        }
         self.state_update.write_to(cell)?;
         if tag == ACCOUNT_BLOCK_TAG_2 {
-            self.mesh_transactions.write_hashmap_root(cell)?;
+            self.mesh_transactions.write_with_opts(cell, opts)?;
         }
         Ok(())
     }
@@ -1988,16 +1992,20 @@ impl Deserializable for AccountBlock {
         }
         self.account_addr.read_from(slice)?;
 
-        let mut trs = Transactions::with_serde_opts(opts);
-        trs.read_hashmap_root(slice)?;
-        self.transactions = trs;
+        if tag == ACCOUNT_BLOCK_TAG_2 {
+            self.transactions.read_from_with_opts(slice, opts)?;
+        } else {
+            let mut trs = Transactions::with_serde_opts(opts);
+            trs.read_hashmap_root(slice)?;
+            self.transactions = trs;
+        }
 
         self.state_update.read_from(slice)?;
 
         if tag == ACCOUNT_BLOCK_TAG_2 {
-            let mut mtrs = MeshTransactions::with_serde_opts(SERDE_OPTS_COMMON_MESSAGE);
-            mtrs.read_hashmap_root(slice)?;
-            self.mesh_transactions = mtrs;
+            self.mesh_transactions.read_from_with_opts(slice, opts)?;
+        } else if opts == SERDE_OPTS_COMMON_MESSAGE {
+            self.mesh_transactions = MeshTransactions::with_serde_opts(SERDE_OPTS_COMMON_MESSAGE);
         }
 
         Ok(())

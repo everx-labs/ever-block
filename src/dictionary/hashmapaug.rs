@@ -304,6 +304,10 @@ macro_rules! define_HashmapAugE {
                     opts,
                 })
             }
+            fn read_from_with_opts(&mut self, slice: &mut SliceData, _opts: u8) -> Result<()> {
+                *self = Self::construct_from_with_opts(slice, _opts)?;
+                Ok(())
+            }
         }
 
         impl fmt::Display for $varname {
