@@ -158,28 +158,37 @@ impl MerkleProof {
             merkle_depth 
         };
 
-        let mut proof_cell = BuilderData::from_cell(cell)?;
+        let data = smallvec::SmallVec::from_slice(cell.data());
+        let mut proof_cell = BuilderData::with_raw(data, cell.bit_length())?;
+        proof_cell.set_type(cell.cell_type());
         let n = cell.references_count();
         for i in 0..n {
-            let child = cell.reference(i)?;
-            let child_repr_hash = child.repr_hash();
+            let child_repr_hash = cell.reference_repr_hash(i)?;
+
             let proof_child = if let Some(c) = done_cells.get(&child_repr_hash) {
                 c.clone()
             } else if is_include_subtree(&child_repr_hash) {
-                child
-            } else if child.references_count() == 0 {
-                done_cells.insert(child_repr_hash, child.clone());
-                child
+                cell.reference(i)?
             } else if is_include(&child_repr_hash) {
-                MerkleProof::create_raw(&child, is_include, is_include_subtree, child_merkle_depth, pruned_branches, done_cells)?
+                Self::create_raw(&cell.reference(i)?, is_include, is_include_subtree, 
+                    child_merkle_depth, pruned_branches, done_cells)?
             } else {
-                let pbc = MerkleUpdate::make_pruned_branch_cell(&child, child_merkle_depth)?;
+                let pbc = if cell.level() == 0 && cell.cell_type() == CellType::Ordinary {
+                    // If current cell is ordinary and has zero level - child cell
+                    // is ordinary and zero level too. So it is need only hash and depth 
+                    // to make pruned branch cell (no need to load child cell)
+                    println!("make_pruned_branch_cell_by_hash");
+                    MerkleUpdate::make_pruned_branch_cell_by_hash(
+                        &child_repr_hash, cell.reference_repr_depth(i)?, child_merkle_depth)?
+                } else {
+                    MerkleUpdate::make_pruned_branch_cell(&cell.reference(i)?, child_merkle_depth)?
+                };
                 if let Some(pruned_branches) = pruned_branches.as_mut() {
                     pruned_branches.insert(child_repr_hash);
                 }
                 pbc.into_cell()?
             };
-            proof_cell.replace_reference_cell(i, proof_child);
+            proof_cell.checked_append_reference(proof_child)?;
         }
 
         let proof_cell = proof_cell.into_cell()?;

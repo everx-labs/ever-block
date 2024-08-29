@@ -63,13 +63,13 @@ fn test_merkle_proof1() {
 
     assert_eq!(&proof.hash.as_slice(), &root.repr_hash().as_slice());
 
-    assert_eq!(proof.proof.level(), 0);
+    assert_eq!(proof.proof.level(), 1);
     let ref0 = &proof.proof.reference(0).unwrap();
     assert_eq!(ref0.cell_type(), CellType::Ordinary);
     assert_eq!(ref0.level(), 0);
     let ref1 = &proof.proof.reference(1).unwrap();
-    assert_eq!(ref1.cell_type(), CellType::Ordinary);
-    assert_eq!(ref1.level(), 0);
+    assert_eq!(ref1.cell_type(), CellType::PrunedBranch);
+    assert_eq!(ref1.level(), 1);
 
     let proof_root = proof.write_to_new_cell().unwrap();
     let proof2: MerkleProof = MerkleProof::construct_from_cell(proof_root.into_cell().unwrap()).unwrap();
@@ -618,26 +618,26 @@ pruned_001      c6
     // println!("proof 2\n {}", tree);
     assert_eq!(tree,
 "Merkle proof   l: 000   bits: 280   refs: 1   data: 03fc5004bc31fd26d8fe7c1bafc45490fa28d5ea7a0dc52e8079317fff57bbbba80004
-hashes: e558f9b117c1d121b684ea621d48ae8f76fc88180db64e31ab498df2ddc1f58b
+hashes: e4ae22ed3e06bd796b5bd450c6843669b9eba4c1a1d3d9f6725bbeef4536e271
 depths: 5
  └─Merkle proof   l: 001   bits: 280   refs: 1   data: 036b663d94d562c0682bd6a8be41c639b6e52f87c20ef5776795e4ad7fdbcf04610003
-   hashes: fc5004bc31fd26d8fe7c1bafc45490fa28d5ea7a0dc52e8079317fff57bbbba8 97b1a3e2d4e46e5a34e1e911e00e2cd8ffc7af1a9feab866a348925cdec35d09
+   hashes: fc5004bc31fd26d8fe7c1bafc45490fa28d5ea7a0dc52e8079317fff57bbbba8 b05852923a85880d85a6fe6769241e0a529200b61829b1aeeb5b584233d1fbff
    depths: 4 4
    └─Ordinary   l: 011   bits: 8   refs: 2   data: 01
-     hashes: 6b663d94d562c0682bd6a8be41c639b6e52f87c20ef5776795e4ad7fdbcf0461 69b89defd3511d324ba0045d5e367328767d9e7879eefee2997eb6d324f7bb26 ffb998ab6a9e8071338e26504249d0b81059ed72a47398ccdf113a872a50f467
+     hashes: 6b663d94d562c0682bd6a8be41c639b6e52f87c20ef5776795e4ad7fdbcf0461 69b89defd3511d324ba0045d5e367328767d9e7879eefee2997eb6d324f7bb26 61d3e69357372022d099e3b2926bb7692d1cc0461912a2ca3e57a7a880dc2f6d
      depths: 3 3 3
-     ├─Pruned branch   l: 001   bits: 288   refs: 0   data: 010148a9bccff3f4284647e46cef7422ab53f73e51f96ca1b61e56a7dbd70f57f91b0001
-     │ hashes: 48a9bccff3f4284647e46cef7422ab53f73e51f96ca1b61e56a7dbd70f57f91b 9cc5685a89369c2eab2d5d1ae7d5075539dda819dfa60559869d3b1eee53d400
-     │ depths: 1 0
+     ├─Pruned branch   l: 011   bits: 560   refs: 0   data: 010348a9bccff3f4284647e46cef7422ab53f73e51f96ca1b61e56a7dbd70f57f91b9cc5685a89369c2eab2d5d1ae7d5075539dda819dfa60559869d3b1eee53d40000010000
+     │ hashes: 48a9bccff3f4284647e46cef7422ab53f73e51f96ca1b61e56a7dbd70f57f91b 9cc5685a89369c2eab2d5d1ae7d5075539dda819dfa60559869d3b1eee53d400 75886b76cecf4242e0fb1579905b1b68e9e8d4c5802f8799910cfac9a66c8363
+     │ depths: 1 0 0
      └─Ordinary   l: 010   bits: 24   refs: 2   data: 060606
-       hashes: 874b71a722fcf50bed19d9635177d6ca5482b560cdd62bed6c6ff8f1e61efe68 d094944cc127ab3032393d74331f5ed0615e51914e056b850afae5f465e01f22
+       hashes: 874b71a722fcf50bed19d9635177d6ca5482b560cdd62bed6c6ff8f1e61efe68 8b86e04f03cb3ac31dff013eef8c39d9e8c729bb0f73deff96f34115110751d0
        depths: 2 2
-       ├─Ordinary   l: 000   bits: 24   refs: 1   data: 030303
-       │ hashes: 093fed1748edf1bbb14e25dbbae22e8015c021831ccdc9e2427e145e24aac8c1
-       │ depths: 1
-       │ └─Ordinary   l: 000   bits: 24   refs: 0   data: 010101
-       │   hashes: 78b55d6113eba6bc4ae107b4442afa416b6bc9709b3146657e358e68fa994c34
-       │   depths: 0
+       ├─Ordinary   l: 010   bits: 24   refs: 1   data: 030303
+       │ hashes: 093fed1748edf1bbb14e25dbbae22e8015c021831ccdc9e2427e145e24aac8c1 cba811a64f95abacf23fa29a98d99399d849ff7c8522cbb2d140f917988c1ae2
+       │ depths: 1 1
+       │ └─Pruned branch   l: 010   bits: 288   refs: 0   data: 010278b55d6113eba6bc4ae107b4442afa416b6bc9709b3146657e358e68fa994c340000
+       │   hashes: 78b55d6113eba6bc4ae107b4442afa416b6bc9709b3146657e358e68fa994c34 99cca996c8108a2288327990fe93e19e5c8c1d80c942645f1b5f8d9a967b8a1f
+       │   depths: 0 0
        └─Pruned branch   l: 010   bits: 288   refs: 0   data: 0102b82404f6e84b041b25e452b30da10f01437dfd34efbba8b5772e4bc427df01df0001
          hashes: b82404f6e84b041b25e452b30da10f01437dfd34efbba8b5772e4bc427df01df 76e25eb9c2e42ba849c900812b41b31bd3fa9f7588468f75a7c3d8fa3b766dce
          depths: 1 0");
