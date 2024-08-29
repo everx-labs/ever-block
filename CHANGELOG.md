@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.15
+
+- Optimized Merkle proof creation ( less cell loading)
+- Cell refactoring
+
 ## Version 1.11.14
 
 - Fixed ser/deserialization of `AccountBlock` with mesh transactions

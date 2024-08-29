@@ -532,8 +532,7 @@ impl MerkleUpdate {
         }
     }
 
-    fn add_one_hash(cell: &Cell, depth: u8) -> Result<LevelMask> {
-        let mask = cell.level_mask().mask();
+    fn add_one_hash(mask: u8, depth: u8) -> Result<LevelMask> {
         if depth > 2 { 
             fail!(BlockError::InvalidArg("depth".to_string()))
         } else if mask & (1 << depth) != 0 {
@@ -549,7 +548,7 @@ impl MerkleUpdate {
     pub(crate) fn make_pruned_branch_cell(cell: &Cell, merkle_depth: u8) -> Result<BuilderData> {
 
         let mut result = BuilderData::new();
-        let level_mask = Self::add_one_hash(cell, merkle_depth)?;
+        let level_mask = Self::add_one_hash(cell.level_mask().mask(), merkle_depth)?;
         result.set_type(CellType::PrunedBranch);
         result.append_u8(u8::from(CellType::PrunedBranch))?;
         result.append_u8(level_mask.mask())?;
@@ -559,6 +558,22 @@ impl MerkleUpdate {
         for depth in cell.depths() {
             result.append_u16(depth)?;
         }
+        Ok(result)
+    }
+
+    pub(crate) fn make_pruned_branch_cell_by_hash(
+        repr_hash: &UInt256,
+        repr_depth: u16,
+        merkle_depth: u8
+    ) -> Result<BuilderData> {
+
+        let mut result = BuilderData::new();
+        let level_mask = Self::add_one_hash(0, merkle_depth)?;
+        result.set_type(CellType::PrunedBranch);
+        result.append_u8(u8::from(CellType::PrunedBranch))?;
+        result.append_u8(level_mask.mask())?;
+        result.append_raw(repr_hash.as_slice(), repr_hash.as_slice().len() * 8)?;
+        result.append_u16(repr_depth)?;
         Ok(result)
     }
 
