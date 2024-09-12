@@ -177,7 +177,6 @@ impl MerkleProof {
                     // If current cell is ordinary and has zero level - child cell
                     // is ordinary and zero level too. So it is need only hash and depth 
                     // to make pruned branch cell (no need to load child cell)
-                    println!("make_pruned_branch_cell_by_hash");
                     MerkleUpdate::make_pruned_branch_cell_by_hash(
                         &child_repr_hash, cell.reference_repr_depth(i)?, child_merkle_depth)?
                 } else {
