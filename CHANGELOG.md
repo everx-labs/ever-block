@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.16
+
+- Deleted unnecessary debug print
+
 ## Version 1.11.15
 
 - Optimized Merkle proof creation ( less cell loading)
