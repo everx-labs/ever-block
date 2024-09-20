@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.17
+
+- Added methods McBlockExtra::validators_stat, McBlockExtra::validators_stat_mut and McBlockExtra::set_validators_stat
+
 ## Version 1.11.16
 
 - Deleted unnecessary debug print

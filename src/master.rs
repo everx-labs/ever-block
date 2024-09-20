@@ -524,6 +524,18 @@ impl McBlockExtra {
     pub fn serde_opts(&self) -> u8 {
         self.serde_opts
     }
+
+    pub fn validators_stat(&self) -> &ValidatorsStat {
+        &self.validators_stat
+    }
+
+    pub fn validators_stat_mut(&mut self) -> &mut ValidatorsStat {
+        &mut self.validators_stat
+    }
+
+    pub fn set_validators_stat(&mut self, stat: ValidatorsStat) {
+        self.validators_stat = stat;
+    }
 }
 
 const MC_BLOCK_EXTRA_TAG : u16 = 0xCCA5;   // Original struct.
