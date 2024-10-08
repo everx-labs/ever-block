@@ -930,12 +930,12 @@ pub fn find_validators(
         let mut cur_seqno = 0;
         if descr.collators.is_some() {
             if let Some(descr2) = descr2 {
-                let f1 = descr.collators()?.stat.get(validator)? as u32;
-                let f2 = descr2.collators()?.stat.get(validator)? as u32;
+                let f1 = descr.collators()?.stat.get(validator).unwrap_or(0) as u32;
+                let f2 = descr2.collators()?.stat.get(validator).unwrap_or(0) as u32;
                 familiarity = (f1 + f2) / 2 * config.familiarity_weight as u32;
                 cur_seqno = descr.seq_no.max(descr2.seq_no);
             } else {
-                familiarity = descr.collators()?.stat.get(validator)? as u32 *
+                familiarity = descr.collators()?.stat.get(validator).unwrap_or(0) as u32 *
                     config.familiarity_weight as u32;
                 cur_seqno = descr.seq_no;
             }
