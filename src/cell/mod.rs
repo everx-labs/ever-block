@@ -195,10 +195,6 @@ impl fmt::Display for CellType {
 pub trait CellImpl: Sync + Send {
     fn data(&self) -> &[u8];
     fn raw_data(&self) -> Result<&[u8]>;
-    #[deprecated]
-    fn cell_data(&self) -> &CellData {
-        unimplemented!();
-    }
     fn bit_length(&self) -> usize;
     fn references_count(&self) -> usize;
     fn reference(&self, index: usize) -> Result<Cell>;
@@ -1677,10 +1673,6 @@ impl CellImpl for DataCell {
         Ok(self.cell_data.raw_data())
     }
 
-    fn cell_data(&self) -> &CellData {
-        &self.cell_data
-    }
-
     fn bit_length(&self) -> usize {
         self.cell_data.bit_length()
     }
@@ -1761,10 +1753,6 @@ impl CellImpl for UsageCell {
         self.cell.raw_data()
     }
 
-    fn cell_data(&self) -> &CellData {
-        &self.cell.cell_data()
-    }
-
     fn bit_length(&self) -> usize {
         self.cell.bit_length()
     }
@@ -1831,10 +1819,6 @@ impl CellImpl for VirtualCell {
 
     fn raw_data(&self) -> Result<&[u8]> {
         fail!("Virtual cell doesn't support raw_data()");
-    }
-
-    fn cell_data(&self) -> &CellData {
-        &self.cell.cell_data()
     }
 
     fn bit_length(&self) -> usize {

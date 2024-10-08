@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.19
+
+- Deleted deprecated method CellImpl::cell_data
+
 ## Version 1.11.18
 
 - Fixed bug in the find_validators function when the number of validators in the new set was increased.
