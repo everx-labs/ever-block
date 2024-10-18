@@ -222,6 +222,9 @@ fn test_tree_of_cells_serialization_deserialization() -> Result<()> {
             let roots_restored = BocReader::new().read(&mut Cursor::new(&data))?.roots;
             assert_eq!(root, roots_restored[0].clone());
 
+            let root_only = read_boc_root(&data)?;
+            assert_eq!(root.data(), root_only.storage());
+
             let roots_restored_2 = BocReader::new().read_inmem(Arc::new(data))?.roots;
             assert_eq!(root, roots_restored_2[0].clone());
         }
@@ -423,8 +426,11 @@ fn test_real_ever_boc2() -> Result<()> {
         Some(rr.header.ref_size),
         Some(rr.header.offset_size)
     )?;
-    BocReader::new().read(&mut Cursor::new(&bytes)).expect("Error deserialising BOC");
+    let rr = BocReader::new().read(&mut Cursor::new(&bytes)).expect("Error deserialising BOC");
     assert_eq!(orig_bytes.len(), bytes.len());
+
+    let root_only = read_boc_root(&bytes)?;
+    assert_eq!(root_only.storage(), rr.roots[0].data());
 
     Ok(())
 }
@@ -690,10 +696,16 @@ fn test_boc_write_iterative() -> Status {
     Ok(())
 }
 
-fn test_bad_boc(boc: Vec<u8>) {
+fn test_bad_boc(boc: Vec<u8>, read_root: bool) {
     match BocReader::new().read(&mut std::io::Cursor::new(&boc)) {
         Ok(_) => panic!("BocReader::new().read must panic"),
         Err(e) => println!("{:?}", e),
+    }
+    if read_root {
+        match BocReader::new().read_root(&boc) {
+            Ok(_) => panic!("BocReader::new().read_root must panic"),
+            Err(e) => println!("{:?}", e),
+        }
     }
     match BocReader::new().read_inmem(Arc::new(boc)) {
         Ok(_) => panic!("BocReader::new().read_inmem must panic"),
@@ -712,13 +724,13 @@ fn test_bad_boc_1() {
     bb.extend_from_slice(&0u32.to_be_bytes()); // absent count
     bb.push(0); // tot_cells_size
 
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
 fn test_bad_boc_2() {
     let bb = base64_decode("aP9l8wIGAAAAAAAAAABo8w==").unwrap();
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
@@ -732,13 +744,13 @@ fn test_bad_boc_3() {
     bb.extend_from_slice(&0_u32.to_be_bytes()); // absent count
     bb.push(0); // tot_cells_size
 
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
 fn test_bad_boc_4() {
     let bb = base64_decode("te6ccjEHBwIAEO6ccjAHBw0AAAAAJgAAAAEvAAAAAAEv8PDw8Cpk/wsAAAAAAAAAAAAAAAAAAv+s/8M=").unwrap();
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
@@ -754,38 +766,38 @@ fn test_bad_boc_5() {
         8, // d1 <-- exotic cell
         0, // d2 <-- empty data
     ];
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
 fn test_bad_boc_6() {
     let bb = base64_decode("te6ccgEBBAEBIQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").unwrap();
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
 fn test_bad_boc_7() {
     let bb = base64_decode("te6ccgEBAwEABgAAAAAAAAAAAAAAAAAAAAAA").unwrap();
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
 fn test_bad_boc_8() {
     // 6GB allocation
     let bb = base64_decode("te6ccnQG+1d+m1sBAAEBAVsAAAaIm/YAGG4Anp6enhhuAJ6enp4A/yWGmwEBAQAABoib9gAYbgCenp76AKoBMAQlKv8=").unwrap();
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
 fn test_bad_boc_9() {
     let bb = hex::decode("b5ee9c72010101000002080065").unwrap();
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
 fn test_bad_boc_10() {
     let bb = base64_decode("aP9l8wEBAgEAKQP/QQABSEgBAgAo//8A/wAo//8AAAAAAwAAAAMXeuR65P//////AP////8AAAADAAAAA+Q=").unwrap();
-    test_bad_boc(bb);
+    test_bad_boc(bb, true);
 }
 
 #[test]
@@ -793,7 +805,7 @@ fn test_bad_boc_11() {
     std::env::set_var("RUST_BACKTRACE", "full");
 
     let bb = base64_decode("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").unwrap();
-    test_bad_boc(bb);
+    test_bad_boc(bb, false);
 }
 
 #[test]

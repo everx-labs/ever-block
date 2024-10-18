@@ -20,9 +20,7 @@ use std::{
 };
 
 use crate::{
-    cell::{self, Cell, DataCell, SHA256_SIZE, DEPTH_SIZE, MAX_DATA_BYTES, MAX_SAFE_DEPTH},
-    ByteOrderRead, UInt256, Result, Status, fail, error, MAX_REFERENCES_COUNT, full_len, CellType, 
-    MAX_BIG_DATA_BYTES, CellImpl, crc32_digest, Crc32,
+    cell::{self, Cell, DataCell, DEPTH_SIZE, MAX_DATA_BYTES, MAX_SAFE_DEPTH, SHA256_SIZE}, crc32_digest, error, fail, full_len, ByteOrderRead, CellData, CellImpl, CellType, Crc32, Result, SliceData, Status, UInt256, MAX_BIG_DATA_BYTES, MAX_REFERENCES_COUNT
 };
 use smallvec::SmallVec;
 
@@ -738,6 +736,11 @@ pub fn read_single_root_boc(data: impl AsRef<[u8]>) -> Result<Cell> {
     read_boc(data)?.withdraw_single_root()
 }
 
+pub fn read_boc_root(data: impl AsRef<[u8]>) -> Result<SliceData> {
+    let (_header, slice) = BocReader::new().read_root(data.as_ref())?;
+    Ok(slice)
+}
+
 impl<'a> BocReader<'a> {
     pub fn new() -> Self { Self::default() }
 
@@ -977,6 +980,64 @@ impl<'a> BocReader<'a> {
             roots, 
             header, 
         })
+    }
+
+    // Reads only boc header and root cell data, without references and root hashes resolving.
+    // The function doesn't check boc correctness and integrity!
+    fn read_root(&mut self, data: &[u8]) -> Result<(BocHeader, SliceData)> {
+        let mut src = Cursor::new(data);
+
+        // Read header
+        let header = self.read_header(&mut src)?;
+        Self::precheck_cells_tree_len(&header, src.position(), data.len() as u64, false)?;
+        if header.roots_count != 1 {
+            fail!("Invalid boc: expected 1 root, found {}", header.roots_count);
+        }
+
+        // Deteremine root index
+        let root_index = if header.magic == BOC_GENERIC_TAG {
+            header.roots_indexes[0] as usize
+        } else {
+            0_usize
+        };
+
+        // Determine root cell offset
+        let mut offset = 0;
+        if header.index_included {
+            let index = &data[src.position() as usize..];
+            if index.len() < header.cells_count * header.offset_size {
+                fail!("Invalid data: too small to fit index");
+            }
+            offset = src.position() as usize + header.cells_count * header.offset_size;
+            if root_index > 0 {
+                let o = (root_index - 1) * header.offset_size;
+                let mut o2 = Cursor::new(&index[o..o + header.offset_size])
+                    .read_be_uint(header.offset_size)? as usize;
+                if header.has_cache_bits {
+                    o2 >>= 1;
+                } 
+                offset += o2;
+            }
+        } else {
+            for cell_index in 0_usize..header.cells_count {
+                if cell_index == root_index {
+                    offset = src.position() as usize;
+                    break;
+                }
+                Self::skip_cell(&mut src, header.ref_size)?;
+            }
+        }
+        if offset == 0 {
+            fail!("Can't found root cell offset");
+        } else if offset >= data.len() {
+            fail!("Data is too short or index {} is invalid", root_index);
+        }
+
+        // Read root cell data
+        let cell_data = CellData::with_unbounded_raw_data_slice(&data[offset..])?;
+        let slice = SliceData::with_bitstring(cell_data.data(), cell_data.bit_length());
+
+        Ok((header, slice))
     }
 
     fn read_header<T>(&self, src: &mut T) -> Result<BocHeader> where T: Read {

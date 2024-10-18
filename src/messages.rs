@@ -17,7 +17,8 @@ use crate::{
     types::{AddSub, CurrencyCollection, Grams, Number5, Number9, UnixTime32},
     AccountId, BuilderData, Cell, CommonMessage, CryptoSignature, Deserializable,
     GetRepresentationHash, IBitstring, InRefValue, Result, Serializable, ShardIdent, SliceData,
-    UInt256, UsageTree, ValidatorDescr, MAX_DATA_BITS, MAX_REFERENCES_COUNT, SERDE_OPTS_EMPTY
+    UInt256, UsageTree, ValidatorDescr, MAX_DATA_BITS, MAX_REFERENCES_COUNT, SERDE_OPTS_EMPTY,
+    read_boc_root,
 };
 use std::{fmt, str::FromStr};
 
@@ -852,6 +853,24 @@ impl CommonMsgInfo {
         }
     }
 
+    pub fn dest_wc(&self) -> Option<i32> {
+        match self  {
+            CommonMsgInfo::IntMsgInfo(header) => {
+                match header.dst {
+                    MsgAddressInt::AddrStd(ref std) => Some(std.workchain_id as i32),
+                    MsgAddressInt::AddrVar(ref var) => Some(var.workchain_id),
+                }
+            },
+            CommonMsgInfo::ExtInMsgInfo(header) => {
+                match header.dst {
+                    MsgAddressInt::AddrStd(ref std) => Some(std.workchain_id as i32),
+                    MsgAddressInt::AddrVar(ref var) => Some(var.workchain_id),
+                }
+            }
+            _ => None,
+        }
+    }
+
     ///
     /// Get value transmitted by the value
     /// Value can be transmitted only internal messages
@@ -1500,6 +1519,14 @@ impl Message {
             }
         }
         Ok(())
+    }
+
+    // The method reads only root cell from given boc and message header from the cell.
+    // It doesn't check boc & message correctness and integrity!
+    pub fn read_header_fast(data: &[u8]) -> Result<CommonMsgInfo> {
+        let mut slice = read_boc_root(data)?;
+        let header = CommonMsgInfo::construct_from(&mut slice)?;
+        Ok(header)
     }
 }
 

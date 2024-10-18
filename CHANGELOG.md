@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.20
+
+- Added method `BocReader::read_root` for fast reading root cell data from BOC
+- Added method `Message::read_header_fast` for fast reading message header from BOC
+
 ## Version 1.11.19
 
 - Deleted deprecated method CellImpl::cell_data
