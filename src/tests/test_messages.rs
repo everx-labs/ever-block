@@ -11,9 +11,29 @@
 * limitations under the License.
 */
 
-use crate::{ed25519_generate_private_key, read_single_root_boc, write_read_and_assert, Ed25519KeyOption, SigPubKey, ED25519_SIGNATURE_LENGTH };
+use crate::{
+    ed25519_generate_private_key, read_single_root_boc, write_read_and_assert, Ed25519KeyOption, 
+    SigPubKey, ED25519_SIGNATURE_LENGTH, write_boc,
+};
 
 use super::*;
+
+#[cfg(test)]
+pub fn write_read_and_assert_message(msg: Message) {
+    let cell = msg.serialize().unwrap();
+    let mut slice = SliceData::load_cell_ref(&cell).unwrap();
+    println!("slice: {}", slice);
+    let s2 = Message::construct_from(&mut slice).unwrap();
+    let cell2 = s2.serialize().unwrap();
+    pretty_assertions::assert_eq!(msg, s2);
+    if cell != cell2 {
+        panic!("write_read_and_assert_with_opts: cells are not equal\nleft: {:#.5}\nright: {:#.5}", cell, cell2)
+    }
+    let bytes = write_boc(&cell).unwrap();
+    let header = Message::read_header_fast(&bytes).unwrap();
+    assert_eq!(&header, msg.header());
+}
+
 
 #[test]
 fn test_serialize_many_times(){
@@ -45,13 +65,13 @@ fn test_serialize_many_times(){
 #[test]
 fn test_serialize_simple_messages(){
     let msg = Message::with_int_header(InternalMessageHeader::default());
-    write_read_and_assert(msg);
+    write_read_and_assert_message(msg);
 
     let msg = Message::with_ext_in_header(ExternalInboundMessageHeader::default());
-    write_read_and_assert(msg);
+    write_read_and_assert_message(msg);
 
     let msg = Message::with_ext_out_header(ExtOutMessageHeader::default());
-    write_read_and_assert(msg);
+    write_read_and_assert_message(msg);
 }
 
 #[test]
@@ -70,7 +90,7 @@ fn test_serialize_msg_with_state_init() {
     stinit.set_library_code(library.into_cell(), false).unwrap();
     
     msg.init = Some(stinit);
-    write_read_and_assert(msg);
+    write_read_and_assert_message(msg);
 }
 
 #[test]
@@ -105,7 +125,7 @@ fn test_serialize_msg_with_state_init_code_and_small_body() {
     msg.init = Some(stinit);
     msg.set_body(body);
 
-    write_read_and_assert(msg);
+    write_read_and_assert_message(msg);
 }
 
 
@@ -129,7 +149,7 @@ fn test_serialize_msg_with_state_init_and_body() {
     msg.init = Some(stinit);
     msg.set_body(body);
 
-    write_read_and_assert(msg);
+    write_read_and_assert_message(msg);
 }
 
 #[test]
@@ -163,7 +183,7 @@ fn test_serialize_msg_with_state_init_and_big_body() {
     msg.set_state_init(stinit);
     msg.set_body(body);
 
-    write_read_and_assert(msg);
+    write_read_and_assert_message(msg);
 }
 
 #[test]
@@ -249,7 +269,7 @@ fn test_serialize_msg_with_state_init_with_refs_and_big_body_with_refs() {
     msg.set_state_init(stinit);
     msg.set_body(SliceData::load_builder(body).unwrap());
 
-    write_read_and_assert(msg);
+    write_read_and_assert_message(msg);
 }
 
 #[test]
