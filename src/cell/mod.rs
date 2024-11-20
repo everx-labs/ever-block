@@ -11,13 +11,17 @@
 * limitations under the License.
 */
 
-use crate::{error, fail, Sha256, types::{ExceptionCode, Result, UInt256, ByteOrderRead}, sha256_digest};
+use crate::{
+    error, fail, Sha256, types::{ExceptionCode, Result, UInt256, ByteOrderRead}, sha256_digest
+};
+use num::{FromPrimitive, ToPrimitive};
 use std::{
     cmp::{max, min}, collections::HashSet, convert::TryInto, fmt::{self, Display, Formatter}, 
     io::{Read, Write, ErrorKind}, ops::{BitOr, BitOrAssign, Deref}, 
-    sync::{Arc, Weak, atomic::{AtomicU64, Ordering}}
+    sync::{Arc, LazyLock, Weak}
 };
-use num::{FromPrimitive, ToPrimitive};
+#[cfg(feature = "cell_counter")]
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const SHA256_SIZE: usize = 32;
 pub const DEPTH_SIZE: usize = 2;
@@ -231,11 +235,10 @@ pub trait CellImpl: Sync + Send {
 
 pub struct Cell(Arc<dyn CellImpl>);
 
-lazy_static::lazy_static!{
-    pub(crate) static ref CELL_DEFAULT: Cell = Cell(Arc::new(DataCell::new()));
-    static ref CELL_COUNT: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
-    // static ref FINALIZATION_NANOS: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
-}
+pub(crate) static CELL_DEFAULT: LazyLock<Cell> = LazyLock::new(|| Cell(Arc::new(DataCell::new())));
+#[cfg(feature = "cell_counter")]
+static CELL_COUNT: LazyLock<Arc<AtomicU64>> = LazyLock::new(Arc::new(AtomicU64::new(0)));
+// static ref FINALIZATION_NANOS: LazyLock<Arc<AtomicU64>> = LazyLock::new(Arc::new(AtomicU64::new(0)));
 
 impl Clone for Cell {
     fn clone(&self) -> Self {
