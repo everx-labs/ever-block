@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.11.21
+
+- Removed cell counting from default features
+
 ## Version 1.11.20
 
 - Added method `BocReader::read_root` for fast reading root cell data from BOC
