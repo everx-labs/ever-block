@@ -54,6 +54,8 @@ pub enum BlockError {
     WrongMerkleUpdate(String),
     #[error("Bad signature")]
     BadSignature,
+    #[error("Duplicated pubkey")]
+    DuplicatedSignature,
     #[error("Unexpected struct variant: exp={0} real={1}")]
     UnexpectedStructVariant(String, String),
     #[error("Unsupported serde opts: {0} {:x}", .1)]

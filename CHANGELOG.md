@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Version 1.12.22
+
+- Checked public key duplicates in check_signatures function
+
 ## Version 1.11.21
 
 - Removed cell counting from default features

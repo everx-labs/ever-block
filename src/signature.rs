@@ -18,7 +18,7 @@ use crate::{
     Result, SliceData, UInt256,
     ED25519_PUBLIC_KEY_LENGTH, ED25519_SIGNATURE_LENGTH
 };
-use std::{collections::HashMap, str::FromStr, sync::Arc, convert::TryInto};
+use std::{collections::{HashMap, HashSet}, str::FromStr, sync::Arc, convert::TryInto};
 
 /*
 ed25519_signature#5 R:bits256 s:bits256 = CryptoSignature;
@@ -314,10 +314,14 @@ impl BlockSignaturesPure {
 
         // Check signatures
         let mut weight = 0;
+        let mut used_keys = HashSet::new();
         self.signatures()
             .iterate_slices(|ref mut _key, ref mut slice| {
                 let sign = CryptoSignaturePair::construct_from(slice)?;
                 if let Some(vd) = validators_map.get(&sign.node_id_short) {
+                    if !used_keys.insert(sign.node_id_short) {
+                        fail!(BlockError::DuplicatedSignature)
+                    }
                     if !vd.verify_signature(data, &sign.sign) {
                         fail!(BlockError::BadSignature)
                     }
